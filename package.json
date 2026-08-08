@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc && tsc-alias -f",
     "start": "node dist/Main.js",
-    "test:model": "tsx src/test/ModelSmoke.ts"
+    "test:model": "tsx src/test/ModelSmoke.ts",
+    "test:dataflow": "tsx src/test/ExecutionContextSmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

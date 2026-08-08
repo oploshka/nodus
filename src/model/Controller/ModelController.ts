@@ -22,8 +22,8 @@ export interface ModelExecutionInput {
   execution: Execution;
   conversation: Conversation;
   operation: OperationProfile;
-  activeStep?: { id: string; type: string; goal: string; attempt: number; maxAttempts: number };
-  stepEvidence?: Array<{ stepId: string; type: string; goal: string; findings: string[]; evidence: unknown[]; missing: string[] }>;
+  activeStep?: { id: string; type: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[] };
+  stepContext?: { facts: Array<{ key: string; value: string; evidence: unknown[]; producerStepId: string }>; missingInputs: string[] };
 }
 
 export class ModelController {
@@ -83,14 +83,14 @@ export class ModelController {
               contextStrategy: input.operation.contextStrategy,
             },
             activeStep: input.activeStep,
-            completedStepEvidence: input.stepEvidence ?? [],
+            stepContext: input.stepContext ?? { facts: [], missingInputs: [] },
             stepIsolationRule: input.activeStep
               ? `Work ONLY on the active step goal: ${input.activeStep.goal}. Do not perform goals assigned to later plan steps.`
               : undefined,
             policies: context.policies,
             knowledge: context.knowledge,
-            conversation: context.conversation,
-            executionHistory: context.executionHistory,
+            conversation: input.activeStep ? [] : context.conversation,
+            executionHistory: input.activeStep ? [] : context.executionHistory,
             toolContext: context.toolContext,
             project: context.project,
             availableOperations: input.activeStep ? [] : this.operationRegistry.list().map(({ id, description }) => ({ id, description })),
@@ -299,11 +299,32 @@ export class ModelController {
           }];
         })
       : [];
+    const facts = Array.isArray(raw.facts)
+      ? raw.facts.flatMap((item) => {
+          if (!item || typeof item !== 'object') return [];
+          const entry = item as Record<string, unknown>;
+          if (typeof entry.key !== 'string' || !entry.key.trim() || typeof entry.value !== 'string' || !entry.value.trim()) return [];
+          const factEvidence = Array.isArray(entry.evidence)
+            ? entry.evidence.flatMap((evidenceItem) => {
+                if (!evidenceItem || typeof evidenceItem !== 'object') return [];
+                const evidenceEntry = evidenceItem as Record<string, unknown>;
+                if (typeof evidenceEntry.fact !== 'string' || !evidenceEntry.fact.trim()) return [];
+                return [{
+                  path: typeof evidenceEntry.path === 'string' ? evidenceEntry.path : undefined,
+                  symbol: typeof evidenceEntry.symbol === 'string' ? evidenceEntry.symbol : undefined,
+                  fact: evidenceEntry.fact.trim(),
+                }];
+              })
+            : [];
+          return [{ key: entry.key.trim(), value: entry.value.trim(), evidence: factEvidence.slice(0, 8) }];
+        })
+      : [];
     return {
       goalSatisfied: raw.goalSatisfied === true,
       findings: Array.isArray(raw.findings) ? raw.findings.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 8) : [],
       evidence: evidence.slice(0, 12),
       missing: Array.isArray(raw.missing) ? raw.missing.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 8) : [],
+      facts: facts.slice(0, 12),
     };
   }
 
@@ -344,10 +365,11 @@ Return ONLY valid JSON with this shape:
     "goalSatisfied": true,
     "findings": ["short result of the ACTIVE step only"],
     "evidence": [{ "path": "optional/file", "symbol": "optional symbol", "fact": "fact supported by evidence" }],
-    "missing": ["specific evidence still missing"]
+    "missing": ["specific evidence still missing"],
+    "facts": [{ "key": "one of activeStep.outputs", "value": "compact reusable fact", "evidence": [{ "path": "optional/file", "symbol": "optional symbol", "fact": "supporting fact" }] }]
   },
   "data": {}
 }
-For search, understand, prepare-change, review, and verify, always return stepResult. Set goalSatisfied=true only when the ACTIVE step goal is actually satisfied. Put only concrete unresolved evidence in missing. Do not work on later plan steps. When activeStep is supplied, leave nextOperation empty because PlanExecutor owns routing. When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
+For search, understand, prepare-change, review, and verify, always return stepResult. The activeStep declares inputs and outputs. Use only stepContext.facts as reusable results from prior semantic steps. When you establish an activeStep output, return it in stepResult.facts using EXACTLY one of activeStep.outputs as key. Set goalSatisfied=true when the ACTIVE step goal is satisfied or all declared outputs are established. Put only concrete unresolved evidence in missing. Do not work on later plan steps. When activeStep is supplied, leave nextOperation empty because PlanExecutor owns routing. When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
   }
 }

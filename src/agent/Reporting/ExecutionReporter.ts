@@ -20,6 +20,10 @@ export class ExecutionReporter {
     this.line(`\n${this.paint('bold', '◆ План')}`);
     plan.steps.forEach((step, index) => {
       this.line(`  ${index + 1}. ${step.goal} ${this.paint('dim', `[${step.type}, max ${step.maxAttempts}]`)}`);
+      if (this.mode === 'verbose') {
+        if (step.inputs.length > 0) this.line(this.paint('dim', `     in: ${step.inputs.join(', ')}`));
+        if (step.outputs.length > 0) this.line(this.paint('dim', `     out: ${step.outputs.join(', ')}`));
+      }
     });
   }
 
@@ -86,6 +90,7 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
     const findings = result.findings.slice(0, this.mode === 'verbose' ? 5 : 3);
     for (const finding of findings) this.line(`  ${finding}`);
     if (this.mode === 'verbose') {
+      for (const fact of result.facts.slice(0, 5)) this.line(this.paint('dim', `  ⇒ ${fact.key}: ${fact.value}`));
       for (const item of result.evidence.slice(0, 5)) {
         const source = [item.path, item.symbol].filter(Boolean).join(' :: ');
         this.line(this.paint('dim', `  ↳ ${source ? `${source}: ` : ''}${item.fact}`));

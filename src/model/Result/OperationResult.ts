@@ -15,11 +15,18 @@ export interface StepEvidenceItem {
   fact: string;
 }
 
+export interface StepFact {
+  key: string;
+  value: string;
+  evidence: StepEvidenceItem[];
+}
+
 export interface StepResult {
   goalSatisfied: boolean;
   findings: string[];
   evidence: StepEvidenceItem[];
   missing: string[];
+  facts: StepFact[];
 }
 
 export interface OperationResult {

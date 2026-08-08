@@ -1,5 +1,6 @@
 export type PlanStepType = 'search' | 'understand' | 'prepare-change' | 'edit-file' | 'review' | 'verify' | 'finalize';
 export type PlanStepStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type FactKey = string;
 
 export interface PlanStep {
   id: string;
@@ -7,6 +8,8 @@ export interface PlanStep {
   goal: string;
   status: PlanStepStatus;
   maxAttempts: number;
+  inputs: FactKey[];
+  outputs: FactKey[];
 }
 
 export interface TaskPlan {

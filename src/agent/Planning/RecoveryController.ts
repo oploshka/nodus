@@ -35,6 +35,7 @@ export class RecoveryController {
     humanHint?: string;
     currentStepResult?: StepResult;
     completedStepEvidence?: unknown[];
+    executionFacts?: unknown[];
     previousRecoveryGoals?: string[];
   }): Promise<RecoveryDecision> {
     const prompt = this.promptRegistry.get('recover-plan');
@@ -57,6 +58,7 @@ export class RecoveryController {
             humanHint: input.humanHint,
             currentStepResult: input.currentStepResult,
             completedStepEvidence: input.completedStepEvidence ?? [],
+            executionFacts: input.executionFacts ?? [],
             previousRecoveryGoals: input.previousRecoveryGoals ?? [],
             plan: input.plan.steps.map((step, index) => ({ index, type: step.type, goal: step.goal, status: step.status })),
             recentExecution: input.execution.history.slice(-12),
@@ -96,7 +98,7 @@ export class RecoveryController {
     const parsed = JSON.parse(raw) as {
       action?: unknown;
       reason?: unknown;
-      steps?: Array<{ id?: unknown; type?: unknown; goal?: unknown; maxAttempts?: unknown }>;
+      steps?: Array<{ id?: unknown; type?: unknown; goal?: unknown; maxAttempts?: unknown; inputs?: unknown; outputs?: unknown }>;
     };
     const actions = new Set<RecoveryAction>(['retry-current', 'insert-steps', 'skip-current', 'request-human', 'fail']);
     if (typeof parsed.action !== 'string' || !actions.has(parsed.action as RecoveryAction)) {
@@ -111,12 +113,15 @@ export class RecoveryController {
       const type = step.type as PlanStepType;
       const max = this.stepRegistry.limit(type);
       const requested = typeof step.maxAttempts === 'number' ? Math.floor(step.maxAttempts) : max;
+      const id = typeof step.id === 'string' && step.id.trim() ? step.id : `recovery-${index + 1}`;
       steps.push({
-        id: typeof step.id === 'string' && step.id.trim() ? step.id : `recovery-${index + 1}`,
+        id,
         type,
         goal: typeof step.goal === 'string' && step.goal.trim() ? step.goal.trim() : this.stepRegistry.get(type).description,
         status: 'pending',
         maxAttempts: Math.max(1, Math.min(requested, max)),
+        inputs: this.factKeys(step.inputs),
+        outputs: this.factKeys(step.outputs).length > 0 ? this.factKeys(step.outputs) : [`${id}.result`],
       });
     }
 
@@ -125,6 +130,11 @@ export class RecoveryController {
       reason: typeof parsed.reason === 'string' ? parsed.reason : 'Recovery decision',
       steps,
     };
+  }
+
+  private factKeys(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.map(String).map((item) => item.trim()).filter((item) => /^[a-z0-9][a-z0-9._-]{1,79}$/i.test(item)).slice(0, 8);
   }
 
   private extractJson(content: string): string {
@@ -139,6 +149,6 @@ export class RecoveryController {
   }
 
   private protocol(): string {
-    return `Return ONLY JSON:\n{\n  "action": "retry-current | insert-steps | skip-current | request-human | fail",\n  "reason": "short explanation",\n  "steps": [{ "id": "recovery-1", "type": "search | understand | prepare-change | edit-file | review | verify | finalize", "goal": "one concrete goal", "maxAttempts": 1 }]\n}`;
+    return `Return ONLY JSON:\n{\n  "action": "retry-current | insert-steps | skip-current | request-human | fail",\n  "reason": "short explanation",\n  "steps": [{ "id": "recovery-1", "type": "search | understand | prepare-change | edit-file | review | verify | finalize", "goal": "one concrete goal", "maxAttempts": 1, "inputs": ["existing.fact"], "outputs": ["missing.fact"] }]\n}\nFor insert-steps, outputs must describe the exact missing fact(s) needed by the blocked step. Do not invent concrete file paths.`;
   }
 }

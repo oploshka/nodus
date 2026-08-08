@@ -4,6 +4,8 @@ import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import type { PlanUpdater } from '@agent/Planning/PlanUpdater';
 import type { RecoveryController, RecoveryDecision } from '@agent/Planning/RecoveryController';
 import type { PlanStep, TaskPlan } from '@agent/Planning/TaskPlan';
+import { ExecutionContext } from '@agent/Planning/ExecutionContext';
+import { ContextComposer } from '@agent/Planning/ContextComposer';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { Conversation } from '@core/Conversation/Conversation';
 import type { Execution } from '@core/Execution/Execution';
@@ -22,6 +24,7 @@ export interface PlanExecutionState {
   stepAttempts: number;
   recoveryAttempts: Map<string, number>;
   stepResults: Map<string, StepResult>;
+  executionContext: ExecutionContext;
   recoveryMissing: Map<string, string[]>;
   recoveryGoals: Set<string>;
   resumes: number;
@@ -33,6 +36,7 @@ export type PlanRunResult = 'finished' | 'paused';
 
 export class PlanExecutor {
   public static readonly MAX_RESUMES = 3;
+  private readonly contextComposer = new ContextComposer();
   private static readonly SAFETY_NODE_EXECUTIONS = 50;
 
   public constructor(
@@ -57,6 +61,20 @@ export class PlanExecutor {
       nodeExecutions += 1;
 
       const step = state.plan.steps[state.planIndex];
+      const composed = this.contextComposer.compose(state.executionContext, step);
+      if (composed.missingInputs.length > 0) {
+        const blocked: StepResult = {
+          goalSatisfied: false,
+          findings: [],
+          evidence: [],
+          missing: composed.missingInputs.map((key) => `required input fact: ${key}`),
+          facts: [],
+        };
+        state.stepResults.set(step.id, this.mergeStepResults(state.stepResults.get(step.id), blocked));
+        const recovered = await this.recover(state, `missing-inputs:${composed.missingInputs.join(',')}`);
+        if (!recovered) return state.pauseReason ? 'paused' : 'finished';
+        continue;
+      }
       if (state.stepAttempts >= step.maxAttempts) {
         const recovered = await this.recover(state, 'step-attempt-budget');
         if (!recovered) return state.pauseReason ? 'paused' : 'finished';
@@ -98,8 +116,8 @@ export class PlanExecutor {
           execution: state.execution,
           conversation: state.conversation,
           operation,
-          activeStep: { id: step.id, type: step.type, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts },
-          stepEvidence: this.completedEvidence(state),
+          activeStep: { id: step.id, type: step.type, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs },
+          stepContext: composed,
         });
       } catch (error) {
         await this.logger.error('model-error', { operation: step.type, error: String(error) }, context);
@@ -120,8 +138,10 @@ export class PlanExecutor {
       });
 
       if (result.stepResult) {
-        state.stepResults.set(step.id, result.stepResult);
-        this.reporter.stepResult(result.stepResult);
+        const merged = this.mergeStepResults(state.stepResults.get(step.id), result.stepResult);
+        state.stepResults.set(step.id, merged);
+        state.executionContext.mergeStepResult(step, merged);
+        this.reporter.stepResult(merged);
       }
 
       if (result.status === 'failed') {
@@ -149,6 +169,22 @@ export class PlanExecutor {
       if (result.changes.length > 0) {
         await this.changeExecutor.apply(result.changes, state.execution, context);
         this.reporter.changes(result.changes.map((change) => change.path));
+        if (step.type === 'edit-file') {
+          const synthetic: StepResult = {
+            goalSatisfied: true,
+            findings: [`Applied changes to: ${result.changes.map((change) => change.path).join(', ')}`],
+            evidence: result.changes.map((change) => ({ path: change.path, fact: 'File change applied by ChangeExecutor.' })),
+            missing: [],
+            facts: step.outputs.map((key) => ({
+              key,
+              value: `Applied requested edit to ${result.changes.map((change) => change.path).join(', ')}`,
+              evidence: result.changes.map((change) => ({ path: change.path, fact: 'File change applied by ChangeExecutor.' })),
+            })),
+          };
+          const merged = this.mergeStepResults(state.stepResults.get(step.id), synthetic);
+          state.stepResults.set(step.id, merged);
+          state.executionContext.mergeStepResult(step, merged);
+        }
       }
 
       if (step.type === 'edit-file') {
@@ -177,8 +213,10 @@ export class PlanExecutor {
       // Routing belongs to TaskPlan. Search/understand/change-planning/review/verify
       // must explicitly prove that the active step goal is satisfied.
       if (this.requiresExplicitStepResult(step.type)) {
-        if (result.stepResult?.goalSatisfied) {
-          this.completeStep(state, step, 'goal-satisfied');
+        const mergedResult = state.stepResults.get(step.id);
+        const outputsReady = step.outputs.length > 0 && step.outputs.every((key) => state.executionContext.has(key));
+        if (mergedResult?.goalSatisfied || outputsReady) {
+          this.completeStep(state, step, outputsReady ? 'outputs-ready' : 'goal-satisfied');
           continue;
         }
         if (state.stepAttempts < step.maxAttempts) continue;
@@ -242,6 +280,7 @@ export class PlanExecutor {
       humanHint,
       currentStepResult: state.stepResults.get(step.id),
       completedStepEvidence: this.completedEvidence(state),
+      executionFacts: state.executionContext.all(),
       previousRecoveryGoals: Array.from(state.recoveryGoals),
     });
     return this.applyRecovery(state, decision);
@@ -273,7 +312,13 @@ export class PlanExecutor {
       }
 
       state.recoveryMissing.set(current.id, [...missing]);
-      for (const step of freshSteps) state.recoveryGoals.add(this.goalSignature(step.goal));
+      for (const step of freshSteps) {
+        step.inputs = step.inputs.filter((key) => state.executionContext.has(key));
+        state.recoveryGoals.add(this.goalSignature(step.goal));
+        for (const output of step.outputs) {
+          if (!current.inputs.includes(output)) current.inputs.push(output);
+        }
+      }
       this.planUpdater.insertBefore(state.plan, state.planIndex, freshSteps);
       this.planUpdater.markPendingFrom(state.plan, state.planIndex);
       state.stepAttempts = 0;
@@ -321,6 +366,23 @@ export class PlanExecutor {
         return [{ stepId: step.id, type: step.type, goal: step.goal, findings: result.findings, evidence: result.evidence, missing: result.missing }];
       })
       .slice(-8);
+  }
+
+
+  private mergeStepResults(previous: StepResult | undefined, current: StepResult): StepResult {
+    if (!previous) return current;
+    const uniqueStrings = (values: string[]) => Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).slice(0, 12);
+    const evidenceKey = (item: { path?: string; symbol?: string; fact: string }) => `${item.path ?? ''}|${item.symbol ?? ''}|${item.fact}`;
+    const evidence = [...previous.evidence, ...current.evidence].filter((item, index, all) => all.findIndex((candidate) => evidenceKey(candidate) === evidenceKey(item)) === index).slice(0, 20);
+    const factKey = (item: { key: string; value: string }) => `${item.key}|${item.value}`;
+    const facts = [...previous.facts, ...current.facts].filter((item, index, all) => all.findIndex((candidate) => factKey(candidate) === factKey(item)) === index).slice(0, 20);
+    return {
+      goalSatisfied: previous.goalSatisfied || current.goalSatisfied,
+      findings: uniqueStrings([...previous.findings, ...current.findings]),
+      evidence,
+      missing: current.missing,
+      facts,
+    };
   }
 
   private missingReduced(previous: string[], current: string[]): boolean {

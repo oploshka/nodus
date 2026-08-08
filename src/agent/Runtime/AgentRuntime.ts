@@ -1,5 +1,6 @@
 import type { PlanGenerator } from '@agent/Planning/PlanGenerator';
 import { PlanExecutor, type PlanExecutionState } from '@agent/Planning/PlanExecutor';
+import { ExecutionContext } from '@agent/Planning/ExecutionContext';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { Conversation } from '@core/Conversation/Conversation';
 import { Execution } from '@core/Execution/Execution';
@@ -50,6 +51,7 @@ export class AgentRuntime {
       stepAttempts: 0,
       recoveryAttempts: new Map(),
       stepResults: new Map(),
+      executionContext: new ExecutionContext(),
       recoveryMissing: new Map(),
       recoveryGoals: new Set(),
       resumes: 0,

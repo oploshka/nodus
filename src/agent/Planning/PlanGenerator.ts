@@ -72,11 +72,12 @@ export class PlanGenerator {
 
   private parse(content: string): TaskPlan {
     const raw = this.extractJson(content);
-    const parsed = JSON.parse(raw) as { goal?: unknown; steps?: Array<{ id?: unknown; type?: unknown; goal?: unknown; maxAttempts?: unknown }> };
+    const parsed = JSON.parse(raw) as { goal?: unknown; steps?: Array<{ id?: unknown; type?: unknown; goal?: unknown; maxAttempts?: unknown; inputs?: unknown; outputs?: unknown }> };
     if (typeof parsed.goal !== 'string' || !Array.isArray(parsed.steps) || parsed.steps.length === 0) {
       throw new Error('Planner returned an invalid TaskPlan');
     }
 
+    const knownOutputs = new Set<string>();
     const steps = parsed.steps.slice(0, 8).map((step, index) => {
       if (typeof step.type !== 'string' || !this.stepRegistry.has(step.type)) {
         throw new Error(`Planner returned unsupported step type: ${String(step.type)}`);
@@ -84,17 +85,24 @@ export class PlanGenerator {
       const type = step.type as PlanStepType;
       const maxLimit = this.stepRegistry.limit(type);
       const requestedLimit = typeof step.maxAttempts === 'number' ? Math.floor(step.maxAttempts) : maxLimit;
+      const id = typeof step.id === 'string' && step.id.trim() ? step.id : `step-${index + 1}`;
+      const declaredOutputs = this.factKeys(step.outputs);
+      const outputs = (declaredOutputs.length > 0 ? declaredOutputs : [`${id}.result`]).filter((key) => !knownOutputs.has(key));
+      const inputs = this.factKeys(step.inputs).filter((key) => knownOutputs.has(key));
+      for (const output of outputs) knownOutputs.add(output);
       return {
-        id: typeof step.id === 'string' && step.id.trim() ? step.id : `step-${index + 1}`,
+        id,
         type,
         goal: typeof step.goal === 'string' && step.goal.trim() ? step.goal.trim() : type,
         status: 'pending' as const,
         maxAttempts: Math.max(1, Math.min(requestedLimit, maxLimit)),
+        inputs,
+        outputs,
       };
     });
 
     if (steps[steps.length - 1]?.type !== 'finalize') {
-      steps.push({ id: `step-${steps.length + 1}`, type: 'finalize', goal: 'Prepare the final user-facing result.', status: 'pending', maxAttempts: this.stepRegistry.limit('finalize') });
+      steps.push({ id: `step-${steps.length + 1}`, type: 'finalize', goal: 'Prepare the final user-facing result.', status: 'pending', maxAttempts: this.stepRegistry.limit('finalize'), inputs: Array.from(knownOutputs), outputs: ['task.final-result'] });
     }
     return { version: 1, goal: parsed.goal.trim(), steps };
   }
@@ -109,8 +117,25 @@ export class PlanGenerator {
     return {
       version: 1,
       goal: description,
-      steps: types.map((type, index) => ({ id: `step-${index + 1}`, type, goal: type, status: 'pending', maxAttempts: this.stepRegistry.limit(type) })),
+      steps: types.map((type, index) => ({
+        id: `step-${index + 1}`,
+        type,
+        goal: type,
+        status: 'pending',
+        maxAttempts: this.stepRegistry.limit(type),
+        inputs: index === 0 ? [] : [`step-${index}.result`],
+        outputs: [`step-${index + 1}.result`],
+      })),
     };
+  }
+
+  private factKeys(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map(String)
+      .map((item) => item.trim())
+      .filter((item) => /^[a-z0-9][a-z0-9._-]{1,79}$/i.test(item))
+      .slice(0, 8);
   }
 
   private extractJson(content: string): string {
@@ -126,6 +151,6 @@ export class PlanGenerator {
 
   private protocol(): string {
     const types = this.stepRegistry.listForPlanner().map((definition) => definition.type).join(' | ');
-    return `Return ONLY JSON:\n{\n  "goal": "short task goal",\n  "steps": [{ "id": "step-1", "type": "${types}", "goal": "one concrete verifiable goal", "maxAttempts": 1 }]\n}`;
+    return `Return ONLY JSON:\n{\n  "goal": "short task goal",\n  "steps": [{ "id": "step-1", "type": "${types}", "goal": "one concrete verifiable goal", "maxAttempts": 1, "inputs": ["fact.key"], "outputs": ["fact.key"] }]\n}\nRules: inputs may reference only outputs of earlier steps. Use short stable dot-separated keys. Search/understand steps should output concrete facts needed later; prepare-change should consume those facts and output a change-plan fact; edit-file should consume the change-plan fact.`;
   }
 }
