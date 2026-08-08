@@ -96,7 +96,7 @@ export class PlanGenerator {
     if (steps[steps.length - 1]?.type !== 'finalize') {
       steps.push({ id: `step-${steps.length + 1}`, type: 'finalize', goal: 'Prepare the final user-facing result.', status: 'pending', maxAttempts: this.stepRegistry.limit('finalize') });
     }
-    return { goal: parsed.goal.trim(), steps };
+    return { version: 1, goal: parsed.goal.trim(), steps };
   }
 
   private fallback(description: string): TaskPlan {
@@ -107,6 +107,7 @@ export class PlanGenerator {
       ? ['search', 'understand', 'prepare-change', 'edit-file', 'review', 'finalize']
       : ['search', 'understand', 'finalize'];
     return {
+      version: 1,
       goal: description,
       steps: types.map((type, index) => ({ id: `step-${index + 1}`, type, goal: type, status: 'pending', maxAttempts: this.stepRegistry.limit(type) })),
     };

@@ -10,6 +10,7 @@ export interface PlanStep {
 }
 
 export interface TaskPlan {
+  version: number;
   goal: string;
   steps: PlanStep[];
 }

@@ -6,6 +6,7 @@ import { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import { AgentRuntime } from '@agent/Runtime/AgentRuntime';
 import { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import { PlanGenerator } from '@agent/Planning/PlanGenerator';
+import { PlanExecutor } from '@agent/Planning/PlanExecutor';
 import { PlanUpdater } from '@agent/Planning/PlanUpdater';
 import { RecoveryController } from '@agent/Planning/RecoveryController';
 import { StepRegistry } from '@agent/Planning/StepRegistry';
@@ -120,18 +121,23 @@ export class Nodus {
     const toolExecutor = new ToolExecutor(this.toolRegistry, this.projectSession, this.logger);
     const changeExecutor = new ChangeExecutor(this.toolRegistry, this.projectSession, this.logger);
 
-    this.runtime = new AgentRuntime(
-      configuration.agent,
+    const planExecutor = new PlanExecutor(
       this.operationRegistry,
       modelController,
       toolExecutor,
       changeExecutor,
       human,
+      recoveryController,
+      planUpdater,
+      this.logger,
+      reporter,
+    );
+
+    this.runtime = new AgentRuntime(
       this.logger,
       reporter,
       planGenerator,
-      recoveryController,
-      planUpdater,
+      planExecutor,
     );
   }
 

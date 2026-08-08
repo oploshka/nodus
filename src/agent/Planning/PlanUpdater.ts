@@ -3,6 +3,7 @@ import type { PlanStep, TaskPlan } from '@agent/Planning/TaskPlan';
 export class PlanUpdater {
   public insertBefore(plan: TaskPlan, index: number, steps: PlanStep[]): void {
     plan.steps.splice(index, 0, ...steps);
+    plan.version += 1;
   }
 
   public markPendingFrom(plan: TaskPlan, index: number): void {

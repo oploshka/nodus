@@ -22,6 +22,20 @@ export class ExecutionReporter {
     });
   }
 
+
+  public planStep(index: number, total: number, goal: string, type: string, attempt: number, maxAttempts: number): void {
+    if (this.mode === 'quiet') return;
+    const retry = attempt > 1 ? this.paint('dim', ` · попытка ${attempt}/${maxAttempts}`) : '';
+    this.line(`
+${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${retry}`);
+    this.line(this.paint('dim', `  ${goal}`));
+  }
+
+  public planAdvance(index: number, total: number, goal: string, type: string): void {
+    if (this.mode !== 'verbose') return;
+    this.line(this.paint('dim', `  ↳ следующий узел ${index + 1}/${total}: ${this.operationName(type)} — ${goal}`));
+  }
+
   public step(step: number, operation: string): void {
     if (this.mode === 'quiet') return;
     this.line(`\n${this.paint('cyan', `→ Шаг ${step}: ${this.operationName(operation)}`)}`);
