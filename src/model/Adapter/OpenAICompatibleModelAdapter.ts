@@ -1,10 +1,10 @@
 // OpenAICompatibleModelAdapter.ts
-import type { ModelAdapter, RawModelResponse } from '@model/Adapter/ModelAdapter';
+import type { ModelAdapter, ModelUsage, RawModelResponse } from '@model/Adapter/ModelAdapter';
 import type { ModelRequest } from '@model/Request/ModelRequest';
 
 interface OpenAICompatibleResponse {
   choices?: Array<{ message?: { content?: string } }>;
-  usage?: unknown;
+  usage?: ModelUsage;
   error?: { message?: string };
 }
 
