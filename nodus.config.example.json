@@ -5,8 +5,15 @@
     "scanMode": "manual",
     "cachePath": ".nodus/cache/project-index.json",
     "knowledgePath": "knowledge.example.json",
-    "include": ["src"],
-    "exclude": ["node_modules", "dist", ".git", ".nodus"]
+    "include": [
+      "src"
+    ],
+    "exclude": [
+      "node_modules",
+      "dist",
+      ".git",
+      ".nodus"
+    ]
   },
   "model": {
     "provider": "mock",
@@ -26,6 +33,7 @@
     "console": true,
     "file": false,
     "path": ".nodus/log/nodus.log",
-    "modelPayload": false
+    "modelPayload": false,
+    "payloadPath": ".nodus/log/payload"
   }
 }

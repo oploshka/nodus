@@ -34,6 +34,7 @@ export class AgentRuntime {
     await this.logger.info('execution-started', { operation: execution.currentOperation }, context);
 
     for (let step = 1; step <= this.configuration.maxSteps; step += 1) {
+      execution.currentStep = step;
       const operation = await this.resolveOperation(execution.currentOperation ?? 'plan', task, execution);
       if (!operation) {
         execution.status = 'failed';

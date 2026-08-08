@@ -1,7 +1,8 @@
 // PromptRegistry.ts
 import type { PromptProfile } from '@model/Profile/PromptProfile';
 
-const COMMON_SYSTEM = `You are the reasoning component inside Nodus, a developer agent.
+const COMMON_SYSTEM = `/no_think
+You are the reasoning component inside Nodus, a developer agent.
 Work from the supplied project evidence and project-specific knowledge. Prefer existing project patterns over generic best practices. Do not invent files, APIs, or facts when tools can establish them. Return only one JSON object matching the response protocol.`;
 
 export class PromptRegistry {

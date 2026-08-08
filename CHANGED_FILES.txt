@@ -1,0 +1,23 @@
+Nodus v0.1 logging + no-think smoke test changes
+
+Changed:
+- package.json
+- nodus.config.example.json
+- src/agent/Runtime/AgentRuntime.ts
+- src/core/Configuration/Configuration.ts
+- src/core/Configuration/ConfigurationLoader.ts
+- src/core/Execution/Execution.ts
+- src/core/Nodus/Nodus.ts
+- src/model/Controller/ModelController.ts
+- src/model/Profile/PromptRegistry.ts
+
+Added:
+- src/core/Logging/PayloadLogger.ts
+- src/test/ModelSmoke.ts
+
+Smoke test:
+  npm run test:model -- nodus.config.json
+
+Expected successful output includes:
+  Reasoning exposed: NO
+  PASS: compact no-think response received.

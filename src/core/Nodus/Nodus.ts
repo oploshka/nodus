@@ -8,6 +8,7 @@ import { ConsoleLogSink } from '@core/Logging/ConsoleLogSink';
 import { FileLogSink } from '@core/Logging/FileLogSink';
 import type { LogSink } from '@core/Logging/Log';
 import { Logger } from '@core/Logging/Logger';
+import { PayloadLogger } from '@core/Logging/PayloadLogger';
 import { Task } from '@core/Task/Task';
 import { ContextSelector } from '@context/Selector/ContextSelector';
 import { KnowledgeResolver } from '@knowledge/Resolver/KnowledgeResolver';
@@ -66,6 +67,10 @@ export class Nodus {
     const promptRegistry = new PromptRegistry();
     const knowledgeResolver = new KnowledgeResolver(knowledgeStore);
     const contextSelector = new ContextSelector(knowledgeResolver);
+    const payloadLogger = new PayloadLogger(
+      configuration.project.root,
+      configuration.logging.payloadPath ?? '.nodus/log/payload',
+    );
     const modelController = new ModelController(
       configuration.model,
       configuration.logging,
@@ -75,6 +80,7 @@ export class Nodus {
       this.operationRegistry,
       this.toolRegistry,
       this.logger,
+      payloadLogger,
     );
 
     this.runtime = new AgentRuntime(

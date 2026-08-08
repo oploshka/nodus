@@ -1,8 +1,10 @@
 // ModelController.ts
+
 import type { LoggingConfiguration, ModelConfiguration } from '@core/Configuration/Configuration';
 import type { Conversation } from '@core/Conversation/Conversation';
 import type { Execution } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
+import type { PayloadLogger } from '@core/Logging/PayloadLogger';
 import type { Task } from '@core/Task/Task';
 import type { ContextSelector } from '@context/Selector/ContextSelector';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
@@ -32,6 +34,7 @@ export class ModelController {
     private readonly operationRegistry: OperationRegistry,
     private readonly toolRegistry: ToolRegistry,
     private readonly logger: Logger,
+    private readonly payloadLogger: PayloadLogger,
   ) {}
 
   public async execute(input: ModelExecutionInput): Promise<OperationResult> {
@@ -84,25 +87,43 @@ export class ModelController {
       taskId: input.task.id,
       executionId: input.execution.id,
     };
+    const payloadContext = {
+      executionId: input.execution.id,
+      step: input.execution.currentStep,
+      operation: input.operation.id,
+    };
 
-    await this.logger.info('model-called', { operation: input.operation.id, model: this.configuration.model }, logContext);
+    let requestPayloadPath: string | undefined;
     if (this.logging.modelPayload) {
-      await this.logger.debug('model-request-payload', request, logContext);
+      requestPayloadPath = await this.payloadLogger.writeRequest(payloadContext, request);
     }
 
+    await this.logger.info('model-called', {
+      step: input.execution.currentStep,
+      operation: input.operation.id,
+      model: this.configuration.model,
+      payload: requestPayloadPath,
+    }, logContext);
+
     const response = await this.adapter.complete(request);
+
+    let responsePayloadPath: string | undefined;
     if (this.logging.modelPayload) {
-      await this.logger.debug('model-response-payload', response, logContext);
+      responsePayloadPath = await this.payloadLogger.writeResponse(payloadContext, response);
     }
 
     const result = this.parseOperationResult(response.content);
     await this.logger.info('model-responded', {
+      step: input.execution.currentStep,
       operation: input.operation.id,
       status: result.status,
       nextOperation: result.nextOperation,
       toolCalls: result.toolCalls.length,
       changes: result.changes.length,
       hasQuestion: Boolean(result.question),
+      message: result.message,
+      usage: response.usage,
+      payload: responsePayloadPath,
     }, logContext);
 
     return result;

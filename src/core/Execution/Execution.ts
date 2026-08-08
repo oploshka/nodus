@@ -14,6 +14,7 @@ export class Execution {
   public readonly taskId: string;
   public status: ExecutionStatus = 'created';
   public currentOperation?: string;
+  public currentStep: number = 0;
   public result?: string;
   public readonly history: ExecutionEvent[] = [];
 

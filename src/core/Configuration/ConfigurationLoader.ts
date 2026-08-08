@@ -48,6 +48,7 @@ export class ConfigurationLoader {
         file: parsed.logging?.file ?? false,
         path: parsed.logging?.path ?? '.nodus/log/nodus.log',
         modelPayload: parsed.logging?.modelPayload ?? false,
+        payloadPath: parsed.logging?.payloadPath ?? '.nodus/log/payload',
       },
     };
   }

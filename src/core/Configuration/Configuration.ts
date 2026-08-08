@@ -32,11 +32,12 @@ export interface KnowledgeConfiguration {
 }
 
 export interface LoggingConfiguration {
-  level: LogLevel;
+  level: 'debug' | 'info' | 'warn' | 'error';
   console: boolean;
   file: boolean;
   path?: string;
   modelPayload: boolean;
+  payloadPath?: string;
 }
 
 export interface NodusConfiguration {
