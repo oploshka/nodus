@@ -1,23 +1,25 @@
-Nodus v0.1 logging + no-think smoke test changes
+Nodus context optimization patch
 
-Changed:
-- package.json
-- nodus.config.example.json
-- src/agent/Runtime/AgentRuntime.ts
-- src/core/Configuration/Configuration.ts
-- src/core/Configuration/ConfigurationLoader.ts
+Changed/added files:
 - src/core/Execution/Execution.ts
-- src/core/Nodus/Nodus.ts
+- src/agent/Execution/ToolExecutor.ts (new)
+- src/agent/Execution/ChangeExecutor.ts (new)
+- src/agent/Runtime/AgentRuntime.ts
+- src/context/Context/ModelContext.ts
+- src/context/Selector/ContextSelector.ts
 - src/model/Controller/ModelController.ts
 - src/model/Profile/PromptRegistry.ts
+- src/core/Nodus/Nodus.ts
 
-Added:
-- src/core/Logging/PayloadLogger.ts
-- src/test/ModelSmoke.ts
+What changed:
+- Full tool results no longer go into Execution.history.
+- Latest tool results are kept in temporary toolContext.
+- toolContext is available for up to two subsequent model calls, then cleared.
+- Tool batches are capped at 5 calls.
+- Tool logging is summarized by tools-started/tools-finished.
+- Tool execution and change application moved out of AgentRuntime.
+- plan prompt is constrained to routing instead of producing a final detailed answer.
 
-Smoke test:
-  npm run test:model -- nodus.config.json
-
-Expected successful output includes:
-  Reasoning exposed: NO
-  PASS: compact no-think response received.
+After overlaying this patch run:
+  npx tsc --noEmit
+  npm run dev -- nodus.config.json

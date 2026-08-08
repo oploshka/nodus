@@ -1,6 +1,8 @@
 // Nodus.ts
 import { resolve } from 'node:path';
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
+import { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
+import { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import { AgentRuntime } from '@agent/Runtime/AgentRuntime';
 import type { NodusConfiguration } from '@core/Configuration/Configuration';
 import { Conversation } from '@core/Conversation/Conversation';
@@ -77,18 +79,22 @@ export class Nodus {
       adapter,
       promptRegistry,
       contextSelector,
+      this.projectSession,
       this.operationRegistry,
       this.toolRegistry,
       this.logger,
       payloadLogger,
     );
 
+    const toolExecutor = new ToolExecutor(this.toolRegistry, this.projectSession, this.logger);
+    const changeExecutor = new ChangeExecutor(this.toolRegistry, this.projectSession, this.logger);
+
     this.runtime = new AgentRuntime(
       configuration.agent,
-      this.projectSession,
       this.operationRegistry,
       modelController,
-      this.toolRegistry,
+      toolExecutor,
+      changeExecutor,
       human,
       this.logger,
     );

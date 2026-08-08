@@ -1,25 +1,24 @@
 // AgentRuntime.ts
+import type { HumanInteraction } from '@agent/Human/HumanInteraction';
+import type { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
+import type { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import type { AgentConfiguration } from '@core/Configuration/Configuration';
 import type { Conversation } from '@core/Conversation/Conversation';
 import { Execution } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
-import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import type { ModelController } from '@model/Controller/ModelController';
 import type { OperationResult } from '@model/Result/OperationResult';
 import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
-import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
-import type { ToolRegistry } from '@tool/Registry/ToolRegistry';
-import type { ToolResult } from '@tool/Tool/Tool';
 
 export class AgentRuntime {
   public constructor(
     private readonly configuration: AgentConfiguration,
-    private readonly projectSession: ProjectSession,
     private readonly operationRegistry: OperationRegistry,
     private readonly modelController: ModelController,
-    private readonly toolRegistry: ToolRegistry,
+    private readonly toolExecutor: ToolExecutor,
+    private readonly changeExecutor: ChangeExecutor,
     private readonly human: HumanInteraction,
     private readonly logger: Logger,
   ) {}
@@ -45,6 +44,7 @@ export class AgentRuntime {
       execution.currentOperation = operation.id;
       execution.addEvent('operation-started', { step, operation: operation.id });
       await this.logger.info('operation-selected', { step, operation: operation.id }, context);
+
       if (operation.id === 'verify') {
         await this.logger.info('verification-started', { step }, context);
       }
@@ -55,7 +55,6 @@ export class AgentRuntime {
           task,
           execution,
           conversation,
-          projectSession: this.projectSession,
           operation,
         });
       } catch (error) {
@@ -78,13 +77,13 @@ export class AgentRuntime {
       });
 
       if (result.toolCalls.length > 0) {
-        await this.executeTools(result, task, execution);
+        await this.toolExecutor.execute(result.toolCalls, execution, context);
         execution.currentOperation = operation.id;
         continue;
       }
 
       if (result.changes.length > 0) {
-        await this.applyChanges(result, task, execution);
+        await this.changeExecutor.apply(result.changes, execution, context);
       }
 
       if (result.question) {
@@ -155,55 +154,6 @@ export class AgentRuntime {
     }
 
     return undefined;
-  }
-
-  private async executeTools(result: OperationResult, task: Task, execution: Execution): Promise<void> {
-    const context = this.logContext(task, execution);
-    for (const call of result.toolCalls) {
-      const tool = this.toolRegistry.get(call.tool);
-      if (!tool) {
-        execution.addEvent('tool-result', { tool: call.tool, ok: false, error: 'Tool not found' });
-        await this.logger.warn('tool-missing', { tool: call.tool }, context);
-        continue;
-      }
-
-      await this.logger.info('tool-called', { tool: call.tool, input: call.input }, context);
-      const toolResult = await tool.execute(call.input, {
-        projectRoot: this.projectSession.root,
-        exclude: this.projectSession.configuration.exclude ?? [],
-      });
-      execution.addEvent('tool-result', { tool: call.tool, input: call.input, result: toolResult });
-      await this.logger.info('tool-result', { tool: call.tool, ok: toolResult.ok }, context);
-    }
-  }
-
-  private async applyChanges(result: OperationResult, task: Task, execution: Execution): Promise<void> {
-    const tool = this.toolRegistry.get('file-system');
-    const context = this.logContext(task, execution);
-    if (!tool) {
-      throw new Error('file-system tool is required to apply changes');
-    }
-
-    for (const change of result.changes) {
-      let toolResult: ToolResult;
-      if (change.type === 'write') {
-        toolResult = await tool.execute({ action: 'write', path: change.path, content: change.content }, {
-          projectRoot: this.projectSession.root,
-          exclude: this.projectSession.configuration.exclude ?? [],
-        });
-      } else {
-        toolResult = await tool.execute({ action: 'delete', path: change.path }, {
-          projectRoot: this.projectSession.root,
-          exclude: this.projectSession.configuration.exclude ?? [],
-        });
-      }
-
-      execution.addEvent('change-applied', { change: { type: change.type, path: change.path }, result: toolResult });
-      await this.logger.info('change-applied', { type: change.type, path: change.path, ok: toolResult.ok }, context);
-      if (!toolResult.ok) {
-        throw new Error(`Failed to apply change ${change.path}: ${toolResult.error ?? 'unknown error'}`);
-      }
-    }
   }
 
   private logContext(task: Task, execution: Execution) {

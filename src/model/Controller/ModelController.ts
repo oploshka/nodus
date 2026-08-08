@@ -20,7 +20,6 @@ export interface ModelExecutionInput {
   task: Task;
   execution: Execution;
   conversation: Conversation;
-  projectSession: ProjectSession;
   operation: OperationProfile;
 }
 
@@ -31,6 +30,7 @@ export class ModelController {
     private readonly adapter: ModelAdapter,
     private readonly promptRegistry: PromptRegistry,
     private readonly contextSelector: ContextSelector,
+    private readonly projectSession: ProjectSession,
     private readonly operationRegistry: OperationRegistry,
     private readonly toolRegistry: ToolRegistry,
     private readonly logger: Logger,
@@ -43,7 +43,7 @@ export class ModelController {
       input.task,
       input.execution,
       input.conversation,
-      input.projectSession,
+      this.projectSession,
       input.operation,
     );
 
@@ -73,6 +73,7 @@ export class ModelController {
             knowledge: context.knowledge,
             conversation: context.conversation,
             executionHistory: context.executionHistory,
+            toolContext: context.toolContext,
             project: context.project,
             availableOperations: this.operationRegistry.list().map(({ id, description }) => ({ id, description })),
             availableTools: this.toolRegistry.definitions(),
@@ -113,6 +114,7 @@ export class ModelController {
     }
 
     const result = this.parseOperationResult(response.content);
+    input.execution.consumeToolContext();
     await this.logger.info('model-responded', {
       step: input.execution.currentStep,
       operation: input.operation.id,

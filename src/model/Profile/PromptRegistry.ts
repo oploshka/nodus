@@ -28,10 +28,13 @@ export class PromptRegistry {
 
   private defaults(): PromptProfile[] {
     return [
-      this.profile('plan', 'Choose the next operation for the task.', [
-        'Do not modify files in this operation.',
-        'Use project evidence and conversation history to decide what must be understood first.',
-        'Choose search/understand/implement/review/verify only when justified.',
+      this.profile('plan', 'Choose only the next useful operation for the task.', [
+        'Do not modify files and do not produce the final detailed answer in this operation.',
+        'Keep planning concise and request tools only when evidence is required to choose the next operation.',
+        'Request at most 5 tool calls at once.',
+        'Do not repeatedly inspect files when enough evidence is already available.',
+        'For analysis tasks, move to understand after enough project evidence has been gathered.',
+        'Keep message and observations short.',
       ]),
       this.profile('search', 'Locate relevant evidence in the project.', [
         'Use search and filesystem tools instead of guessing paths.',

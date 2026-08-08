@@ -23,6 +23,7 @@ export class ContextSelector {
     return {
       conversation: conversation.recent(6),
       executionHistory: execution.history.slice(-16),
+      toolContext: execution.getToolContext(),
       policies: resolved.policies,
       knowledge: resolved.knowledge,
       project: {
