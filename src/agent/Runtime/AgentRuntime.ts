@@ -1,5 +1,6 @@
 // AgentRuntime.ts
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
+import type { PlanGenerator } from '@agent/Planning/PlanGenerator';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
 import type { ToolExecutor } from '@agent/Execution/ToolExecutor';
@@ -27,26 +28,66 @@ export class AgentRuntime {
     private readonly human: HumanInteraction,
     private readonly logger: Logger,
     private readonly reporter: ExecutionReporter,
+    private readonly planGenerator: PlanGenerator,
   ) {}
 
   public async execute(task: Task, conversation: Conversation): Promise<Execution> {
     const execution = new Execution(task.id);
     execution.status = 'running';
-    execution.currentOperation = task.options?.initialOperation ?? 'plan';
     execution.addEvent('task', { description: task.description });
+
+    const taskPlan = await this.planGenerator.generate(task, execution.id);
+    execution.addEvent('task-plan', taskPlan);
+    this.reporter.plan(taskPlan);
+    execution.currentOperation = task.options?.initialOperation ?? taskPlan.steps[0]?.type ?? 'understand';
 
     const context = this.logContext(task, execution);
     const startedAt = Date.now();
     let searchAttempts = 0;
     let understandToolBatches = 0;
     let taskIntent: TaskIntent = this.inferTaskIntent(task.description);
+    let planIndex = 0;
+    let planStepAttempts = 0;
 
     await this.logger.info('execution-started', { operation: execution.currentOperation }, context);
     this.reporter.task(task.description);
 
     for (let step = 1; step <= this.configuration.maxSteps; step += 1) {
       execution.currentStep = step;
-      const operation = await this.resolveOperation(execution.currentOperation ?? 'plan', task, execution);
+
+      const requestedOperation = execution.currentOperation ?? taskPlan.steps[planIndex]?.type ?? 'understand';
+      const futurePlanIndex = taskPlan.steps.findIndex((planStep, index) => index >= planIndex && planStep.type === requestedOperation);
+      if (futurePlanIndex > planIndex) {
+        taskPlan.steps[planIndex].status = 'completed';
+        planIndex = futurePlanIndex;
+        planStepAttempts = 0;
+      }
+
+      const activePlanStep = taskPlan.steps[planIndex];
+      if (activePlanStep && requestedOperation === activePlanStep.type) {
+        if (planStepAttempts >= activePlanStep.maxAttempts) {
+          activePlanStep.status = 'completed';
+          const nextPlanStep = taskPlan.steps[planIndex + 1];
+          if (nextPlanStep) {
+            planIndex += 1;
+            planStepAttempts = 0;
+            execution.currentOperation = nextPlanStep.type;
+            await this.logger.info('plan-step-budget-exhausted', {
+              stepId: activePlanStep.id,
+              operation: activePlanStep.type,
+              maxAttempts: activePlanStep.maxAttempts,
+              next: nextPlanStep.type,
+            }, context);
+            this.reporter.warning(`Лимит шага «${activePlanStep.goal}» исчерпан; перехожу к следующему шагу плана.`);
+            continue;
+          }
+        } else {
+          activePlanStep.status = 'running';
+          planStepAttempts += 1;
+        }
+      }
+
+      const operation = await this.resolveOperation(execution.currentOperation ?? 'understand', task, execution);
       if (!operation) {
         execution.status = 'failed';
         execution.result = `No available operation for ${execution.currentOperation ?? 'unknown'}`;
@@ -166,7 +207,7 @@ export class AgentRuntime {
       if (result.changes.length > 0) {
         await this.changeExecutor.apply(result.changes, execution, context);
         this.reporter.changes(result.changes.map((change) => change.path));
-        if (operation.id === 'implement') {
+        if (operation.id === 'implement' || operation.id === 'edit-file') {
           const target = this.operationRegistry.has('review') ? 'review' : 'finalize';
           await this.transition(execution, target, 'changes-applied', context);
           continue;
@@ -210,8 +251,9 @@ export class AgentRuntime {
         }
         if (taskIntent === 'write' && !hasAppliedChanges && result.changes.length === 0) {
           await this.logger.warn('write-task-completed-without-changes', undefined, context);
-          if (this.operationRegistry.has('implement') && operation.id !== 'implement') {
-            await this.transition(execution, 'implement', 'write-task-needs-changes', context);
+          const writeOperation = this.operationRegistry.has('edit-file') ? 'edit-file' : 'implement';
+          if (this.operationRegistry.has(writeOperation) && operation.id !== writeOperation) {
+            await this.transition(execution, writeOperation, 'write-task-needs-changes', context);
             continue;
           }
           execution.status = 'failed';
@@ -403,8 +445,9 @@ export class AgentRuntime {
     return undefined;
   }
 
-  private afterUnderstandTarget(intent: TaskIntent): 'implement' | 'finalize' {
-    return intent === 'write' ? 'implement' : 'finalize';
+  private afterUnderstandTarget(intent: TaskIntent): 'prepare-change' | 'implement' | 'finalize' {
+    if (intent !== 'write') return 'finalize';
+    return this.operationRegistry.has('prepare-change') ? 'prepare-change' : 'implement';
   }
 
   private inferTaskIntent(description: string): TaskIntent {

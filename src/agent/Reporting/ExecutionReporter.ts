@@ -1,5 +1,6 @@
 // ExecutionReporter.ts
 import type { ConsoleMode } from '@core/Configuration/Configuration';
+import type { TaskPlan } from '@agent/Planning/TaskPlan';
 
 export class ExecutionReporter {
   public constructor(
@@ -11,6 +12,14 @@ export class ExecutionReporter {
     if (this.mode === 'quiet') return;
     this.line(this.paint('cyan', '────────────────────────────────────────'));
     this.line(`${this.paint('bold', '● Получена задача')}\n  ${description}`);
+  }
+
+  public plan(plan: TaskPlan): void {
+    if (this.mode === 'quiet') return;
+    this.line(`\n${this.paint('bold', '◆ План')}`);
+    plan.steps.forEach((step, index) => {
+      this.line(`  ${index + 1}. ${step.goal} ${this.paint('dim', `[${step.type}, max ${step.maxAttempts}]`)}`);
+    });
   }
 
   public step(step: number, operation: string): void {
@@ -75,6 +84,7 @@ export class ExecutionReporter {
   private operationName(operation: string): string {
     const names: Record<string, string> = {
       plan: 'планирование', search: 'поиск', understand: 'анализ', implement: 'реализация',
+      'prepare-change': 'подготовка изменения', 'edit-file': 'редактирование файла',
       review: 'проверка изменений', verify: 'верификация', finalize: 'подготовка результата',
       'resolve-failure': 'разбор ошибки', 'extract-knowledge': 'извлечение знаний',
     };

@@ -5,6 +5,7 @@ import { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
 import { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import { AgentRuntime } from '@agent/Runtime/AgentRuntime';
 import { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
+import { PlanGenerator } from '@agent/Planning/PlanGenerator';
 import type { NodusConfiguration } from '@core/Configuration/Configuration';
 import { Conversation } from '@core/Conversation/Conversation';
 import { ConsoleLogSink } from '@core/Logging/ConsoleLogSink';
@@ -80,6 +81,14 @@ export class Nodus {
       configuration.logging.console ? configuration.logging.consoleMode : 'quiet',
       configuration.logging.colors,
     );
+    const planGenerator = new PlanGenerator(
+      configuration.model,
+      adapter,
+      promptRegistry,
+      this.projectSession,
+      this.logger,
+    );
+
     const modelController = new ModelController(
       configuration.model,
       configuration.agent,
@@ -107,6 +116,7 @@ export class Nodus {
       human,
       this.logger,
       reporter,
+      planGenerator,
     );
   }
 
