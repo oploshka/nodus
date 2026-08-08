@@ -13,6 +13,7 @@ import { Rag } from '@knowledge/Rag/Rag';
 
 import { ModelFactory } from '@model/ModelFactory';
 import { MockModelAdapter } from '@model/Adapter/MockModelAdapter';
+import { KoboldAdapter } from '@model/Adapter/KoboldAdapter';
 
 import { ProjectScanner } from '@project/Scanner/ProjectScanner';
 
@@ -62,7 +63,8 @@ const model = new ModelFactory().create(
     provider: config.model.provider,
     model: config.model.model,
   },
-  new MockModelAdapter(),
+  // new MockModelAdapter(),
+  new KoboldAdapter('http://localhost:5001/v1'), // Передаем адрес твоего koboldcpp
 );
 
 const contextBuilder = new ContextBuilder();
