@@ -1,5 +1,6 @@
 // AgentRuntime.ts
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
+import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
 import type { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import type { AgentConfiguration } from '@core/Configuration/Configuration';
@@ -24,6 +25,7 @@ export class AgentRuntime {
     private readonly changeExecutor: ChangeExecutor,
     private readonly human: HumanInteraction,
     private readonly logger: Logger,
+    private readonly reporter: ExecutionReporter,
   ) {}
 
   public async execute(task: Task, conversation: Conversation): Promise<Execution> {
@@ -38,6 +40,7 @@ export class AgentRuntime {
     let taskIntent: TaskIntent = this.inferTaskIntent(task.description);
 
     await this.logger.info('execution-started', { operation: execution.currentOperation }, context);
+    this.reporter.task(task.description);
 
     for (let step = 1; step <= this.configuration.maxSteps; step += 1) {
       execution.currentStep = step;
@@ -51,6 +54,7 @@ export class AgentRuntime {
       execution.currentOperation = operation.id;
       execution.addEvent('operation-started', { step, operation: operation.id });
       await this.logger.info('operation-selected', { step, operation: operation.id }, context);
+      this.reporter.step(step, operation.id);
 
       if (operation.id === 'verify') {
         await this.logger.info('verification-started', { step }, context);
@@ -71,6 +75,7 @@ export class AgentRuntime {
         break;
       }
 
+      this.reporter.note(operation.id, result.message);
       execution.addEvent('operation-result', {
         operation: operation.id,
         status: result.status,
@@ -102,6 +107,7 @@ export class AgentRuntime {
           : undefined;
 
         await this.toolExecutor.execute(result.toolCalls, execution, context, maxCalls);
+        this.reporter.tools(Math.min(result.toolCalls.length, maxCalls ?? result.toolCalls.length));
 
         if (operation.id === 'understand') {
           understandToolBatches += 1;
@@ -128,6 +134,12 @@ export class AgentRuntime {
 
       if (result.changes.length > 0) {
         await this.changeExecutor.apply(result.changes, execution, context);
+        this.reporter.changes(result.changes.map((change) => change.path));
+        if (operation.id === 'implement') {
+          const target = this.operationRegistry.has('review') ? 'review' : 'finalize';
+          await this.transition(execution, target, 'changes-applied', context);
+          continue;
+        }
       }
 
       if (result.question) {
@@ -247,6 +259,15 @@ export class AgentRuntime {
     await this.logger.info('execution-metrics', metrics, context);
     execution.addEvent('execution-finished', { status: execution.status, result: execution.result });
     await this.logger.info('execution-finished', { status: execution.status, result: execution.result }, context);
+    const changedFiles = new Set(execution.history
+      .filter((event) => event.type === 'change-applied')
+      .map((event) => (event.data as { path?: string } | undefined)?.path)
+      .filter((path): path is string => Boolean(path))).size;
+    if (execution.status === 'completed') {
+      this.reporter.completed(execution.result ?? 'Completed', metrics.durationMs, changedFiles);
+    } else {
+      this.reporter.failed(execution.result ?? execution.status, metrics.durationMs);
+    }
     return execution;
   }
 
@@ -305,6 +326,7 @@ export class AgentRuntime {
     execution.currentOperation = to;
     execution.addEvent('operation-transition', { from, to, reason });
     await this.logger.info('operation-transition', { from, to, reason }, context);
+    this.reporter.transition(from, to, reason);
   }
 
   private async resolveOperation(id: string, task: Task, execution: Execution): Promise<OperationProfile | undefined> {

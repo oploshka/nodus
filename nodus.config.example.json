@@ -36,6 +36,9 @@
     "file": false,
     "path": ".nodus/log/nodus.log",
     "modelPayload": false,
-    "payloadPath": ".nodus/log/payload"
+    "payloadPath": ".nodus/log/executions",
+    "executionPath": ".nodus/log/executions",
+    "consoleMode": "normal",
+    "colors": true
   }
 }

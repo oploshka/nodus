@@ -76,8 +76,7 @@ export async function runCli(args: string[]): Promise<void> {
       }
 
       try {
-        const result = await nodus.runTask(value, conversation.id);
-        console.log(`\n${result}`);
+        await nodus.runTask(value, conversation.id);
       } catch (error) {
         console.error(`Task failed: ${String(error)}`);
       }

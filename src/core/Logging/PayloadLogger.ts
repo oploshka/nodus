@@ -32,6 +32,7 @@ export class PayloadLogger {
     const relativePath = [
       this.path,
       context.executionId,
+      'payload',
       `step-${step}-${context.operation}-${type}.json`,
     ].join('/');
     const absolutePath = resolve(this.root, relativePath);

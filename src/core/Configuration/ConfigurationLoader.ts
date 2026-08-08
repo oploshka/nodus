@@ -50,7 +50,10 @@ export class ConfigurationLoader {
         file: parsed.logging?.file ?? false,
         path: parsed.logging?.path ?? '.nodus/log/nodus.log',
         modelPayload: parsed.logging?.modelPayload ?? false,
-        payloadPath: parsed.logging?.payloadPath ?? '.nodus/log/payload',
+        payloadPath: parsed.logging?.payloadPath ?? '.nodus/log/executions',
+        executionPath: parsed.logging?.executionPath ?? '.nodus/log/executions',
+        consoleMode: parsed.logging?.consoleMode ?? 'normal',
+        colors: parsed.logging?.colors ?? true,
       },
     };
   }

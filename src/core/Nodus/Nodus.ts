@@ -4,10 +4,12 @@ import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
 import { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import { AgentRuntime } from '@agent/Runtime/AgentRuntime';
+import { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { NodusConfiguration } from '@core/Configuration/Configuration';
 import { Conversation } from '@core/Conversation/Conversation';
 import { ConsoleLogSink } from '@core/Logging/ConsoleLogSink';
 import { FileLogSink } from '@core/Logging/FileLogSink';
+import { ExecutionFileLogSink } from '@core/Logging/ExecutionFileLogSink';
 import type { LogSink } from '@core/Logging/Log';
 import { Logger } from '@core/Logging/Logger';
 import { PayloadLogger } from '@core/Logging/PayloadLogger';
@@ -44,10 +46,11 @@ export class Nodus {
   ) {
     const sinks: LogSink[] = [];
     if (configuration.logging.console) {
-      sinks.push(new ConsoleLogSink());
+      sinks.push(new ConsoleLogSink('error'));
     }
     if (configuration.logging.file) {
       sinks.push(new FileLogSink(resolve(configuration.project.root, configuration.logging.path ?? '.nodus/log/nodus.log')));
+      sinks.push(new ExecutionFileLogSink(resolve(configuration.project.root, configuration.logging.executionPath ?? '.nodus/log/executions')));
     }
     this.logger = new Logger(configuration.logging.level, sinks);
 
@@ -71,7 +74,11 @@ export class Nodus {
     const contextSelector = new ContextSelector(knowledgeResolver);
     const payloadLogger = new PayloadLogger(
       configuration.project.root,
-      configuration.logging.payloadPath ?? '.nodus/log/payload',
+      configuration.logging.executionPath ?? configuration.logging.payloadPath ?? '.nodus/log/executions',
+    );
+    const reporter = new ExecutionReporter(
+      configuration.logging.console ? configuration.logging.consoleMode : 'quiet',
+      configuration.logging.colors,
     );
     const modelController = new ModelController(
       configuration.model,
@@ -85,6 +92,7 @@ export class Nodus {
       this.toolRegistry,
       this.logger,
       payloadLogger,
+      reporter,
     );
 
     const toolExecutor = new ToolExecutor(this.toolRegistry, this.projectSession, this.logger);
@@ -98,6 +106,7 @@ export class Nodus {
       changeExecutor,
       human,
       this.logger,
+      reporter,
     );
   }
 

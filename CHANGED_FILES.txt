@@ -1,12 +1,12 @@
+src/agent/Reporting/ExecutionReporter.ts
 src/agent/Runtime/AgentRuntime.ts
 src/core/Configuration/Configuration.ts
 src/core/Configuration/ConfigurationLoader.ts
+src/core/Logging/ConsoleLogSink.ts
+src/core/Logging/ExecutionFileLogSink.ts
+src/core/Logging/PayloadLogger.ts
 src/core/Nodus/Nodus.ts
 src/model/Controller/ModelController.ts
-src/model/Profile/PromptRegistry.ts
-src/model/Prompt/CommonSystemPrompt.ts
-src/model/Prompt/DefaultPromptDefinitions.ts
-src/model/Result/OperationResult.ts
 src/operation/Default/DefaultOperationProfile.ts
-src/operation/Profile/OperationProfile.ts
+src/cli/Cli.ts
 nodus.config.example.json

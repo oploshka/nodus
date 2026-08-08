@@ -4,7 +4,7 @@ import type { OperationProfile } from '@operation/Profile/OperationProfile';
 export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   {
     id: 'plan',
-    allowedTransitions: ['understand', 'implement', 'finalize'],
+    allowedTransitions: ['search', 'understand', 'implement', 'finalize'],
     description: 'Choose the next useful intellectual operation for the task without reading or changing files.',
     promptId: 'plan',
     contextStrategy: 'planning',

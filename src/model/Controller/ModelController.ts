@@ -2,6 +2,7 @@
 
 import type { AgentConfiguration, LoggingConfiguration, ModelConfiguration } from '@core/Configuration/Configuration';
 import type { Conversation } from '@core/Conversation/Conversation';
+import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { Execution } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { PayloadLogger } from '@core/Logging/PayloadLogger';
@@ -36,6 +37,7 @@ export class ModelController {
     private readonly toolRegistry: ToolRegistry,
     private readonly logger: Logger,
     private readonly payloadLogger: PayloadLogger,
+    private readonly reporter: ExecutionReporter,
   ) {}
 
   public async execute(input: ModelExecutionInput): Promise<OperationResult> {
@@ -122,7 +124,9 @@ export class ModelController {
       payload: requestPayloadPath,
     }, logContext);
 
+    const modelStartedAt = Date.now();
     const response = await this.adapter.complete(request);
+    const modelDurationMs = Date.now() - modelStartedAt;
 
     let responsePayloadPath: string | undefined;
     if (this.logging.modelPayload) {
@@ -132,6 +136,12 @@ export class ModelController {
     const result = await this.parseOrRepairOperationResult(response.content, request, input, logContext);
     input.execution.addEvent('model-usage', { operation: input.operation.id, usage: response.usage });
     input.execution.consumeToolContext();
+    this.reporter.modelResponse(
+      input.operation.id,
+      modelDurationMs,
+      response.usage?.prompt_tokens,
+      response.usage?.completion_tokens,
+    );
     await this.logger.info('model-responded', {
       step: input.execution.currentStep,
       operation: input.operation.id,

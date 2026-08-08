@@ -3,6 +3,7 @@ export type ScanMode = 'manual' | 'on-open' | 'disabled';
 export type KnowledgeGenerationMode = 'disabled' | 'manual';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export type ModelProvider = 'mock' | 'openai-compatible';
+export type ConsoleMode = 'quiet' | 'normal' | 'verbose';
 
 export interface ProjectConfiguration {
   id: string;
@@ -43,6 +44,9 @@ export interface LoggingConfiguration {
   path?: string;
   modelPayload: boolean;
   payloadPath?: string;
+  executionPath?: string;
+  consoleMode: ConsoleMode;
+  colors: boolean;
 }
 
 export interface NodusConfiguration {
