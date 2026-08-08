@@ -4,6 +4,7 @@
     // Явно подключаем типы Node для этой папки
     "types": ["node"],
     "paths": {
+      "@cli/*": ["src/cli/*"],
       "@core/*": ["src/core/*"],
       "@knowledge/*": ["src/knowledge/*"],
       "@project/*": ["src/project/*"],

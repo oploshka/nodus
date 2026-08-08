@@ -1,6 +1,12 @@
 // FileChange.ts
 
+export type FileChangeType =
+  | 'create'
+  | 'update'
+  | 'delete';
+
 export interface FileChange {
   path: string;
-  content: string;
+  type: FileChangeType;
+  content?: string;
 }
