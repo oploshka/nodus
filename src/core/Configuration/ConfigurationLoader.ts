@@ -1,17 +1,53 @@
 // ConfigurationLoader.ts
-
-import type { Configuration } from '@core/Configuration/Configuration';
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import type { NodusConfiguration } from '@core/Configuration/Configuration';
 
 export class ConfigurationLoader {
-  load(): Configuration {
+  public static async load(path: string): Promise<NodusConfiguration> {
+    const absolutePath = resolve(path);
+    const raw = await readFile(absolutePath, 'utf8');
+    const parsed = JSON.parse(raw) as Partial<NodusConfiguration>;
+    const configurationDirectory = dirname(absolutePath);
+
+    if (!parsed.project?.id || !parsed.project.root) {
+      throw new Error('Configuration requires project.id and project.root');
+    }
+
+    if (!parsed.model?.provider || !parsed.model.model) {
+      throw new Error('Configuration requires model.provider and model.model');
+    }
+
     return {
-      projectRoot: process.cwd(),
+      project: {
+        id: parsed.project.id,
+        root: resolve(configurationDirectory, parsed.project.root),
+        scanMode: parsed.project.scanMode ?? 'manual',
+        cachePath: parsed.project.cachePath,
+        knowledgePath: parsed.project.knowledgePath,
+        include: parsed.project.include ?? [],
+        exclude: parsed.project.exclude ?? ['node_modules', 'dist', '.git', '.nodus'],
+      },
       model: {
-        provider: 'mock',
-        model: 'mock-model',
+        provider: parsed.model.provider,
+        endpoint: parsed.model.endpoint,
+        model: parsed.model.model,
+        apiKey: parsed.model.apiKey,
+        temperature: parsed.model.temperature ?? 0.2,
+        maxTokens: parsed.model.maxTokens ?? 4096,
       },
       agent: {
-        maxSteps: 10,
+        maxSteps: parsed.agent?.maxSteps ?? 20,
+      },
+      knowledge: {
+        generationMode: parsed.knowledge?.generationMode ?? 'disabled',
+      },
+      logging: {
+        level: parsed.logging?.level ?? 'info',
+        console: parsed.logging?.console ?? true,
+        file: parsed.logging?.file ?? false,
+        path: parsed.logging?.path ?? '.nodus/log/nodus.log',
+        modelPayload: parsed.logging?.modelPayload ?? false,
       },
     };
   }

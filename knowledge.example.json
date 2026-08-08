@@ -1,0 +1,28 @@
+[
+  {
+    "id": "policy-single-quotes",
+    "type": "policy",
+    "content": "Use single quotes in TypeScript source files.",
+    "scope": "project",
+    "appliesTo": ["code", "typescript"],
+    "priority": 50,
+    "source": "human",
+    "confidence": 1,
+    "status": "active",
+    "relatedIds": [],
+    "relatedFiles": []
+  },
+  {
+    "id": "pattern-existing-analogue",
+    "type": "pattern",
+    "content": "When adding a new domain entity, prefer the closest existing entity as the primary implementation example instead of inventing a new structure.",
+    "scope": "project",
+    "appliesTo": ["entity", "implementation"],
+    "priority": 80,
+    "source": "human",
+    "confidence": 1,
+    "status": "active",
+    "relatedIds": [],
+    "relatedFiles": []
+  }
+]

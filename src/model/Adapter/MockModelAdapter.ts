@@ -1,16 +1,17 @@
 // MockModelAdapter.ts
-
-import type { Context } from '@core/Context/Context';
-import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
-import type { ModelResponse } from '@model/Response';
+import type { ModelAdapter, RawModelResponse } from '@model/Adapter/ModelAdapter';
+import type { ModelRequest } from '@model/Request/ModelRequest';
 
 export class MockModelAdapter implements ModelAdapter {
-  async send(context: Context): Promise<ModelResponse> {
-    console.log('Model context:', JSON.stringify(context, null, 2));
-
+  public async complete(_request: ModelRequest): Promise<RawModelResponse> {
     return {
-      type: 'message',
-      content: 'Mock model response',
+      content: JSON.stringify({
+        status: 'completed',
+        message: 'Mock model response',
+        toolCalls: [],
+        changes: [],
+        observations: [],
+      }),
     };
   }
 }

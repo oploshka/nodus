@@ -1,80 +1,73 @@
 // FileSystemTool.ts
-
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import type { Tool } from '@tool/Tool';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, relative, resolve } from 'node:path';
+import type { Tool, ToolContext, ToolResult } from '@tool/Tool/Tool';
 
 export class FileSystemTool implements Tool {
-  name = 'filesystem';
+  public readonly definition = {
+    id: 'file-system',
+    description: 'Read, write, list, delete, or check project files. Paths are relative to project root.',
+    inputSchema: {
+      action: 'read | write | list | delete | exists',
+      path: 'string',
+      content: 'string, required for write',
+    },
+  };
 
-  description = 'Read, write, check and list files';
-
-  async execute(input: unknown): Promise<unknown> {
-    if (!input || typeof input !== 'object') {
-      throw new Error('Filesystem input must be an object');
-    }
-
-    const data = input as {
-      action?: string;
-      path?: string;
-      content?: string;
-    };
-
-    switch (data.action) {
-      case 'read':
-        if (!data.path) {
-          throw new Error('File path is required');
-        }
-
-        return this.read(data.path);
-
-      case 'write':
-        if (!data.path || data.content === undefined) {
-          throw new Error('File path and content are required');
-        }
-
-        await this.write(data.path, data.content);
-        return 'File written';
-
-      case 'exists':
-        if (!data.path) {
-          throw new Error('File path is required');
-        }
-
-        return this.exists(data.path);
-
-      case 'list':
-        if (!data.path) {
-          throw new Error('Directory path is required');
-        }
-
-        return this.list(data.path);
-
-      default:
-        throw new Error(`Unknown filesystem action: ${data.action}`);
-    }
-  }
-
-  async read(filePath: string): Promise<string> {
-    return fs.readFile(filePath, 'utf-8');
-  }
-
-  async write(filePath: string, content: string): Promise<void> {
-    await fs.writeFile(filePath, content, 'utf-8');
-  }
-
-  async exists(filePath: string): Promise<boolean> {
+  public async execute(input: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     try {
-      await fs.access(filePath);
-      return true;
-    } catch {
-      return false;
+      const action = String(input.action ?? '');
+      const path = String(input.path ?? '');
+      const absolutePath = this.safePath(context.projectRoot, path);
+
+      switch (action) {
+        case 'read':
+          return { ok: true, data: await readFile(absolutePath, 'utf8') };
+        case 'write': {
+          const content = String(input.content ?? '');
+          await mkdir(dirname(absolutePath), { recursive: true });
+          await writeFile(absolutePath, content, 'utf8');
+          return { ok: true, data: { path } };
+        }
+        case 'list': {
+          const entries = await readdir(absolutePath, { withFileTypes: true });
+          return {
+            ok: true,
+            data: entries.map((entry: { name: string; isDirectory(): boolean }) => ({ name: entry.name, type: entry.isDirectory() ? 'directory' : 'file' })),
+          };
+        }
+        case 'delete':
+          await rm(absolutePath, { recursive: true, force: true });
+          return { ok: true, data: { path } };
+        case 'exists': {
+          try {
+            const value = await stat(absolutePath);
+            return { ok: true, data: { exists: true, type: value.isDirectory() ? 'directory' : 'file' } };
+          } catch (error) {
+            const nodeError = error as NodeJS.ErrnoException;
+            if (nodeError.code === 'ENOENT') {
+              return { ok: true, data: { exists: false } };
+            }
+            throw error;
+          }
+        }
+        default:
+          return { ok: false, error: `Unknown file-system action: ${action}` };
+      }
+    } catch (error) {
+      return { ok: false, error: String(error) };
     }
   }
 
-  async list(directory: string): Promise<string[]> {
-    const entries = await fs.readdir(directory);
+  private safePath(root: string, path: string): string {
+    const resolvedRoot = resolve(root);
+    const absolutePath = resolve(resolvedRoot, path || '.');
+    const relativePath = relative(resolvedRoot, absolutePath);
 
-    return entries.map((entry) => path.join(directory, entry));
+    if (relativePath.startsWith('..') || relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+      throw new Error(`Path escapes project root: ${path}`);
+    }
+
+    return absolutePath;
   }
 }

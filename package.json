@@ -1,23 +1,18 @@
 {
-  "name": "nodus",
+  "name": "nodus-agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
-    "test": "vitest run",
-    "test:watch": "vitest"
-  },
-  "dependencies": {
-    "zod": "^4.0.0"
+    "dev": "tsx src/Main.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc && tsc-alias -f",
+    "start": "node dist/Main.js"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "tsx": "^4.0.0",
-    "tsconfig-paths": "^4.2.0",
-    "typescript": "5.9.3",
-    "vitest": "^3.0.0"
+    "@types/node": "^22.10.0",
+    "tsc-alias": "^1.8.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
   }
 }

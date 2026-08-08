@@ -1,8 +1,11 @@
 // ModelAdapter.ts
+import type { ModelRequest } from '@model/Request/ModelRequest';
 
-import type { Context } from '@core/Context/Context';
-import type { ModelResponse } from '@model/Response';
+export interface RawModelResponse {
+  content: string;
+  usage?: unknown;
+}
 
 export interface ModelAdapter {
-  send(context: Context): Promise<ModelResponse>;
+  complete(request: ModelRequest): Promise<RawModelResponse>;
 }

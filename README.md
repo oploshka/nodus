@@ -1,156 +1,136 @@
-# Nodus
+# Nodus Agent v0.1
 
-> Understand before you generate.
+Nodus is a small, model-agnostic developer agent built around a persistent project session, explicit project knowledge, operation-specific prompts, tools, and a simple execution loop.
 
-Nodus — экспериментальная среда разработки, предназначенная для работы человека и LLM с учетом контекста, структуры и инженерных знаний конкретного проекта.
+Core principle: **Understand before you generate.**
 
-Главная идея Nodus — не заставить LLM генерировать больше кода, а дать ей возможность **понимать существующий проект и работать по его образцу**.
+## MVP architecture
 
-## Основная идея
-
-Современная LLM хорошо умеет решать отдельные задачи, но плохо знает конкретный проект:
-
-- почему архитектура устроена именно так;
-- какие решения уже существуют;
-- какие подходы приняты в проекте;
-- какие существуют исключения;
-- как обычно реализуются похожие задачи;
-- какие изменения безопасны, а какие могут нарушить существующие договоренности.
-
-Nodus должен постепенно формировать и поддерживать это понимание.
-
-Вместо:
-
-~~~text
-Task → LLM → Code
-~~~
-
-целевая модель выглядит примерно так:
-
-~~~text
+```text
+Conversation
+    ↓
 Task
-  ↓
-Project Knowledge
-  ↓
-Relevant Context
-  ↓
-Existing Examples
-  ↓
-LLM
-  ↓
-Tools
-  ↓
-Verification
-~~~
-
-## Что Nodus пытается решить
-
-Nodus исследует возможность вынести часть инженерного понимания проекта из головы разработчиков в систему, которую могут использовать как человек, так и различные LLM.
-
-Цель — не заменить разработчика и не создать «идеального AI-архитектора».
-
-Цель — сделать так, чтобы модель могла:
-
-1. понять, как устроен конкретный проект;
-2. найти существующие решения, похожие на текущую задачу;
-3. следовать существующим паттернам вместо изобретения новых;
-4. изменять проект через инструменты;
-5. проверять результат;
-6. задавать вопросы, когда существующего знания недостаточно;
-7. постепенно накапливать новое понимание проекта.
-
-## Принципы
-
-### Project first
-
-Nodus не должен навязывать проекту абстрактную «правильную архитектуру».
-
-Существующий проект и его реальные решения являются главным источником контекста.
-
-### Examples over rules
-
-Предпочтение отдается существующим примерам и паттернам проекта.
-
-Жесткие правила используются только там, где они действительно необходимы.
-
-### Model agnostic
-
-LLM является заменяемым компонентом.
-
-Nodus не должен зависеть от конкретной модели или поставщика API.
-
-### Uncertainty is information
-
-Если система не понимает, почему принято определенное решение, она не должна автоматически считать свое предположение фактом.
-
-Неизвестность должна быть явной и при необходимости превращаться в вопрос.
-
-### Human in the loop
-
-Nodus помогает принимать и выполнять решения, но не предполагает безусловную автономность.
-
-Разработчик остается частью процесса.
-
-## Основной сценарий первой версии
-
-Первый практический сценарий Nodus:
-
-> Добавить новую сущность в существующий проект по образцу уже реализованных сущностей.
-
-Например:
-
-~~~text
-Новая сущность
     ↓
-Найти похожие реализации
+AgentRuntime
+    ├── ProjectSession
+    ├── Knowledge
+    ├── OperationRegistry
+    ├── Tools
+    └── Logger
     ↓
-Изучить существующий паттерн
+ModelController
     ↓
-Сформировать план изменений
+Local Model
     ↓
-Изменить проект
+OperationResult
     ↓
-Проверить результат
+AgentRuntime
     ↓
-Показать diff
-~~~
+Result
+```
 
-Этот сценарий используется как первая проверка основной гипотезы Nodus.
+The implementation deliberately keeps verification, context selection, knowledge generation, and planning simple. They are extension points, not separate heavy subsystems in v0.1.
 
-## Основные компоненты
+## Quick start
 
-На текущем этапе предполагаются следующие концепции:
+```bash
+npm install
+cp nodus.config.example.json nodus.config.json
+npm run dev -- nodus.config.json
+```
 
-- **Knowledge** — знания о проекте;
-- **File Understanding** — понимание назначения и роли файлов;
-- **Context Builder** — формирование контекста для LLM;
-- **Policies** — мягкие правила и предпочтения проекта;
-- **Tools** — операции над проектом;
-- **Model Adapter** — абстракция над конкретной LLM;
-- **Agent Runtime** — цикл выполнения задачи;
-- **Verification** — проверка результата.
+On Windows PowerShell, copy the config with:
 
-Архитектура и определения этих компонентов находятся в `docs/`.
+```powershell
+Copy-Item nodus.config.example.json nodus.config.json
+```
 
-## Статус
+The example config uses the `mock` model provider, so the CLI starts without a running LLM. To use a local OpenAI-compatible endpoint, set:
 
-Проект находится на стадии формирования архитектуры и проверки концепции.
+```json
+{
+  "model": {
+    "provider": "openai-compatible",
+    "endpoint": "http://127.0.0.1:11434/v1",
+    "model": "your-local-model"
+  }
+}
+```
 
-Текущая задача — определить минимальный набор компонентов, необходимый для первого рабочего прототипа, не создавая преждевременно сложную инфраструктуру.
+The adapter calls `<endpoint>/chat/completions`. This works with local servers that expose an OpenAI-compatible Chat Completions API.
 
-## Документация
+## CLI commands
 
-- [План разработки](docs/PLAN.md)
-- [Архитектура](docs/ARCHITECTURE.md)
-- [Основные концепции](docs/CONCEPTS.md)
-- [Принятые решения](docs/DECISIONS.md)
+- `/scan` — manually scan the project and save the index cache.
+- `/refresh` — rescan the project.
+- `/conversation` — show the active conversation id.
+- `/new` — start a new conversation.
+- `/exit` — exit.
 
-## Название
+Any other input becomes a Task in the active conversation.
 
-**Nodus** — от латинского *nodus*, «узел».
+## Knowledge
 
-Название отражает идею проекта как системы взаимосвязанных знаний, решений, компонентов и зависимостей.
+Knowledge is loaded from the configured JSON file and supports four entry types:
 
----
+- `understanding`
+- `pattern`
+- `decision`
+- `policy`
 
-> Nodus is an experiment in making project understanding a first-class part of software development.
+Each entry may define scope, applicability tags, source, confidence, priority, related entries, and related files. v0.1 primarily expects knowledge to be human-authored or pre-generated.
+
+## Operations
+
+Built-in operations:
+
+- `search`
+- `understand`
+- `plan`
+- `implement`
+- `review`
+- `verify`
+- `resolve-failure`
+- `extract-knowledge`
+
+The model receives only currently registered operations. If it requests an unknown operation, Nodus logs `missing-operation` and falls back to `understand` when possible.
+
+## Model response protocol
+
+Nodus asks the model to return one JSON object. The important fields are:
+
+```json
+{
+  "status": "continue",
+  "message": "What I am doing",
+  "nextOperation": "understand",
+  "toolCalls": [],
+  "changes": [],
+  "question": null,
+  "observations": []
+}
+```
+
+A model may request tools, propose file changes, ask the user a question, move to another operation, complete the task, or fail.
+
+## Project scanning
+
+Scanning is intentionally optional. With `scanMode: "manual"`, opening a project only loads available knowledge and an existing cached project index. `/scan` or `/refresh` performs a deterministic scan later.
+
+The scanner records file metadata and simple import/export facts for common JS/TS/Vue files. It is not intended to be a full AST-based understanding system.
+
+## Logging
+
+Console logging is enabled by default. File logging writes JSONL and is optional. Full model payload logging is separately controlled by `logging.modelPayload` because prompts and responses can be large and may contain project code.
+
+## Build
+
+```bash
+npm run typecheck
+npm run build
+npm start -- nodus.config.json
+```
+
+`tsc-alias` rewrites TypeScript path aliases in the compiled output.
+
+See `docs/MvpSpecification.md` for the frozen v0.1 scope.

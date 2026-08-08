@@ -1,28 +1,45 @@
 // GitTool.ts
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import type { Tool, ToolContext, ToolResult } from '@tool/Tool/Tool';
 
-import { TerminalTool } from '@tool/Terminal/TerminalTool';
-import type { Tool } from '@tool/Tool';
+const execFileAsync = promisify(execFile);
 
 export class GitTool implements Tool {
-  name = 'git';
+  public readonly definition = {
+    id: 'git',
+    description: 'Read git status, diff, or recent log for the project.',
+    inputSchema: {
+      action: 'status | diff | log',
+      args: 'optional string array',
+    },
+  };
 
-  description = 'Inspect and work with Git repositories';
+  public async execute(input: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    try {
+      const action = String(input.action ?? 'status');
+      const extra = Array.isArray(input.args) ? input.args.map(String) : [];
+      let args: string[];
 
-  constructor(private readonly terminal: TerminalTool) {}
+      switch (action) {
+        case 'status':
+          args = ['status', '--short', ...extra];
+          break;
+        case 'diff':
+          args = ['diff', ...extra];
+          break;
+        case 'log':
+          args = ['log', '--oneline', '-n', '20', ...extra];
+          break;
+        default:
+          return { ok: false, error: `Unknown git action: ${action}` };
+      }
 
-  async execute(input: unknown): Promise<unknown> {
-    if (typeof input !== 'string') {
-      throw new Error('Git command must be a string');
+      const result = await execFileAsync('git', args, { cwd: context.projectRoot, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+      return { ok: true, data: { stdout: result.stdout, stderr: result.stderr } };
+    } catch (error) {
+      const value = error as Error & { stdout?: string; stderr?: string };
+      return { ok: false, error: value.message, data: { stdout: value.stdout, stderr: value.stderr } };
     }
-
-    return this.terminal.execute(`git ${input}`);
-  }
-
-  status(cwd: string): Promise<string> {
-    return this.terminal.execute('git status --short', cwd);
-  }
-
-  diff(cwd: string): Promise<string> {
-    return this.terminal.execute('git diff', cwd);
   }
 }
