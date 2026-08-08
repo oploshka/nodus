@@ -1,12 +1,13 @@
+// ContextItem.ts
+
 export type ContextItemType =
-  | 'instruction'
+  | 'task'
   | 'file'
-  | 'knowledge'
-  | 'example'
   | 'tool'
-  | 'message';
+  | 'message'
+  | 'knowledge';
 
 export interface ContextItem {
   type: ContextItemType;
-  content: string;
+  content: unknown;
 }

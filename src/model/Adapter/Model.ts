@@ -1,6 +1,8 @@
-import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
+// ModelAdapter.ts
 
-export interface Model {
-  name: string;
-  adapter: ModelAdapter;
+import type { Context } from '@core/Context/Context';
+import type { ModelResponse } from '@model/Response';
+
+export interface ModelAdapter {
+  send(context: Context): Promise<ModelResponse>;
 }

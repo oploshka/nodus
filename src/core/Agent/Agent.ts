@@ -1,6 +1,8 @@
 // Agent.ts
 
-import type { Context } from '@core/Context/Context';
+import type { ContextBuilder } from '@core/Context/ContextBuilder';
+import type { Execution } from '@core/Execution/Execution';
+import type { ExecutionResult } from '@core/Execution/ExecutionResult';
 import type { Task } from '@core/Task/Task';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { ToolRegistry } from '@tool/ToolRegistry';
@@ -9,45 +11,58 @@ export class Agent {
   constructor(
     private readonly model: ModelAdapter,
     private readonly tools: ToolRegistry,
+    private readonly contextBuilder: ContextBuilder,
   ) {}
 
-  async execute(task: Task, context: Context): Promise<string> {
-    let currentContext = context;
+  async execute(task: Task): Promise<ExecutionResult> {
+    const execution: Execution = {
+      task,
+      context: this.contextBuilder
+        .addTask(task)
+        .build(),
+      step: 0,
+      completed: false,
+    };
 
-    for (let i = 0; i < 10; i += 1) {
-      const response = await this.model.send(currentContext);
+    while (!execution.completed) {
+      execution.step += 1;
+
+      const response = await this.model.send(execution.context);
 
       if (response.type === 'message') {
-        return response.content ?? '';
+        execution.completed = true;
+
+        return {
+          content: response.content ?? '',
+          steps: execution.step,
+        };
       }
 
-      if (response.type === 'tool') {
-        if (!response.tool) {
-          throw new Error('Tool response does not contain a tool call');
-        }
+      if (!response.tool) {
+        throw new Error('Tool response does not contain a tool call');
+      }
 
-        const tool = this.tools.get(response.tool.name);
+      const tool = this.tools.get(response.tool.name);
 
-        if (!tool) {
-          throw new Error(`Unknown tool: ${response.tool.name}`);
-        }
+      if (!tool) {
+        throw new Error(`Unknown tool: ${response.tool.name}`);
+      }
 
-        const result = await tool.execute(response.tool.input);
+      const result = await tool.execute(response.tool.input);
 
-        currentContext = {
-          ...currentContext,
-          files: [
-            ...currentContext.files,
-            JSON.stringify({
-              tool: response.tool.name,
-              input: response.tool.input,
-              result,
-            }),
-          ],
-        };
+      execution.context = this.contextBuilder
+        .addToolResult(
+          response.tool.name,
+          response.tool.input,
+          result,
+        )
+        .build();
+
+      if (execution.step >= 10) {
+        throw new Error('Agent execution limit reached');
       }
     }
 
-    throw new Error('Agent execution limit reached');
+    throw new Error('Execution ended without a result');
   }
 }

@@ -1,7 +1,7 @@
-import type { Knowledge } from '@knowledge/Knowledge';
+// Context.ts
+
+import type { ContextItem } from '@core/Context/ContextItem';
 
 export interface Context {
-  task: string;
-  knowledge?: Knowledge;
-  files: string[];
+  items: ContextItem[];
 }
