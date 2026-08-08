@@ -2,6 +2,7 @@
 import type { FileChange } from '@core/Change/ChangeSet';
 
 export type OperationStatus = 'continue' | 'waiting' | 'completed' | 'failed';
+export type TaskIntent = 'read' | 'write';
 
 export interface ToolCallRequest {
   tool: string;
@@ -13,6 +14,7 @@ export interface OperationResult {
   message?: string;
   finalAnswer?: string;
   nextOperation?: string;
+  intent?: TaskIntent;
   toolCalls: ToolCallRequest[];
   changes: FileChange[];
   question?: string;

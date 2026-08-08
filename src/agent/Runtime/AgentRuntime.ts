@@ -8,7 +8,7 @@ import { Execution } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
 import type { ModelController } from '@model/Controller/ModelController';
-import type { OperationResult } from '@model/Result/OperationResult';
+import type { OperationResult, TaskIntent } from '@model/Result/OperationResult';
 import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 
@@ -35,6 +35,7 @@ export class AgentRuntime {
     const context = this.logContext(task, execution);
     const startedAt = Date.now();
     let understandToolBatches = 0;
+    let taskIntent: TaskIntent = this.inferTaskIntent(task.description);
 
     await this.logger.info('execution-started', { operation: execution.currentOperation }, context);
 
@@ -77,6 +78,11 @@ export class AgentRuntime {
         observations: result.observations,
       });
 
+      if (operation.id === 'plan' && result.intent) {
+        taskIntent = result.intent;
+        await this.logger.info('task-intent-classified', { intent: taskIntent, source: 'model' }, context);
+      }
+
       if (operation.id === 'plan' && result.toolCalls.length > 0) {
         await this.logger.warn('plan-tool-calls-ignored', { count: result.toolCalls.length }, context);
         await this.transition(execution, 'understand', 'plan-cannot-use-tools', context);
@@ -84,8 +90,10 @@ export class AgentRuntime {
       }
 
       if (operation.id === 'finalize' && result.toolCalls.length > 0) {
-        await this.logger.warn('finalize-tool-calls-ignored', { count: result.toolCalls.length }, context);
-        result.toolCalls = [];
+        await this.logger.warn('finalize-invalid-result', { reason: 'tool-calls', count: result.toolCalls.length }, context);
+        execution.status = 'failed';
+        execution.result = 'Finalize returned tool calls instead of a completed final answer';
+        break;
       }
 
       if (result.toolCalls.length > 0) {
@@ -97,16 +105,18 @@ export class AgentRuntime {
 
         if (operation.id === 'understand') {
           understandToolBatches += 1;
-          if (
-            understandToolBatches >= AgentRuntime.MAX_UNDERSTAND_TOOL_BATCHES &&
-            this.operationRegistry.has('finalize')
-          ) {
+          if (understandToolBatches >= AgentRuntime.MAX_UNDERSTAND_TOOL_BATCHES) {
+            const target = this.afterUnderstandTarget(taskIntent);
             await this.logger.info('understand-budget-exhausted', {
               toolBatches: understandToolBatches,
               limit: AgentRuntime.MAX_UNDERSTAND_TOOL_BATCHES,
+              intent: taskIntent,
+              target,
             }, context);
-            await this.transition(execution, 'finalize', 'understand-tool-budget', context);
-            continue;
+            if (this.operationRegistry.has(target)) {
+              await this.transition(execution, target, 'understand-tool-budget', context);
+              continue;
+            }
           }
         }
 
@@ -147,6 +157,24 @@ export class AgentRuntime {
       }
 
       if (result.status === 'completed') {
+        const finalAnswer = result.finalAnswer?.trim();
+        const hasAppliedChanges = execution.history.some((event) => event.type === 'change-applied');
+        if (operation.id === 'finalize' && !finalAnswer) {
+          await this.logger.warn('finalize-invalid-result', { reason: 'missing-final-answer' }, context);
+          execution.status = 'failed';
+          execution.result = 'Finalize completed without finalAnswer';
+          break;
+        }
+        if (taskIntent === 'write' && !hasAppliedChanges && result.changes.length === 0) {
+          await this.logger.warn('write-task-completed-without-changes', undefined, context);
+          if (this.operationRegistry.has('implement') && operation.id !== 'implement') {
+            await this.transition(execution, 'implement', 'write-task-needs-changes', context);
+            continue;
+          }
+          execution.status = 'failed';
+          execution.result = 'Write task completed without applying changes';
+          break;
+        }
         execution.status = 'completed';
         execution.result = this.formatFinalResult(result);
         break;
@@ -161,8 +189,8 @@ export class AgentRuntime {
             requested: requestedNextOperation,
             allowed,
           }, context);
-          const fallback = operation.id === 'understand' && this.operationRegistry.has('finalize')
-            ? 'finalize'
+          const fallback = operation.id === 'understand'
+            ? this.afterUnderstandTarget(taskIntent)
             : operation.fallback;
           if (fallback && this.operationRegistry.has(fallback)) {
             await this.transition(execution, fallback, 'invalid-model-transition', context);
@@ -185,15 +213,23 @@ export class AgentRuntime {
         continue;
       }
 
-      if (operation.id === 'understand' && result.status === 'continue' && this.operationRegistry.has('finalize')) {
-        await this.transition(execution, 'finalize', 'understand-no-action', context);
-        continue;
+      if (operation.id === 'understand' && result.status === 'continue') {
+        const target = this.afterUnderstandTarget(taskIntent);
+        await this.logger.warn('operation-no-progress', {
+          operation: operation.id,
+          intent: taskIntent,
+          target,
+        }, context);
+        if (this.operationRegistry.has(target)) {
+          await this.transition(execution, target, 'understand-no-progress', context);
+          continue;
+        }
       }
 
       if (operation.id === 'finalize' && result.status === 'continue') {
-        execution.status = 'completed';
-        execution.result = this.formatFinalResult(result);
-        await this.logger.warn('finalize-forced-complete', undefined, context);
+        await this.logger.warn('finalize-invalid-result', { reason: 'status-continue' }, context);
+        execution.status = 'failed';
+        execution.result = 'Finalize did not return status=completed with finalAnswer';
         break;
       }
 
@@ -285,6 +321,19 @@ export class AgentRuntime {
       return fallback;
     }
     return undefined;
+  }
+
+  private afterUnderstandTarget(intent: TaskIntent): 'implement' | 'finalize' {
+    return intent === 'write' ? 'implement' : 'finalize';
+  }
+
+  private inferTaskIntent(description: string): TaskIntent {
+    const normalized = description.toLowerCase();
+    const writeSignals = [
+      'добав', 'измени', 'измен', 'исправ', 'удали', 'создай', 'рефактор', 'реализ',
+      'add ', 'change ', 'modify ', 'fix ', 'delete ', 'remove ', 'create ', 'implement ', 'refactor ',
+    ];
+    return writeSignals.some((signal) => normalized.includes(signal)) ? 'write' : 'read';
   }
 
   private logContext(task: Task, execution: Execution) {

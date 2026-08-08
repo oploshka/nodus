@@ -172,7 +172,7 @@ export class ModelController {
       project: size(context.project),
     };
     const totalChars = Object.values(chars).reduce((sum, value) => sum + value, 0);
-    return { ...chars, totalChars, estimatedTokens: Math.ceil(totalChars / 4) };
+    return { ...chars, totalChars, estimatedTokens: Math.ceil(totalChars / 2), estimateSafetyFactor: 2 };
   }
 
   private availableToolsFor(operationId: string) {
@@ -255,6 +255,7 @@ export class ModelController {
       message: typeof parsed.message === 'string' ? parsed.message : undefined,
       finalAnswer: typeof parsed.finalAnswer === 'string' ? parsed.finalAnswer : undefined,
       nextOperation: typeof parsed.nextOperation === 'string' ? parsed.nextOperation : undefined,
+      intent: parsed.intent === 'read' || parsed.intent === 'write' ? parsed.intent : undefined,
       toolCalls: Array.isArray(parsed.toolCalls) ? parsed.toolCalls : [],
       changes: Array.isArray(parsed.changes) ? parsed.changes : [],
       question: typeof parsed.question === 'string' ? parsed.question : undefined,
@@ -291,6 +292,7 @@ Return ONLY valid JSON with this shape:
   "message": "short execution note",
   "finalAnswer": "full user-facing answer; use only when status=completed",
   "nextOperation": "optional operation id",
+  "intent": "read | write; set this in plan when task intent can be classified",
   "toolCalls": [{ "tool": "tool id", "input": {} }],
   "changes": [{ "type": "write", "path": "relative/path", "content": "..." }, { "type": "delete", "path": "relative/path" }],
   "question": "question for human when status=waiting",
