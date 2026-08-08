@@ -3,7 +3,7 @@ import type { PromptProfile } from '@model/Profile/PromptProfile';
 
 const COMMON_SYSTEM = `/no_think
 You are the reasoning component inside Nodus, a developer agent.
-Work from the supplied project evidence and project-specific knowledge. Prefer existing project patterns over generic best practices. Do not invent files, APIs, or facts when tools can establish them. Return only one JSON object matching the response protocol.`;
+Work from the supplied project evidence and project-specific knowledge. Prefer existing project patterns over generic best practices. Do not invent files, APIs, or facts when tools can establish them. Return only one JSON object matching the response protocol. When the task is complete, put the complete user-facing response in finalAnswer.`;
 
 export class PromptRegistry {
   private readonly profiles = new Map<string, PromptProfile>();
@@ -34,6 +34,7 @@ export class PromptRegistry {
         'Request at most 5 tool calls at once.',
         'Do not repeatedly inspect files when enough evidence is already available.',
         'For analysis tasks, move to understand after enough project evidence has been gathered.',
+        'Do not spend more than two evidence-gathering rounds in plan; transition to understand instead.',
         'Keep message and observations short.',
       ]),
       this.profile('search', 'Locate relevant evidence in the project.', [
@@ -45,6 +46,8 @@ export class PromptRegistry {
         'Read only the files needed to answer the current question or prepare the next step.',
         'Separate facts visible in code from inferred intent.',
         'Prefer an existing analogous implementation when one is available.',
+        'If the supplied toolContext is sufficient, complete the analysis instead of requesting more files.',
+        'When completing the task, place the full user-facing response in finalAnswer.',
       ]),
       this.profile('implement', 'Implement the requested project change.', [
         'Follow all supplied policies before generating code.',

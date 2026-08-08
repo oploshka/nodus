@@ -123,6 +123,7 @@ export class ModelController {
       toolCalls: result.toolCalls.length,
       changes: result.changes.length,
       hasQuestion: Boolean(result.question),
+      hasFinalAnswer: Boolean(result.finalAnswer),
       message: result.message,
       usage: response.usage,
       payload: responsePayloadPath,
@@ -143,6 +144,7 @@ export class ModelController {
     return {
       status: parsed.status,
       message: typeof parsed.message === 'string' ? parsed.message : undefined,
+      finalAnswer: typeof parsed.finalAnswer === 'string' ? parsed.finalAnswer : undefined,
       nextOperation: typeof parsed.nextOperation === 'string' ? parsed.nextOperation : undefined,
       toolCalls: Array.isArray(parsed.toolCalls) ? parsed.toolCalls : [],
       changes: Array.isArray(parsed.changes) ? parsed.changes : [],
@@ -177,7 +179,8 @@ export class ModelController {
 Return ONLY valid JSON with this shape:
 {
   "status": "continue | waiting | completed | failed",
-  "message": "short user-facing or execution note",
+  "message": "short execution note",
+  "finalAnswer": "full user-facing answer; use only when status=completed",
   "nextOperation": "optional operation id",
   "toolCalls": [{ "tool": "tool id", "input": {} }],
   "changes": [{ "type": "write", "path": "relative/path", "content": "..." }, { "type": "delete", "path": "relative/path" }],
@@ -185,6 +188,6 @@ Return ONLY valid JSON with this shape:
   "observations": ["short factual observation"],
   "data": {}
 }
-When toolCalls is non-empty, use status=continue and leave changes, question, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation.`;
+When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
   }
 }

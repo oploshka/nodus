@@ -1,25 +1,27 @@
-Nodus context optimization patch
+Nodus v0.1 — plan/final-result patch
 
-Changed/added files:
-- src/core/Execution/Execution.ts
-- src/agent/Execution/ToolExecutor.ts (new)
-- src/agent/Execution/ChangeExecutor.ts (new)
+Apply this archive OVER the previous logging + context-optimization version.
+
+Changed files:
 - src/agent/Runtime/AgentRuntime.ts
-- src/context/Context/ModelContext.ts
-- src/context/Selector/ContextSelector.ts
+  - plan is limited to 2 tool batches
+  - plan with status=continue but no action auto-transitions to understand
+  - operation transitions are logged with reasons
+  - completed result keeps the full final answer (with backward-compatible fallback to observations)
+- src/model/Result/OperationResult.ts
+  - adds finalAnswer?: string
 - src/model/Controller/ModelController.ts
+  - parses/logs finalAnswer
+  - response protocol distinguishes execution message from final user answer
 - src/model/Profile/PromptRegistry.ts
-- src/core/Nodus/Nodus.ts
+  - plan explicitly stops evidence gathering after <=2 rounds
+  - understand prefers completing from existing toolContext
+  - completed operations return full text in finalAnswer
 
-What changed:
-- Full tool results no longer go into Execution.history.
-- Latest tool results are kept in temporary toolContext.
-- toolContext is available for up to two subsequent model calls, then cleared.
-- Tool batches are capped at 5 calls.
-- Tool logging is summarized by tools-started/tools-finished.
-- Tool execution and change application moved out of AgentRuntime.
-- plan prompt is constrained to routing instead of producing a final detailed answer.
+Expected flow for the architecture-analysis smoke task:
+plan -> tools (<=5) -> plan -> tools (<=5) -> understand -> completed
+or faster if plan transitions earlier.
 
-After overlaying this patch run:
-  npx tsc --noEmit
-  npm run dev -- nodus.config.json
+New useful log events:
+- operation-transition { from, to, reason }
+- plan-budget-exhausted { toolBatches, limit }

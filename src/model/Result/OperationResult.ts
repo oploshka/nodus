@@ -11,6 +11,7 @@ export interface ToolCallRequest {
 export interface OperationResult {
   status: OperationStatus;
   message?: string;
+  finalAnswer?: string;
   nextOperation?: string;
   toolCalls: ToolCallRequest[];
   changes: FileChange[];
