@@ -2,7 +2,9 @@
 import type { AgentRuntime } from '@agent/Runtime/AgentRuntime';
 import type { Conversation } from '@core/Conversation/Conversation';
 import type { Execution } from '@core/Execution/Execution';
-import type { Task, CreateTaskInput } from '@core/Task/Task';
+import type { CreateTaskInput } from '@core/Task/Task';
+
+import { Task } from '@core/Task/Task';
 
 export class TaskExecutor {
   public constructor(private readonly agentRuntime: AgentRuntime) {}
