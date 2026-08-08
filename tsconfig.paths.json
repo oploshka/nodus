@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    // Явно подключаем типы Node для этой папки
+    "types": ["node"],
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@knowledge/*": ["src/knowledge/*"],
+      "@project/*": ["src/project/*"],
+      "@model/*": ["src/model/*"],
+      "@tool/*": ["src/tool/*"]
+    }
+  }
+}

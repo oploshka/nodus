@@ -10,6 +10,6 @@ export interface Task {
   id: string;
   description: string;
   status: TaskStatus;
-  createdAt: Date;
-  updatedAt: Date;
+  // createdAt: Date;
+  // updatedAt: Date;
 }
