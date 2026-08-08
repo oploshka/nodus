@@ -3,6 +3,7 @@
 import type { ContextBuilder } from '@core/Context/ContextBuilder';
 import type { Execution } from '@core/Execution/Execution';
 import type { ExecutionResult } from '@core/Execution/ExecutionResult';
+import type { MemoryStore } from '@core/Memory/MemoryStore';
 import type { Task } from '@core/Task/Task';
 import type { Model } from '@model/Model';
 import type { ToolRegistry } from '@tool/ToolRegistry';
@@ -12,6 +13,7 @@ export class Agent {
     private readonly model: Model,
     private readonly tools: ToolRegistry,
     private readonly contextBuilder: ContextBuilder,
+    private readonly memory: MemoryStore,
   ) {}
 
   async execute(task: Task): Promise<ExecutionResult> {
@@ -33,6 +35,13 @@ export class Agent {
 
       if (response.type === 'message') {
         execution.completed = true;
+
+        this.memory.update({
+          completedSteps: [
+            ...this.memory.get().completedSteps,
+            response.content,
+          ],
+        });
 
         return {
           content: response.content ?? '',
@@ -59,6 +68,10 @@ export class Agent {
           result,
         )
         .build();
+
+      this.memory.update({
+        lastFilesModified: [],
+      });
 
       if (execution.step >= 10) {
         throw new Error('Agent execution limit reached');
