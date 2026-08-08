@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     // Явно подключаем типы Node для этой папки
     "types": ["node"],
     "paths": {
