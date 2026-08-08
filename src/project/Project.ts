@@ -1,5 +1,7 @@
+// Project.ts
+
 export interface Project {
-  path: string;
-  name: string;
+  root: string;
   files: string[];
+  configuration: Record<string, unknown>;
 }
