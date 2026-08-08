@@ -12,7 +12,9 @@ const COMMANDS = [
   { name: '/conversation', description: 'Show current conversation ID.' },
   { name: '/new', description: 'Create a new conversation.' },
   { name: '/exit', description: 'Exit the CLI.' },
-  { name: '/help', description: 'Show this help message.' }
+  { name: '/help', description: 'Show this help message.' },
+  { name: '/resume', description: 'Resume the last paused execution. Optional text after the command is used as a hint.' },
+  { name: '/stop', description: 'Stop and discard the last paused execution.' }
 ];
 
 class ConsoleHumanInteraction implements HumanInteraction {
@@ -74,6 +76,17 @@ export async function runCli(args: string[]): Promise<void> {
         console.log();
         continue;
       }
+      if (value === '/stop') {
+        console.log(nodus.stopPausedTask(conversation.id) ? 'Paused execution stopped.' : 'No paused execution.');
+        continue;
+      }
+
+      const resume = parseResumeInput(value);
+      if ((resume.requested || value.startsWith('/resume')) && nodus.hasPausedExecution(conversation.id)) {
+        const hint = value.startsWith('/resume') ? value.slice('/resume'.length).trim() : resume.hint;
+        await nodus.resumeTask(conversation.id, hint || undefined);
+        continue;
+      }
 
       try {
         await nodus.runTask(value, conversation.id);
@@ -84,4 +97,10 @@ export async function runCli(args: string[]): Promise<void> {
   } finally {
     readline.close();
   }
+}
+function parseResumeInput(value: string): { requested: boolean; hint?: string } {
+  const match = value.match(/^(?:продолжи(?:\s+выполнение)?|продолжить(?:\s+выполнение)?|continue|retry|попробуй\s+(?:ещ[её]\s+раз|снова))(?:\s*[,.:;-]\s*|\s+)?(.*)$/i);
+  if (!match) return { requested: false };
+  const hint = match[1]?.trim();
+  return { requested: true, hint: hint || undefined };
 }

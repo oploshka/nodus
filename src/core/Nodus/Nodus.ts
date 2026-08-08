@@ -6,6 +6,9 @@ import { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import { AgentRuntime } from '@agent/Runtime/AgentRuntime';
 import { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import { PlanGenerator } from '@agent/Planning/PlanGenerator';
+import { PlanUpdater } from '@agent/Planning/PlanUpdater';
+import { RecoveryController } from '@agent/Planning/RecoveryController';
+import { StepRegistry } from '@agent/Planning/StepRegistry';
 import type { NodusConfiguration } from '@core/Configuration/Configuration';
 import { Conversation } from '@core/Conversation/Conversation';
 import { ConsoleLogSink } from '@core/Logging/ConsoleLogSink';
@@ -81,13 +84,23 @@ export class Nodus {
       configuration.logging.console ? configuration.logging.consoleMode : 'quiet',
       configuration.logging.colors,
     );
+    const stepRegistry = new StepRegistry();
     const planGenerator = new PlanGenerator(
       configuration.model,
       adapter,
       promptRegistry,
       this.projectSession,
       this.logger,
+      stepRegistry,
     );
+    const recoveryController = new RecoveryController(
+      configuration.model,
+      adapter,
+      promptRegistry,
+      stepRegistry,
+      this.logger,
+    );
+    const planUpdater = new PlanUpdater();
 
     const modelController = new ModelController(
       configuration.model,
@@ -117,6 +130,8 @@ export class Nodus {
       this.logger,
       reporter,
       planGenerator,
+      recoveryController,
+      planUpdater,
     );
   }
 
@@ -156,11 +171,37 @@ export class Nodus {
 
     const execution = await this.runtime.execute(task, conversation);
     const result = execution.result ?? execution.status;
-    conversation.completeTask(task.id, result);
+    if (execution.status !== 'paused') conversation.completeTask(task.id, result);
     await this.logger.info('result', { status: execution.status, result }, {
       projectId: task.projectId,
       conversationId,
       taskId: task.id,
+      executionId: execution.id,
+    });
+    return result;
+  }
+
+  public hasPausedExecution(conversationId: string): boolean {
+    return this.runtime.hasPausedExecution(conversationId);
+  }
+
+  public stopPausedTask(conversationId: string): boolean {
+    return this.runtime.cancelPaused(conversationId);
+  }
+
+  public async resumeTask(conversationId: string, hint?: string): Promise<string> {
+    const conversation = this.conversations.get(conversationId);
+    if (!conversation) throw new Error(`Conversation not found: ${conversationId}`);
+
+    const execution = await this.runtime.resume(conversationId, hint);
+    if (!execution) return 'Нет приостановленного выполнения для продолжения.';
+
+    const result = execution.result ?? execution.status;
+    if (execution.status !== 'paused') conversation.completeTask(execution.taskId, result);
+    await this.logger.info('result', { status: execution.status, result }, {
+      projectId: this.configuration.project.id,
+      conversationId,
+      taskId: execution.taskId,
       executionId: execution.id,
     });
     return result;

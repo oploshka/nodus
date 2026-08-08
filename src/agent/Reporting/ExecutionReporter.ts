@@ -68,6 +68,39 @@ export class ExecutionReporter {
     this.line(this.paint('yellow', `! ${message}`));
   }
 
+
+  public recovery(stepGoal: string, reason: string): void {
+    if (this.mode === 'quiet') return;
+    this.line(`\n${this.paint('yellow', '↻ Восстановление шага')}`);
+    this.line(`  ${stepGoal}`);
+    if (this.mode === 'verbose') this.line(this.paint('dim', `  Причина: ${reason}`));
+  }
+
+  public recoveryDecision(action: string, reason: string): void {
+    if (this.mode === 'quiet') return;
+    this.line(this.paint('yellow', `  ↳ ${action}: ${reason}`));
+  }
+
+  public planUpdated(plan: TaskPlan, startIndex: number, inserted: number): void {
+    if (this.mode === 'quiet') return;
+    this.line(this.paint('yellow', `◆ План скорректирован: добавлено шагов ${inserted}`));
+    plan.steps.slice(startIndex, startIndex + inserted).forEach((step, index) => {
+      this.line(`  + ${startIndex + index + 1}. ${step.goal} ${this.paint('dim', `[${step.type}]`)}`);
+    });
+  }
+
+  public paused(message: string): void {
+    this.line(`\n${this.paint('yellow', 'Ⅱ Выполнение приостановлено')}`);
+    this.line(message);
+    this.line(this.paint('dim', '  Напишите «продолжи» или «продолжи, <подсказка>». Для остановки используйте /stop.'));
+  }
+
+  public resumed(resume: number, hint?: string): void {
+    if (this.mode === 'quiet') return;
+    this.line(`\n${this.paint('cyan', `▶ Продолжаю выполнение (попытка ${resume})`)}`);
+    if (hint?.trim()) this.line(this.paint('dim', `  Подсказка: ${hint.trim()}`));
+  }
+
   public completed(result: string, durationMs: number, changedFiles: number): void {
     this.line(`\n${this.paint('green', `✓ Задача выполнена за ${(durationMs / 1000).toFixed(1)} сек`)}`);
     if (changedFiles > 0) this.line(this.paint('dim', `  Изменено файлов: ${changedFiles}`));

@@ -1,0 +1,31 @@
+Recovery / resume workflow
+
+Added:
+- src/agent/Planning/StepRegistry.ts
+- src/agent/Planning/PlanUpdater.ts
+- src/agent/Planning/RecoveryController.ts
+
+Updated:
+- src/agent/Planning/PlanGenerator.ts
+- src/agent/Runtime/AgentRuntime.ts
+- src/agent/Reporting/ExecutionReporter.ts
+- src/core/Execution/Execution.ts
+- src/core/Nodus/Nodus.ts
+- src/cli/Cli.ts
+- src/model/Prompt/DefaultPromptDefinitions.ts
+- src/operation/Default/DefaultOperationProfile.ts
+
+Behavior:
+- planner receives explicit supported step types, descriptions, and hard limits from StepRegistry;
+- exhausted/failed plan steps invoke one focused recovery prompt before asking for human help;
+- recovery can retry, insert focused steps, skip a genuinely unnecessary step, request human help, or fail;
+- paused executions retain TaskPlan, current step, history, tool evidence, and applied changes in memory;
+- natural "продолжи" / "continue" resumes the same execution instead of creating a new task;
+- "продолжи, <hint>" and /resume <hint> feed a human hint into recovery;
+- /stop discards the paused execution;
+- global maxSteps is treated as a safety segment limit with a minimum of 20; reaching it pauses instead of failing;
+- automatic recovery is limited per step; human resume is limited to 3 resumes.
+
+Validation:
+- TypeScript project checked with a temporary Node type stub because the environment registry cannot download undici-types/@types-node.
+- `tsc --noEmit` with the real project dependencies should still be run locally.

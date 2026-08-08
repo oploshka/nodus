@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ToolCallRequest } from '@model/Result/OperationResult';
 import type { ToolResult } from '@tool/Tool/Tool';
 
-export type ExecutionStatus = 'created' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
+export type ExecutionStatus = 'created' | 'running' | 'waiting' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
 export interface ExecutionEvent {
   timestamp: string;

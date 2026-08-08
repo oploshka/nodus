@@ -27,7 +27,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   {
     id: 'understand',
     costWeight: 2,
-    allowedTransitions: ['understand', 'implement', 'review', 'finalize'],
+    allowedTransitions: ['understand', 'prepare-change', 'implement', 'review', 'finalize'],
     description: 'Understand existing code, responsibilities, dependencies, and project behavior.',
     promptId: 'understand',
     contextStrategy: 'understanding',
@@ -80,7 +80,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   {
     id: 'review',
     costWeight: 2,
-    allowedTransitions: ['implement', 'verify', 'finalize', 'resolve-failure'],
+    allowedTransitions: ['edit-file', 'implement', 'verify', 'finalize', 'resolve-failure'],
     description: 'Review current changes for correctness, scope, consistency, and policy compliance.',
     promptId: 'review',
     contextStrategy: 'review',

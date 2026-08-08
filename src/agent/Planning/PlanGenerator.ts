@@ -5,9 +5,8 @@ import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { PromptRegistry } from '@model/Profile/PromptRegistry';
 import type { ModelRequest } from '@model/Request/ModelRequest';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
-import { PLAN_STEP_LIMITS, type PlanStepType, type TaskPlan } from '@agent/Planning/TaskPlan';
-
-const ALLOWED_STEP_TYPES = new Set<PlanStepType>(Object.keys(PLAN_STEP_LIMITS) as PlanStepType[]);
+import type { PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
+import type { StepRegistry } from '@agent/Planning/StepRegistry';
 
 export class PlanGenerator {
   public constructor(
@@ -16,6 +15,7 @@ export class PlanGenerator {
     private readonly promptRegistry: PromptRegistry,
     private readonly projectSession: ProjectSession,
     private readonly logger: Logger,
+    private readonly stepRegistry: StepRegistry,
   ) {}
 
   public async generate(task: Task, executionId: string): Promise<TaskPlan> {
@@ -38,8 +38,11 @@ export class PlanGenerator {
               id: this.projectSession.projectId,
               files: this.projectSession.index?.files.map((file) => file.path) ?? [],
             },
-            availableStepTypes: Array.from(ALLOWED_STEP_TYPES),
-            defaultLimits: PLAN_STEP_LIMITS,
+            availableStepTypes: this.stepRegistry.listForPlanner().map((definition) => ({
+              type: definition.type,
+              description: definition.description,
+              maxAttempts: definition.maxAttempts,
+            })),
           }, null, 2),
         },
       ],
@@ -75,22 +78,23 @@ export class PlanGenerator {
     }
 
     const steps = parsed.steps.slice(0, 8).map((step, index) => {
-      if (typeof step.type !== 'string' || !ALLOWED_STEP_TYPES.has(step.type as PlanStepType)) {
+      if (typeof step.type !== 'string' || !this.stepRegistry.has(step.type)) {
         throw new Error(`Planner returned unsupported step type: ${String(step.type)}`);
       }
       const type = step.type as PlanStepType;
-      const requestedLimit = typeof step.maxAttempts === 'number' ? Math.floor(step.maxAttempts) : PLAN_STEP_LIMITS[type];
+      const maxLimit = this.stepRegistry.limit(type);
+      const requestedLimit = typeof step.maxAttempts === 'number' ? Math.floor(step.maxAttempts) : maxLimit;
       return {
         id: typeof step.id === 'string' && step.id.trim() ? step.id : `step-${index + 1}`,
         type,
         goal: typeof step.goal === 'string' && step.goal.trim() ? step.goal.trim() : type,
         status: 'pending' as const,
-        maxAttempts: Math.max(1, Math.min(requestedLimit, PLAN_STEP_LIMITS[type])),
+        maxAttempts: Math.max(1, Math.min(requestedLimit, maxLimit)),
       };
     });
 
     if (steps[steps.length - 1]?.type !== 'finalize') {
-      steps.push({ id: `step-${steps.length + 1}`, type: 'finalize', goal: 'Prepare the final user-facing result.', status: 'pending', maxAttempts: 1 });
+      steps.push({ id: `step-${steps.length + 1}`, type: 'finalize', goal: 'Prepare the final user-facing result.', status: 'pending', maxAttempts: this.stepRegistry.limit('finalize') });
     }
     return { goal: parsed.goal.trim(), steps };
   }
@@ -104,7 +108,7 @@ export class PlanGenerator {
       : ['search', 'understand', 'finalize'];
     return {
       goal: description,
-      steps: types.map((type, index) => ({ id: `step-${index + 1}`, type, goal: type, status: 'pending', maxAttempts: PLAN_STEP_LIMITS[type] })),
+      steps: types.map((type, index) => ({ id: `step-${index + 1}`, type, goal: type, status: 'pending', maxAttempts: this.stepRegistry.limit(type) })),
     };
   }
 
@@ -120,6 +124,7 @@ export class PlanGenerator {
   }
 
   private protocol(): string {
-    return `Return ONLY JSON:\n{\n  "goal": "short task goal",\n  "steps": [{ "id": "step-1", "type": "search | understand | prepare-change | edit-file | review | verify | finalize", "goal": "one concrete verifiable goal", "maxAttempts": 1 }]\n}`;
+    const types = this.stepRegistry.listForPlanner().map((definition) => definition.type).join(' | ');
+    return `Return ONLY JSON:\n{\n  "goal": "short task goal",\n  "steps": [{ "id": "step-1", "type": "${types}", "goal": "one concrete verifiable goal", "maxAttempts": 1 }]\n}`;
   }
 }
