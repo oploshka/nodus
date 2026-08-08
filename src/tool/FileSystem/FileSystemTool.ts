@@ -10,7 +10,49 @@ export class FileSystemTool implements Tool {
   description = 'Read, write, check and list files';
 
   async execute(input: unknown): Promise<unknown> {
-    return input;
+    if (!input || typeof input !== 'object') {
+      throw new Error('Filesystem input must be an object');
+    }
+
+    const data = input as {
+      action?: string;
+      path?: string;
+      content?: string;
+    };
+
+    switch (data.action) {
+      case 'read':
+        if (!data.path) {
+          throw new Error('File path is required');
+        }
+
+        return this.read(data.path);
+
+      case 'write':
+        if (!data.path || data.content === undefined) {
+          throw new Error('File path and content are required');
+        }
+
+        await this.write(data.path, data.content);
+        return 'File written';
+
+      case 'exists':
+        if (!data.path) {
+          throw new Error('File path is required');
+        }
+
+        return this.exists(data.path);
+
+      case 'list':
+        if (!data.path) {
+          throw new Error('Directory path is required');
+        }
+
+        return this.list(data.path);
+
+      default:
+        throw new Error(`Unknown filesystem action: ${data.action}`);
+    }
   }
 
   async read(filePath: string): Promise<string> {

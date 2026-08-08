@@ -1,3 +1,8 @@
+// ModelAdapter.ts
+
+import type { Context } from '@core/Context/Context';
+import type { ModelResponse } from '@model/Response';
+
 export interface ModelAdapter {
-  send(prompt: string): Promise<string>;
+  send(context: Context): Promise<ModelResponse>;
 }

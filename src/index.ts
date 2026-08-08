@@ -19,11 +19,32 @@ tools.register(terminal);
 tools.register(new GitTool(terminal));
 tools.register(new TestingTool(terminal));
 
-const model: ModelAdapter = {
-  async send(prompt: string): Promise<string> {
-    console.log(prompt);
+let requestCount = 0;
 
-    return 'Model response';
+const model: ModelAdapter = {
+  async send(context: Context) {
+    requestCount += 1;
+
+    console.log(`Model request #${requestCount}`);
+    console.log(context);
+
+    if (requestCount === 1) {
+      return {
+        type: 'tool',
+        tool: {
+          name: 'filesystem',
+          input: {
+            action: 'read',
+            path: './package.json',
+          },
+        },
+      };
+    }
+
+    return {
+      type: 'message',
+      content: 'Project analyzed',
+    };
   },
 };
 
@@ -40,6 +61,4 @@ const context: Context = {
   files: [],
 };
 
-const result = await agent.execute(task, context);
-
-console.log(result);
+console.log(await agent.execute(task, context));

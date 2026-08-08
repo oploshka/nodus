@@ -12,17 +12,42 @@ export class Agent {
   ) {}
 
   async execute(task: Task, context: Context): Promise<string> {
-    const response = await this.model.send(
-      JSON.stringify({
-        task,
-        context,
-        tools: this.tools.getAll().map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-        })),
-      }),
-    );
+    let currentContext = context;
 
-    return response;
+    for (let i = 0; i < 10; i += 1) {
+      const response = await this.model.send(currentContext);
+
+      if (response.type === 'message') {
+        return response.content ?? '';
+      }
+
+      if (response.type === 'tool') {
+        if (!response.tool) {
+          throw new Error('Tool response does not contain a tool call');
+        }
+
+        const tool = this.tools.get(response.tool.name);
+
+        if (!tool) {
+          throw new Error(`Unknown tool: ${response.tool.name}`);
+        }
+
+        const result = await tool.execute(response.tool.input);
+
+        currentContext = {
+          ...currentContext,
+          files: [
+            ...currentContext.files,
+            JSON.stringify({
+              tool: response.tool.name,
+              input: response.tool.input,
+              result,
+            }),
+          ],
+        };
+      }
+    }
+
+    throw new Error('Agent execution limit reached');
   }
 }
