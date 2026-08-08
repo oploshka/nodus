@@ -11,7 +11,7 @@ import type { ContextSelector } from '@context/Selector/ContextSelector';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { PromptRegistry } from '@model/Profile/PromptRegistry';
 import type { ModelRequest } from '@model/Request/ModelRequest';
-import type { OperationResult } from '@model/Result/OperationResult';
+import type { OperationResult, StepResult } from '@model/Result/OperationResult';
 import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
@@ -22,6 +22,8 @@ export interface ModelExecutionInput {
   execution: Execution;
   conversation: Conversation;
   operation: OperationProfile;
+  activeStep?: { id: string; type: string; goal: string; attempt: number; maxAttempts: number };
+  stepEvidence?: Array<{ stepId: string; type: string; goal: string; findings: string[]; evidence: unknown[]; missing: string[] }>;
 }
 
 export class ModelController {
@@ -80,15 +82,22 @@ export class ModelController {
               description: input.operation.description,
               contextStrategy: input.operation.contextStrategy,
             },
+            activeStep: input.activeStep,
+            completedStepEvidence: input.stepEvidence ?? [],
+            stepIsolationRule: input.activeStep
+              ? `Work ONLY on the active step goal: ${input.activeStep.goal}. Do not perform goals assigned to later plan steps.`
+              : undefined,
             policies: context.policies,
             knowledge: context.knowledge,
             conversation: context.conversation,
             executionHistory: context.executionHistory,
             toolContext: context.toolContext,
             project: context.project,
-            availableOperations: this.operationRegistry.list().map(({ id, description }) => ({ id, description })),
+            availableOperations: input.activeStep ? [] : this.operationRegistry.list().map(({ id, description }) => ({ id, description })),
             availableTools: this.availableToolsFor(input.operation.id),
-            responseProtocolReminder: 'Respond with one OperationResult JSON object only. The top-level object MUST contain status. Do not return an execution event, tool-result event, transcript entry, or copied context object.',
+            responseProtocolReminder: input.activeStep
+              ? 'Respond with one OperationResult JSON object only. Work only on activeStep. Leave nextOperation empty because PlanExecutor owns routing.'
+              : 'Respond with one OperationResult JSON object only. The top-level object MUST contain status. Do not return an execution event, tool-result event, transcript entry, or copied context object.',
           }, null, 2),
         },
       ],
@@ -270,7 +279,31 @@ export class ModelController {
       changes: Array.isArray(parsed.changes) ? parsed.changes : [],
       question: typeof parsed.question === 'string' ? parsed.question : undefined,
       observations: Array.isArray(parsed.observations) ? parsed.observations.map(String) : [],
+      stepResult: this.parseStepResult((parsed as { stepResult?: unknown }).stepResult),
       data: parsed.data,
+    };
+  }
+
+  private parseStepResult(value: unknown): StepResult | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const raw = value as Record<string, unknown>;
+    const evidence = Array.isArray(raw.evidence)
+      ? raw.evidence.flatMap((item) => {
+          if (!item || typeof item !== 'object') return [];
+          const entry = item as Record<string, unknown>;
+          if (typeof entry.fact !== 'string' || !entry.fact.trim()) return [];
+          return [{
+            path: typeof entry.path === 'string' ? entry.path : undefined,
+            symbol: typeof entry.symbol === 'string' ? entry.symbol : undefined,
+            fact: entry.fact.trim(),
+          }];
+        })
+      : [];
+    return {
+      goalSatisfied: raw.goalSatisfied === true,
+      findings: Array.isArray(raw.findings) ? raw.findings.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 8) : [],
+      evidence: evidence.slice(0, 12),
+      missing: Array.isArray(raw.missing) ? raw.missing.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 8) : [],
     };
   }
 
@@ -307,8 +340,14 @@ Return ONLY valid JSON with this shape:
   "changes": [{ "type": "write", "path": "relative/path", "content": "..." }, { "type": "delete", "path": "relative/path" }],
   "question": "question for human when status=waiting",
   "observations": ["short factual observation"],
+  "stepResult": {
+    "goalSatisfied": true,
+    "findings": ["short result of the ACTIVE step only"],
+    "evidence": [{ "path": "optional/file", "symbol": "optional symbol", "fact": "fact supported by evidence" }],
+    "missing": ["specific evidence still missing"]
+  },
   "data": {}
 }
-When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
+For search, understand, prepare-change, review, and verify, always return stepResult. Set goalSatisfied=true only when the ACTIVE step goal is actually satisfied. Put only concrete unresolved evidence in missing. Do not work on later plan steps. When activeStep is supplied, leave nextOperation empty because PlanExecutor owns routing. When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
   }
 }

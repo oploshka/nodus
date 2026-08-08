@@ -5,6 +5,7 @@ import type { Task } from '@core/Task/Task';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { PromptRegistry } from '@model/Profile/PromptRegistry';
 import type { ModelRequest } from '@model/Request/ModelRequest';
+import type { StepResult } from '@model/Result/OperationResult';
 import type { PlanStep, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
 import type { StepRegistry } from '@agent/Planning/StepRegistry';
 
@@ -32,6 +33,9 @@ export class RecoveryController {
     stepIndex: number;
     reason: string;
     humanHint?: string;
+    currentStepResult?: StepResult;
+    completedStepEvidence?: unknown[];
+    previousRecoveryGoals?: string[];
   }): Promise<RecoveryDecision> {
     const prompt = this.promptRegistry.get('recover-plan');
     const currentStep = input.plan.steps[input.stepIndex];
@@ -51,6 +55,9 @@ export class RecoveryController {
             currentStep,
             reason: input.reason,
             humanHint: input.humanHint,
+            currentStepResult: input.currentStepResult,
+            completedStepEvidence: input.completedStepEvidence ?? [],
+            previousRecoveryGoals: input.previousRecoveryGoals ?? [],
             plan: input.plan.steps.map((step, index) => ({ index, type: step.type, goal: step.goal, status: step.status })),
             recentExecution: input.execution.history.slice(-12),
             availableStepTypes: this.stepRegistry.listForPlanner().map((definition) => ({

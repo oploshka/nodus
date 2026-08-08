@@ -49,6 +49,9 @@ export class AgentRuntime {
       planIndex: 0,
       stepAttempts: 0,
       recoveryAttempts: new Map(),
+      stepResults: new Map(),
+      recoveryMissing: new Map(),
+      recoveryGoals: new Set(),
       resumes: 0,
       startedAt: Date.now(),
     };

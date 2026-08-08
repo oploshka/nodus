@@ -1,6 +1,7 @@
 // ExecutionReporter.ts
 import type { ConsoleMode } from '@core/Configuration/Configuration';
 import type { TaskPlan } from '@agent/Planning/TaskPlan';
+import type { StepResult } from '@model/Result/OperationResult';
 
 export class ExecutionReporter {
   public constructor(
@@ -75,6 +76,24 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
   public changes(paths: string[]): void {
     if (this.mode === 'quiet' || paths.length === 0) return;
     for (const path of paths) this.line(`${this.paint('green', '✓ Изменён')} ${path}`);
+  }
+
+
+  public stepResult(result: StepResult): void {
+    if (this.mode === 'quiet') return;
+    const prefix = result.goalSatisfied ? this.paint('green', '✓ Результат шага') : this.paint('yellow', '· Промежуточный результат');
+    this.line(prefix);
+    const findings = result.findings.slice(0, this.mode === 'verbose' ? 5 : 3);
+    for (const finding of findings) this.line(`  ${finding}`);
+    if (this.mode === 'verbose') {
+      for (const item of result.evidence.slice(0, 5)) {
+        const source = [item.path, item.symbol].filter(Boolean).join(' :: ');
+        this.line(this.paint('dim', `  ↳ ${source ? `${source}: ` : ''}${item.fact}`));
+      }
+    }
+    if (result.missing.length > 0) {
+      this.line(this.paint('dim', `  Не хватает: ${result.missing.slice(0, 3).join('; ')}`));
+    }
   }
 
   public warning(message: string): void {

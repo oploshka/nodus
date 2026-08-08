@@ -9,6 +9,19 @@ export interface ToolCallRequest {
   input: Record<string, unknown>;
 }
 
+export interface StepEvidenceItem {
+  path?: string;
+  symbol?: string;
+  fact: string;
+}
+
+export interface StepResult {
+  goalSatisfied: boolean;
+  findings: string[];
+  evidence: StepEvidenceItem[];
+  missing: string[];
+}
+
 export interface OperationResult {
   status: OperationStatus;
   message?: string;
@@ -19,5 +32,6 @@ export interface OperationResult {
   changes: FileChange[];
   question?: string;
   observations: string[];
+  stepResult?: StepResult;
   data?: unknown;
 }

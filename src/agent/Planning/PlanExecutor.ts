@@ -10,7 +10,7 @@ import type { Execution } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
 import type { ModelController } from '@model/Controller/ModelController';
-import type { OperationResult } from '@model/Result/OperationResult';
+import type { OperationResult, StepResult } from '@model/Result/OperationResult';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 
 export interface PlanExecutionState {
@@ -21,6 +21,9 @@ export interface PlanExecutionState {
   planIndex: number;
   stepAttempts: number;
   recoveryAttempts: Map<string, number>;
+  stepResults: Map<string, StepResult>;
+  recoveryMissing: Map<string, string[]>;
+  recoveryGoals: Set<string>;
   resumes: number;
   startedAt: number;
   pauseReason?: string;
@@ -95,6 +98,8 @@ export class PlanExecutor {
           execution: state.execution,
           conversation: state.conversation,
           operation,
+          activeStep: { id: step.id, type: step.type, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts },
+          stepEvidence: this.completedEvidence(state),
         });
       } catch (error) {
         await this.logger.error('model-error', { operation: step.type, error: String(error) }, context);
@@ -110,8 +115,14 @@ export class PlanExecutor {
         type: step.type,
         status: result.status,
         message: result.message,
+        stepResult: result.stepResult,
         ignoredNextOperation: result.nextOperation,
       });
+
+      if (result.stepResult) {
+        state.stepResults.set(step.id, result.stepResult);
+        this.reporter.stepResult(result.stepResult);
+      }
 
       if (result.status === 'failed') {
         const recovered = await this.recover(state, result.message ?? 'step failed');
@@ -130,11 +141,8 @@ export class PlanExecutor {
       if (result.toolCalls.length > 0) {
         const summary = await this.toolExecutor.execute(result.toolCalls, state.execution, context);
         this.reporter.tools(summary.executed);
-        // Tool calls gather evidence inside the current semantic node. The model gets
-        // another attempt on the same node; the plan, not nextOperation, owns routing.
-        if (state.stepAttempts >= step.maxAttempts && summary.useful > 0 && (step.type === 'search' || step.type === 'understand')) {
-          this.completeStep(state, step, `${step.type}-evidence-gathered`);
-        }
+        // Tool calls gather raw evidence for the immediate next model call.
+        // The model must summarize that evidence into stepResult before the semantic step can complete.
         continue;
       }
 
@@ -166,8 +174,19 @@ export class PlanExecutor {
         return 'finished';
       }
 
-      // A semantic step completes when it returns without more tool work or a failure.
-      // nextOperation is intentionally ignored: routing belongs to TaskPlan.
+      // Routing belongs to TaskPlan. Search/understand/change-planning/review/verify
+      // must explicitly prove that the active step goal is satisfied.
+      if (this.requiresExplicitStepResult(step.type)) {
+        if (result.stepResult?.goalSatisfied) {
+          this.completeStep(state, step, 'goal-satisfied');
+          continue;
+        }
+        if (state.stepAttempts < step.maxAttempts) continue;
+        const recovered = await this.recover(state, 'step-goal-not-satisfied');
+        if (!recovered) return state.pauseReason ? 'paused' : 'finished';
+        continue;
+      }
+
       this.completeStep(state, step, 'step-result-ready');
     }
 
@@ -221,6 +240,9 @@ export class PlanExecutor {
       stepIndex: state.planIndex,
       reason,
       humanHint,
+      currentStepResult: state.stepResults.get(step.id),
+      completedStepEvidence: this.completedEvidence(state),
+      previousRecoveryGoals: Array.from(state.recoveryGoals),
     });
     return this.applyRecovery(state, decision);
   }
@@ -236,10 +258,26 @@ export class PlanExecutor {
       return true;
     }
     if (decision.action === 'insert-steps' && decision.steps.length > 0) {
-      this.planUpdater.insertBefore(state.plan, state.planIndex, decision.steps);
+      const currentResult = state.stepResults.get(current.id);
+      const missing = currentResult?.missing ?? [];
+      const previousMissing = state.recoveryMissing.get(current.id);
+      const noMissingProgress = Boolean(previousMissing && !this.missingReduced(previousMissing, missing));
+      const freshSteps = decision.steps.filter((step) => {
+        const signature = this.goalSignature(step.goal);
+        return signature && !state.recoveryGoals.has(signature) && !this.isDuplicatePlanGoal(state.plan, step.goal);
+      });
+
+      if (noMissingProgress || freshSteps.length === 0) {
+        this.pause(state, `step:${current.id}:recovery-no-progress`, `Восстановление не принесло новых данных для шага «${current.goal}». Нужна подсказка.`);
+        return false;
+      }
+
+      state.recoveryMissing.set(current.id, [...missing]);
+      for (const step of freshSteps) state.recoveryGoals.add(this.goalSignature(step.goal));
+      this.planUpdater.insertBefore(state.plan, state.planIndex, freshSteps);
       this.planUpdater.markPendingFrom(state.plan, state.planIndex);
       state.stepAttempts = 0;
-      this.reporter.planUpdated(state.plan, state.planIndex, decision.steps.length);
+      this.reporter.planUpdated(state.plan, state.planIndex, freshSteps.length);
       return true;
     }
     if (decision.action === 'skip-current') {
@@ -267,6 +305,40 @@ export class PlanExecutor {
 
   private hasAppliedChanges(execution: Execution): boolean {
     return execution.history.some((event) => event.type === 'change-applied');
+  }
+
+
+  private requiresExplicitStepResult(type: string): boolean {
+    return type === 'search' || type === 'understand' || type === 'prepare-change' || type === 'review' || type === 'verify';
+  }
+
+  private completedEvidence(state: PlanExecutionState) {
+    return state.plan.steps
+      .filter((step) => step.status === 'completed')
+      .flatMap((step) => {
+        const result = state.stepResults.get(step.id);
+        if (!result) return [];
+        return [{ stepId: step.id, type: step.type, goal: step.goal, findings: result.findings, evidence: result.evidence, missing: result.missing }];
+      })
+      .slice(-8);
+  }
+
+  private missingReduced(previous: string[], current: string[]): boolean {
+    if (previous.length === 0) return current.length === 0;
+    if (current.length < previous.length) return true;
+    const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+    const old = new Set(previous.map(normalize));
+    return current.some((item) => !old.has(normalize(item)));
+  }
+
+  private goalSignature(goal: string): string {
+    return goal.toLowerCase().replace(/[^a-zа-яё0-9]+/giu, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  private isDuplicatePlanGoal(plan: TaskPlan, goal: string): boolean {
+    const signature = this.goalSignature(goal);
+    if (!signature) return true;
+    return plan.steps.some((step) => this.goalSignature(step.goal) === signature);
   }
 
   private context(state: PlanExecutionState) {
