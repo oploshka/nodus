@@ -1,6 +1,6 @@
 // ModelController.ts
 
-import type { LoggingConfiguration, ModelConfiguration } from '@core/Configuration/Configuration';
+import type { AgentConfiguration, LoggingConfiguration, ModelConfiguration } from '@core/Configuration/Configuration';
 import type { Conversation } from '@core/Conversation/Conversation';
 import type { Execution } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
@@ -26,6 +26,7 @@ export interface ModelExecutionInput {
 export class ModelController {
   public constructor(
     private readonly configuration: ModelConfiguration,
+    private readonly agentConfiguration: AgentConfiguration,
     private readonly logging: LoggingConfiguration,
     private readonly adapter: ModelAdapter,
     private readonly promptRegistry: PromptRegistry,
@@ -47,6 +48,9 @@ export class ModelController {
       input.operation,
     );
 
+    const responseLanguage = this.resolveResponseLanguage(input.task.description);
+    const contextTelemetry = this.contextTelemetry(context);
+
     const request: ModelRequest = {
       model: this.configuration.model,
       temperature: this.configuration.temperature,
@@ -59,6 +63,11 @@ export class ModelController {
         {
           role: 'user',
           content: JSON.stringify({
+            language: {
+              response: responseLanguage,
+              internal: this.agentConfiguration.internalLanguage,
+              instruction: `Write all user-facing text in ${responseLanguage}. Do not switch language because of source files or model defaults.`,
+            },
             task: {
               id: input.task.id,
               description: input.task.description,
@@ -100,6 +109,12 @@ export class ModelController {
       requestPayloadPath = await this.payloadLogger.writeRequest(payloadContext, request);
     }
 
+    await this.logger.debug('context-built', {
+      step: input.execution.currentStep,
+      operation: input.operation.id,
+      ...contextTelemetry,
+    }, logContext);
+
     await this.logger.info('model-called', {
       step: input.execution.currentStep,
       operation: input.operation.id,
@@ -115,6 +130,7 @@ export class ModelController {
     }
 
     const result = await this.parseOrRepairOperationResult(response.content, request, input, logContext);
+    input.execution.addEvent('model-usage', { operation: input.operation.id, usage: response.usage });
     input.execution.consumeToolContext();
     await this.logger.info('model-responded', {
       step: input.execution.currentStep,
@@ -131,6 +147,32 @@ export class ModelController {
     }, logContext);
 
     return result;
+  }
+
+  private resolveResponseLanguage(description: string): string {
+    if (this.agentConfiguration.responseLanguage !== 'auto') {
+      return this.agentConfiguration.responseLanguage;
+    }
+
+    const cyrillic = (description.match(/[А-Яа-яЁё]/g) ?? []).length;
+    const latin = (description.match(/[A-Za-z]/g) ?? []).length;
+    return cyrillic > latin ? 'ru' : 'en';
+  }
+
+  private contextTelemetry(context: ReturnType<ContextSelector['select']>) {
+    const size = (value: unknown): number => {
+      try { return JSON.stringify(value).length; } catch { return 0; }
+    };
+    const chars = {
+      conversation: size(context.conversation),
+      history: size(context.executionHistory),
+      toolContext: size(context.toolContext),
+      policies: size(context.policies),
+      knowledge: size(context.knowledge),
+      project: size(context.project),
+    };
+    const totalChars = Object.values(chars).reduce((sum, value) => sum + value, 0);
+    return { ...chars, totalChars, estimatedTokens: Math.ceil(totalChars / 4) };
   }
 
   private availableToolsFor(operationId: string) {

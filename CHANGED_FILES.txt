@@ -1,17 +1,11 @@
-Nodus v0.1 — safe context + protocol hardening
-
-Changed files:
-- src/context/Selector/ContextBudget.ts
-- src/model/Controller/ModelController.ts
-
-What changed:
-1. ContextBudget never slices an assembled prompt.
-2. executionHistory is now control-plane only; old tool-result events are excluded.
-3. History is bounded both by event count and character budget.
-4. Raw toolContext is bounded entry-by-entry while keeping valid JSON shapes.
-5. plan/understand/finalize context budgets were reduced to keep prompts compact.
-6. A protocol reminder is placed at the END of the user payload so local models see the required output shape close to generation time.
-7. If a model still returns event-shaped/malformed JSON, ModelController makes one small protocol-repair call instead of immediately entering resolve-failure.
-8. Protocol repair does not add task reasoning; it only normalizes the malformed output into OperationResult.
-
-No nodus.config.json changes are required.
+src/agent/Runtime/AgentRuntime.ts
+src/core/Configuration/Configuration.ts
+src/core/Configuration/ConfigurationLoader.ts
+src/core/Nodus/Nodus.ts
+src/model/Controller/ModelController.ts
+src/model/Profile/PromptRegistry.ts
+src/model/Prompt/CommonSystemPrompt.ts
+src/model/Prompt/DefaultPromptDefinitions.ts
+src/operation/Default/DefaultOperationProfile.ts
+src/operation/Profile/OperationProfile.ts
+nodus.config.example.json

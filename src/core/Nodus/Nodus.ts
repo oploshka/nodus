@@ -75,6 +75,7 @@ export class Nodus {
     );
     const modelController = new ModelController(
       configuration.model,
+      configuration.agent,
       configuration.logging,
       adapter,
       promptRegistry,

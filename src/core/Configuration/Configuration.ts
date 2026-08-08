@@ -23,8 +23,13 @@ export interface ModelConfiguration {
   maxTokens?: number;
 }
 
+export type ResponseLanguage = 'auto' | string;
+export type InternalLanguage = 'original' | 'en';
+
 export interface AgentConfiguration {
   maxSteps: number;
+  responseLanguage: ResponseLanguage;
+  internalLanguage: InternalLanguage;
 }
 
 export interface KnowledgeConfiguration {

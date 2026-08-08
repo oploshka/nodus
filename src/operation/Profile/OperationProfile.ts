@@ -7,5 +7,6 @@ export interface OperationProfile {
   policyScopes: string[];
   outputSchema?: string;
   fallback?: string;
+  allowedTransitions?: string[];
   enabled: boolean;
 }

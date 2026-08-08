@@ -4,6 +4,7 @@ import type { OperationProfile } from '@operation/Profile/OperationProfile';
 export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   {
     id: 'plan',
+    allowedTransitions: ['understand', 'implement', 'finalize'],
     description: 'Choose the next useful intellectual operation for the task without reading or changing files.',
     promptId: 'plan',
     contextStrategy: 'planning',
@@ -13,6 +14,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'search',
+    allowedTransitions: ['search', 'understand', 'implement', 'finalize'],
     description: 'Locate relevant project files, symbols, examples, and references.',
     promptId: 'search',
     contextStrategy: 'search',
@@ -22,6 +24,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'understand',
+    allowedTransitions: ['understand', 'implement', 'review', 'finalize'],
     description: 'Understand existing code, responsibilities, dependencies, and project behavior.',
     promptId: 'understand',
     contextStrategy: 'understanding',
@@ -30,6 +33,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'finalize',
+    allowedTransitions: [],
     description: 'Produce the final user-facing answer from evidence and observations already gathered.',
     promptId: 'finalize',
     contextStrategy: 'finalization',
@@ -38,6 +42,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'implement',
+    allowedTransitions: ['implement', 'review', 'verify', 'finalize', 'resolve-failure'],
     description: 'Implement the requested change using existing project patterns and policies.',
     promptId: 'implement',
     contextStrategy: 'implementation',
@@ -47,6 +52,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'review',
+    allowedTransitions: ['implement', 'verify', 'finalize', 'resolve-failure'],
     description: 'Review current changes for correctness, scope, consistency, and policy compliance.',
     promptId: 'review',
     contextStrategy: 'review',
@@ -56,6 +62,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'verify',
+    allowedTransitions: ['finalize', 'implement', 'resolve-failure'],
     description: 'Optionally verify the result using appropriate deterministic checks and focused review.',
     promptId: 'verify',
     contextStrategy: 'verification',
@@ -65,6 +72,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'resolve-failure',
+    allowedTransitions: ['understand', 'implement', 'verify', 'finalize'],
     description: 'Analyze a failed operation or check and decide how to fix, replan, ask, or stop.',
     promptId: 'resolve-failure',
     contextStrategy: 'failure-analysis',
@@ -74,6 +82,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'extract-knowledge',
+    allowedTransitions: ['finalize'],
     description: 'Extract a reusable project understanding, pattern, decision candidate, or policy candidate.',
     promptId: 'extract-knowledge',
     contextStrategy: 'knowledge-extraction',

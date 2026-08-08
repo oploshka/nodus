@@ -38,6 +38,8 @@ export class ConfigurationLoader {
       },
       agent: {
         maxSteps: parsed.agent?.maxSteps ?? 20,
+        responseLanguage: parsed.agent?.responseLanguage ?? 'auto',
+        internalLanguage: parsed.agent?.internalLanguage ?? 'original',
       },
       knowledge: {
         generationMode: parsed.knowledge?.generationMode ?? 'disabled',

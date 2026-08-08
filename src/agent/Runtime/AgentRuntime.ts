@@ -33,6 +33,7 @@ export class AgentRuntime {
     execution.addEvent('task', { description: task.description });
 
     const context = this.logContext(task, execution);
+    const startedAt = Date.now();
     let understandToolBatches = 0;
 
     await this.logger.info('execution-started', { operation: execution.currentOperation }, context);
@@ -153,6 +154,24 @@ export class AgentRuntime {
 
       const requestedNextOperation = result.nextOperation?.trim();
       if (requestedNextOperation) {
+        const allowed = operation.allowedTransitions ?? [];
+        if (!this.operationRegistry.has(requestedNextOperation) || !allowed.includes(requestedNextOperation)) {
+          await this.logger.warn('operation-transition-rejected', {
+            from: operation.id,
+            requested: requestedNextOperation,
+            allowed,
+          }, context);
+          const fallback = operation.id === 'understand' && this.operationRegistry.has('finalize')
+            ? 'finalize'
+            : operation.fallback;
+          if (fallback && this.operationRegistry.has(fallback)) {
+            await this.transition(execution, fallback, 'invalid-model-transition', context);
+            continue;
+          }
+          execution.currentOperation = operation.id;
+          continue;
+        }
+
         // Prevent analysis from bouncing back into planning after evidence collection started.
         const target = operation.id === 'understand' && requestedNextOperation === 'plan'
           ? 'finalize'
@@ -187,9 +206,45 @@ export class AgentRuntime {
       await this.logger.warn('execution-max-steps', { maxSteps: this.configuration.maxSteps }, context);
     }
 
+    const metrics = this.executionMetrics(execution, startedAt);
+    execution.addEvent('execution-metrics', metrics);
+    await this.logger.info('execution-metrics', metrics, context);
     execution.addEvent('execution-finished', { status: execution.status, result: execution.result });
     await this.logger.info('execution-finished', { status: execution.status, result: execution.result }, context);
     return execution;
+  }
+
+  private executionMetrics(execution: Execution, startedAt: number) {
+    const operations: Record<string, number> = {};
+    let modelCalls = 0;
+    let toolCalls = 0;
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    for (const event of execution.history) {
+      if (event.type === 'operation-started') {
+        const operation = (event.data as { operation?: string } | undefined)?.operation;
+        if (operation) operations[operation] = (operations[operation] ?? 0) + 1;
+      }
+      if (event.type === 'tool-result') toolCalls += 1;
+      if (event.type === 'model-usage') {
+        modelCalls += 1;
+        const usage = (event.data as { usage?: Record<string, unknown> } | undefined)?.usage;
+        if (usage) {
+          promptTokens += Number(usage.prompt_tokens ?? 0);
+          completionTokens += Number(usage.completion_tokens ?? 0);
+        }
+      }
+    }
+
+    return {
+      durationMs: Date.now() - startedAt,
+      modelCalls,
+      toolCalls,
+      promptTokens,
+      completionTokens,
+      operations,
+    };
   }
 
   private formatFinalResult(result: OperationResult): string {

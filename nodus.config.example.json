@@ -23,7 +23,9 @@
     "maxTokens": 4096
   },
   "agent": {
-    "maxSteps": 20
+    "maxSteps": 20,
+    "responseLanguage": "auto",
+    "internalLanguage": "original"
   },
   "knowledge": {
     "generationMode": "disabled"
