@@ -5,6 +5,16 @@ import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import { ConfigurationLoader } from '@core/Configuration/ConfigurationLoader';
 import { Nodus } from '@core/Nodus/Nodus';
 
+// Определяем единый источник данных для команд
+const COMMANDS = [
+  { name: '/scan', description: 'Scan project files.' },
+  { name: '/refresh', description: 'Refresh project files.' },
+  { name: '/conversation', description: 'Show current conversation ID.' },
+  { name: '/new', description: 'Create a new conversation.' },
+  { name: '/exit', description: 'Exit the CLI.' },
+  { name: '/help', description: 'Show this help message.' }
+];
+
 class ConsoleHumanInteraction implements HumanInteraction {
   public constructor(private readonly readline: ReturnType<typeof createInterface>) {}
 
@@ -26,7 +36,7 @@ export async function runCli(args: string[]): Promise<void> {
     let conversation = nodus.createConversation();
     console.log(`Nodus v0.1 ready. Project: ${configuration.project.id}`);
     console.log(`Conversation: ${conversation.id}`);
-    console.log('Commands: /scan /refresh /conversation /new /exit');
+    console.log('Commands: ' + COMMANDS.map(cmd => cmd.name).join(' '));
 
     while (true) {
       const value = (await readline.question('\n> ')).trim();
@@ -54,6 +64,14 @@ export async function runCli(args: string[]): Promise<void> {
       if (value === '/new') {
         conversation = nodus.createConversation();
         console.log(`Conversation: ${conversation.id}`);
+        continue;
+      }
+      if (value === '/help') {
+        console.log('\nAvailable commands:');
+        COMMANDS.forEach(cmd => {
+          console.log(`${cmd.name} - ${cmd.description}`);
+        });
+        console.log();
         continue;
       }
 
