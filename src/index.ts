@@ -43,7 +43,7 @@ const planner = new Planner(memory);
 
 const task: Task = {
   id: '1',
-  description: 'Analyze the project',
+  description: 'Посмотри файл src/index.ts и скажи, какие модули в нем импортируются',
   status: 'pending',
 };
 
@@ -71,8 +71,9 @@ const contextBuilder = new ContextBuilder();
 
 contextBuilder
   .addTask(task)
-  .addProject(index)
-  .addPlan(plan);
+  .addProject(index); // Передаем только индекс
+// .addPlan(plan);  <-- Временно отключите, чтобы модель не циклилась на структуре плана
+
 
 const ragResults = await rag.search(
   task.description,

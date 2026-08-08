@@ -9,6 +9,7 @@ export class ProjectScanner {
     'node_modules',
     'dist',
     '.git',
+    '.idea',
   ]);
 
   async scan(root: string): Promise<Project> {
