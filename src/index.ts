@@ -2,9 +2,9 @@
 
 import { Agent } from '@core/Agent/Agent';
 import { ContextBuilder } from '@core/Context/ContextBuilder';
-import type { Context } from '@core/Context/Context';
-import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { Task } from '@core/Task/Task';
+import { ModelFactory } from '@model/ModelFactory';
+import { MockModelAdapter } from '@model/Adapter/MockModelAdapter';
 import { FileSystemTool } from '@tool/FileSystem/FileSystemTool';
 import { GitTool } from '@tool/Git/GitTool';
 import { TerminalTool } from '@tool/Terminal/TerminalTool';
@@ -20,34 +20,13 @@ tools.register(terminal);
 tools.register(new GitTool(terminal));
 tools.register(new TestingTool(terminal));
 
-let requestCount = 0;
-
-const model: ModelAdapter = {
-  async send(context: Context) {
-    requestCount += 1;
-
-    console.log(`Model request #${requestCount}`);
-    console.log(JSON.stringify(context, null, 2));
-
-    if (requestCount === 1) {
-      return {
-        type: 'tool',
-        tool: {
-          name: 'filesystem',
-          input: {
-            action: 'read',
-            path: './package.json',
-          },
-        },
-      };
-    }
-
-    return {
-      type: 'message',
-      content: 'Project analyzed',
-    };
+const model = new ModelFactory().create(
+  {
+    provider: 'mock',
+    model: 'mock-model',
   },
-};
+  new MockModelAdapter(),
+);
 
 const agent = new Agent(
   model,

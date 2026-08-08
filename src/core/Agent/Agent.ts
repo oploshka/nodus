@@ -4,12 +4,12 @@ import type { ContextBuilder } from '@core/Context/ContextBuilder';
 import type { Execution } from '@core/Execution/Execution';
 import type { ExecutionResult } from '@core/Execution/ExecutionResult';
 import type { Task } from '@core/Task/Task';
-import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
+import type { Model } from '@model/Model';
 import type { ToolRegistry } from '@tool/ToolRegistry';
 
 export class Agent {
   constructor(
-    private readonly model: ModelAdapter,
+    private readonly model: Model,
     private readonly tools: ToolRegistry,
     private readonly contextBuilder: ContextBuilder,
   ) {}
@@ -27,7 +27,9 @@ export class Agent {
     while (!execution.completed) {
       execution.step += 1;
 
-      const response = await this.model.send(execution.context);
+      const response = await this.model.adapter.send(
+        execution.context,
+      );
 
       if (response.type === 'message') {
         execution.completed = true;
