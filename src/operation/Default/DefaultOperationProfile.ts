@@ -4,6 +4,7 @@ import type { OperationProfile } from '@operation/Profile/OperationProfile';
 export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   {
     id: 'plan',
+    costWeight: 1,
     allowedTransitions: ['search', 'understand', 'implement', 'finalize'],
     description: 'Choose the next useful intellectual operation for the task without reading or changing files.',
     promptId: 'plan',
@@ -14,6 +15,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'search',
+    costWeight: 1,
     allowedTransitions: ['search', 'understand', 'implement', 'finalize'],
     description: 'Locate relevant project files, symbols, examples, and references.',
     promptId: 'search',
@@ -24,6 +26,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'understand',
+    costWeight: 2,
     allowedTransitions: ['understand', 'implement', 'review', 'finalize'],
     description: 'Understand existing code, responsibilities, dependencies, and project behavior.',
     promptId: 'understand',
@@ -33,6 +36,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'finalize',
+    costWeight: 2,
     allowedTransitions: [],
     description: 'Produce the final user-facing answer from evidence and observations already gathered.',
     promptId: 'finalize',
@@ -42,6 +46,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'implement',
+    costWeight: 4,
     allowedTransitions: ['implement', 'review', 'verify', 'finalize', 'resolve-failure'],
     description: 'Implement the requested change using existing project patterns and policies.',
     promptId: 'implement',
@@ -52,6 +57,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'review',
+    costWeight: 2,
     allowedTransitions: ['implement', 'verify', 'finalize', 'resolve-failure'],
     description: 'Review current changes for correctness, scope, consistency, and policy compliance.',
     promptId: 'review',
@@ -62,6 +68,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'verify',
+    costWeight: 2,
     allowedTransitions: ['finalize', 'implement', 'resolve-failure'],
     description: 'Optionally verify the result using appropriate deterministic checks and focused review.',
     promptId: 'verify',
@@ -72,6 +79,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'resolve-failure',
+    costWeight: 2,
     allowedTransitions: ['understand', 'implement', 'verify', 'finalize'],
     description: 'Analyze a failed operation or check and decide how to fix, replan, ask, or stop.',
     promptId: 'resolve-failure',
@@ -82,6 +90,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'extract-knowledge',
+    costWeight: 2,
     allowedTransitions: ['finalize'],
     description: 'Extract a reusable project understanding, pattern, decision candidate, or policy candidate.',
     promptId: 'extract-knowledge',

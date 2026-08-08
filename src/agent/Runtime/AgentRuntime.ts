@@ -14,6 +14,7 @@ import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 
 export class AgentRuntime {
+  private static readonly MAX_SEARCH_ATTEMPTS = 3;
   private static readonly MAX_UNDERSTAND_TOOL_BATCHES = 2;
   private static readonly MAX_UNDERSTAND_TOOLS_PER_BATCH = 3;
 
@@ -36,6 +37,7 @@ export class AgentRuntime {
 
     const context = this.logContext(task, execution);
     const startedAt = Date.now();
+    let searchAttempts = 0;
     let understandToolBatches = 0;
     let taskIntent: TaskIntent = this.inferTaskIntent(task.description);
 
@@ -52,6 +54,7 @@ export class AgentRuntime {
       }
 
       execution.currentOperation = operation.id;
+      if (operation.id === 'search') searchAttempts += 1;
       execution.addEvent('operation-started', { step, operation: operation.id });
       await this.logger.info('operation-selected', { step, operation: operation.id }, context);
       this.reporter.step(step, operation.id);
@@ -106,8 +109,36 @@ export class AgentRuntime {
           ? AgentRuntime.MAX_UNDERSTAND_TOOLS_PER_BATCH
           : undefined;
 
-        await this.toolExecutor.execute(result.toolCalls, execution, context, maxCalls);
-        this.reporter.tools(Math.min(result.toolCalls.length, maxCalls ?? result.toolCalls.length));
+        const toolSummary = await this.toolExecutor.execute(result.toolCalls, execution, context, maxCalls);
+        this.reporter.tools(toolSummary.executed);
+
+        if (operation.id === 'search') {
+          if (toolSummary.useful > 0) {
+            await this.logger.info('search-evidence-found', {
+              attempt: searchAttempts,
+              useful: toolSummary.useful,
+              success: toolSummary.success,
+            }, context);
+            if (this.operationRegistry.has('understand')) {
+              await this.transition(execution, 'understand', 'search-evidence-found', context);
+              continue;
+            }
+          }
+
+          if (searchAttempts >= AgentRuntime.MAX_SEARCH_ATTEMPTS) {
+            await this.logger.info('search-budget-exhausted', {
+              attempts: searchAttempts,
+              limit: AgentRuntime.MAX_SEARCH_ATTEMPTS,
+            }, context);
+            if (this.operationRegistry.has('understand')) {
+              await this.transition(execution, 'understand', 'search-attempt-budget', context);
+              continue;
+            }
+          }
+
+          execution.currentOperation = 'search';
+          continue;
+        }
 
         if (operation.id === 'understand') {
           understandToolBatches += 1;
@@ -192,6 +223,24 @@ export class AgentRuntime {
         break;
       }
 
+      if (operation.id === 'search' && result.status === 'continue' && !result.nextOperation) {
+        if (searchAttempts >= AgentRuntime.MAX_SEARCH_ATTEMPTS && this.operationRegistry.has('understand')) {
+          await this.logger.info('search-budget-exhausted', {
+            attempts: searchAttempts,
+            limit: AgentRuntime.MAX_SEARCH_ATTEMPTS,
+          }, context);
+          await this.transition(execution, 'understand', 'search-attempt-budget', context);
+          continue;
+        }
+
+        await this.logger.info('search-retry', {
+          attempt: searchAttempts,
+          limit: AgentRuntime.MAX_SEARCH_ATTEMPTS,
+        }, context);
+        execution.currentOperation = 'search';
+        continue;
+      }
+
       const requestedNextOperation = result.nextOperation?.trim();
       if (requestedNextOperation) {
         const allowed = operation.allowedTransitions ?? [];
@@ -212,11 +261,20 @@ export class AgentRuntime {
           continue;
         }
 
-        // Prevent analysis from bouncing back into planning after evidence collection started.
-        const target = operation.id === 'understand' && requestedNextOperation === 'plan'
-          ? 'finalize'
-          : requestedNextOperation;
-        await this.transition(execution, target, target === requestedNextOperation ? 'model-requested' : 'understand-no-replan', context);
+        // Prevent search from consuming the whole execution budget and analysis from bouncing back into planning.
+        const target = operation.id === 'search'
+          && requestedNextOperation === 'search'
+          && searchAttempts >= AgentRuntime.MAX_SEARCH_ATTEMPTS
+          ? 'understand'
+          : operation.id === 'understand' && requestedNextOperation === 'plan'
+            ? 'finalize'
+            : requestedNextOperation;
+        const transitionReason = target === requestedNextOperation
+          ? 'model-requested'
+          : operation.id === 'search'
+            ? 'search-attempt-budget'
+            : 'understand-no-replan';
+        await this.transition(execution, target, transitionReason, context);
         continue;
       }
 

@@ -1,0 +1,16 @@
+Search budget patch
+
+Changed:
+- src/agent/Runtime/AgentRuntime.ts
+  - search is limited to 3 attempts
+  - successful non-empty tool evidence exits search early to understand
+  - empty/unsuccessful search retries until the attempt budget is exhausted
+  - after budget exhaustion search transitions to understand
+- src/agent/Execution/ToolExecutor.ts
+  - returns ToolExecutionSummary with success/failed/useful counts
+- src/operation/Profile/OperationProfile.ts
+  - added optional costWeight for future execution budgets
+- src/operation/Default/DefaultOperationProfile.ts
+  - populated costWeight values; runtime does not consume them yet
+
+No configuration changes required.

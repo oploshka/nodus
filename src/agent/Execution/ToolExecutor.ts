@@ -6,6 +6,14 @@ import type { ToolCallRequest } from '@model/Result/OperationResult';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import type { ToolRegistry } from '@tool/Registry/ToolRegistry';
 
+export interface ToolExecutionSummary {
+  requested: number;
+  executed: number;
+  success: number;
+  failed: number;
+  useful: number;
+}
+
 export class ToolExecutor {
   private static readonly DEFAULT_MAX_CALLS_PER_BATCH = 5;
 
@@ -20,11 +28,12 @@ export class ToolExecutor {
     execution: Execution,
     logContext: LogContext,
     maxCalls: number = ToolExecutor.DEFAULT_MAX_CALLS_PER_BATCH,
-  ): Promise<void> {
+  ): Promise<ToolExecutionSummary> {
     const selectedCalls = calls.slice(0, Math.max(0, maxCalls));
     const toolContext: ToolContextEntry[] = [];
     let success = 0;
     let failed = 0;
+    let useful = 0;
 
     await this.logger.info('tools-started', {
       requested: calls.length,
@@ -52,8 +61,12 @@ export class ToolExecutor {
       });
 
       toolContext.push({ call, result });
-      if (result.ok) success += 1;
-      else failed += 1;
+      if (result.ok) {
+        success += 1;
+        if (this.estimateSize(result.data) > 0) useful += 1;
+      } else {
+        failed += 1;
+      }
 
       execution.addEvent('tool-result', {
         tool: call.tool,
@@ -79,7 +92,16 @@ export class ToolExecutor {
       count: selectedCalls.length,
       success,
       failed,
+      useful,
     }, logContext);
+
+    return {
+      requested: calls.length,
+      executed: selectedCalls.length,
+      success,
+      failed,
+      useful,
+    };
   }
 
   private estimateSize(value: unknown): number {

@@ -8,5 +8,6 @@ export interface OperationProfile {
   outputSchema?: string;
   fallback?: string;
   allowedTransitions?: string[];
+  costWeight?: number;
   enabled: boolean;
 }
