@@ -1,12 +1,14 @@
-import type { Task } from '@core/Task/Task';
+// Agent.ts
+
 import type { Context } from '@core/Context/Context';
+import type { Task } from '@core/Task/Task';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { ToolRegistry } from '@tool/ToolRegistry';
 
 export class Agent {
   constructor(
     private readonly model: ModelAdapter,
-    private readonly tools: ToolRegistry
+    private readonly tools: ToolRegistry,
   ) {}
 
   async execute(task: Task, context: Context): Promise<string> {
@@ -16,9 +18,9 @@ export class Agent {
         context,
         tools: this.tools.getAll().map((tool) => ({
           name: tool.name,
-          description: tool.description
-        }))
-      })
+          description: tool.description,
+        })),
+      }),
     );
 
     return response;

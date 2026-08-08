@@ -1,7 +1,18 @@
+// FileSystemTool.ts
+
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import type { Tool } from '@tool/Tool';
 
-export class FileSystemTool {
+export class FileSystemTool implements Tool {
+  name = 'filesystem';
+
+  description = 'Read, write, check and list files';
+
+  async execute(input: unknown): Promise<unknown> {
+    return input;
+  }
+
   async read(filePath: string): Promise<string> {
     return fs.readFile(filePath, 'utf-8');
   }

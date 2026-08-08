@@ -1,3 +1,5 @@
+// Tool.ts
+
 export interface Tool {
   name: string;
   description: string;

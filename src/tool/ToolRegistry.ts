@@ -1,3 +1,5 @@
+// ToolRegistry.ts
+
 import type { Tool } from '@tool/Tool';
 
 export class ToolRegistry {
