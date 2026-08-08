@@ -13,7 +13,8 @@ import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 
 export class AgentRuntime {
-  private static readonly MAX_PLAN_TOOL_BATCHES = 2;
+  private static readonly MAX_UNDERSTAND_TOOL_BATCHES = 2;
+  private static readonly MAX_UNDERSTAND_TOOLS_PER_BATCH = 3;
 
   public constructor(
     private readonly configuration: AgentConfiguration,
@@ -32,7 +33,7 @@ export class AgentRuntime {
     execution.addEvent('task', { description: task.description });
 
     const context = this.logContext(task, execution);
-    let planToolBatches = 0;
+    let understandToolBatches = 0;
 
     await this.logger.info('execution-started', { operation: execution.currentOperation }, context);
 
@@ -55,12 +56,7 @@ export class AgentRuntime {
 
       let result: OperationResult;
       try {
-        result = await this.modelController.execute({
-          task,
-          execution,
-          conversation,
-          operation,
-        });
+        result = await this.modelController.execute({ task, execution, conversation, operation });
       } catch (error) {
         execution.addEvent('model-error', { operation: operation.id, error: String(error) });
         await this.logger.error('model-error', { operation: operation.id, error: String(error) }, context);
@@ -80,24 +76,41 @@ export class AgentRuntime {
         observations: result.observations,
       });
 
-      if (result.toolCalls.length > 0) {
-        await this.toolExecutor.execute(result.toolCalls, execution, context);
+      if (operation.id === 'plan' && result.toolCalls.length > 0) {
+        await this.logger.warn('plan-tool-calls-ignored', { count: result.toolCalls.length }, context);
+        await this.transition(execution, 'understand', 'plan-cannot-use-tools', context);
+        continue;
+      }
 
-        if (operation.id === 'plan') {
-          planToolBatches += 1;
+      if (operation.id === 'finalize' && result.toolCalls.length > 0) {
+        await this.logger.warn('finalize-tool-calls-ignored', { count: result.toolCalls.length }, context);
+        result.toolCalls = [];
+      }
+
+      if (result.toolCalls.length > 0) {
+        const maxCalls = operation.id === 'understand'
+          ? AgentRuntime.MAX_UNDERSTAND_TOOLS_PER_BATCH
+          : undefined;
+
+        await this.toolExecutor.execute(result.toolCalls, execution, context, maxCalls);
+
+        if (operation.id === 'understand') {
+          understandToolBatches += 1;
           if (
-            planToolBatches >= AgentRuntime.MAX_PLAN_TOOL_BATCHES &&
-            this.operationRegistry.has('understand')
+            understandToolBatches >= AgentRuntime.MAX_UNDERSTAND_TOOL_BATCHES &&
+            this.operationRegistry.has('finalize')
           ) {
-            await this.logger.info('plan-budget-exhausted', {
-              toolBatches: planToolBatches,
-              limit: AgentRuntime.MAX_PLAN_TOOL_BATCHES,
+            await this.logger.info('understand-budget-exhausted', {
+              toolBatches: understandToolBatches,
+              limit: AgentRuntime.MAX_UNDERSTAND_TOOL_BATCHES,
             }, context);
-            await this.transition(execution, 'understand', 'plan-tool-budget', context);
+            await this.transition(execution, 'finalize', 'understand-tool-budget', context);
             continue;
           }
         }
 
+        // The tool response is intentionally returned to the same intellectual operation once.
+        // Any nextOperation mixed into a tool-call response is ignored because it violates the protocol.
         execution.currentOperation = operation.id;
         continue;
       }
@@ -140,15 +153,29 @@ export class AgentRuntime {
 
       const requestedNextOperation = result.nextOperation?.trim();
       if (requestedNextOperation) {
-        await this.transition(execution, requestedNextOperation, 'model-requested', context);
+        // Prevent analysis from bouncing back into planning after evidence collection started.
+        const target = operation.id === 'understand' && requestedNextOperation === 'plan'
+          ? 'finalize'
+          : requestedNextOperation;
+        await this.transition(execution, target, target === requestedNextOperation ? 'model-requested' : 'understand-no-replan', context);
         continue;
       }
 
-      // A bare "continue" from plan is ambiguous. Do not let it loop forever:
-      // once plan has no concrete tool call or explicit transition, understanding is the safe next step.
       if (operation.id === 'plan' && result.status === 'continue' && this.operationRegistry.has('understand')) {
         await this.transition(execution, 'understand', 'plan-no-action', context);
         continue;
+      }
+
+      if (operation.id === 'understand' && result.status === 'continue' && this.operationRegistry.has('finalize')) {
+        await this.transition(execution, 'finalize', 'understand-no-action', context);
+        continue;
+      }
+
+      if (operation.id === 'finalize' && result.status === 'continue') {
+        execution.status = 'completed';
+        execution.result = this.formatFinalResult(result);
+        await this.logger.warn('finalize-forced-complete', undefined, context);
+        break;
       }
 
       execution.currentOperation = operation.id;
@@ -167,18 +194,13 @@ export class AgentRuntime {
 
   private formatFinalResult(result: OperationResult): string {
     const finalAnswer = result.finalAnswer?.trim();
-    if (finalAnswer) {
-      return finalAnswer;
-    }
+    if (finalAnswer) return finalAnswer;
 
     const parts: string[] = [];
-    if (result.message?.trim()) {
-      parts.push(result.message.trim());
-    }
+    if (result.message?.trim()) parts.push(result.message.trim());
     if (result.observations.length > 0) {
       parts.push(result.observations.map((item) => `- ${item}`).join('\n'));
     }
-
     return parts.join('\n\n') || 'Completed';
   }
 
@@ -196,9 +218,7 @@ export class AgentRuntime {
 
   private async resolveOperation(id: string, task: Task, execution: Execution): Promise<OperationProfile | undefined> {
     const profile = this.operationRegistry.get(id);
-    if (profile) {
-      return profile;
-    }
+    if (profile) return profile;
 
     const context = this.logContext(task, execution);
     execution.addEvent('missing-operation', { operation: id });
@@ -209,7 +229,6 @@ export class AgentRuntime {
       execution.addEvent('operation-fallback', { requested: id, fallback: fallback.id });
       return fallback;
     }
-
     return undefined;
   }
 

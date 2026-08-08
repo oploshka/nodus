@@ -1,27 +1,36 @@
-Nodus v0.1 — plan/final-result patch
+Nodus v0.1 — context budget + deterministic analysis flow
 
-Apply this archive OVER the previous logging + context-optimization version.
+Apply this archive over the previous plan-final-result patch.
+No nodus.config.json changes are required.
 
-Changed files:
+Changed:
 - src/agent/Runtime/AgentRuntime.ts
-  - plan is limited to 2 tool batches
-  - plan with status=continue but no action auto-transitions to understand
-  - operation transitions are logged with reasons
-  - completed result keeps the full final answer (with backward-compatible fallback to observations)
-- src/model/Result/OperationResult.ts
-  - adds finalAnswer?: string
-- src/model/Controller/ModelController.ts
-  - parses/logs finalAnswer
-  - response protocol distinguishes execution message from final user answer
+  * plan can no longer execute tools
+  * understand: max 2 tool batches, max 3 calls per batch
+  * understand -> finalize after budget/no-action
+  * blocks understand -> plan bounce
+  * finalize forced to terminate instead of looping
+- src/agent/Execution/ToolExecutor.ts
+  * configurable per-operation batch limit
+  * raw toolContext survives for only the immediate next model call
+- src/context/Selector/ContextBudget.ts (new)
+  * operation-specific context budgets
+  * clips raw tool payloads by chars as a tokenizer-free MVP safeguard
+- src/context/Selector/ContextSelector.ts
+  * applies context budgets to history, file index and tool context
 - src/model/Profile/PromptRegistry.ts
-  - plan explicitly stops evidence gathering after <=2 rounds
-  - understand prefers completing from existing toolContext
-  - completed operations return full text in finalAnswer
+  * plan is router-only
+  * understand must summarize observations and stop gathering after two rounds
+  * new finalize prompt
+- src/model/Controller/ModelController.ts
+  * plan/finalize do not expose tools to the model
+- src/operation/Default/DefaultOperationProfile.ts
+  * adds finalize operation
 
-Expected flow for the architecture-analysis smoke task:
-plan -> tools (<=5) -> plan -> tools (<=5) -> understand -> completed
-or faster if plan transitions earlier.
+Expected analysis flow:
+plan -> understand -> [<=3 reads] -> understand -> [<=3 reads] -> finalize -> completed
+Typical calls: 3-5, depending on whether understand needs one or two evidence batches.
 
-New useful log events:
-- operation-transition { from, to, reason }
-- plan-budget-exhausted { toolBatches, limit }
+Notes:
+- Context budget is intentionally implemented in characters for MVP, not tokenizer-specific tokens.
+- tsc could not be fully executed in the packaging environment because @types/node/node_modules are not installed there.

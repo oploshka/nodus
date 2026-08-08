@@ -4,7 +4,7 @@ import type { OperationProfile } from '@operation/Profile/OperationProfile';
 export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   {
     id: 'plan',
-    description: 'Decide the next useful intellectual step for the task without changing files.',
+    description: 'Choose the next useful intellectual operation for the task without reading or changing files.',
     promptId: 'plan',
     contextStrategy: 'planning',
     policyScopes: ['architecture', 'project'],
@@ -26,6 +26,14 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
     promptId: 'understand',
     contextStrategy: 'understanding',
     policyScopes: ['architecture', 'project'],
+    enabled: true,
+  },
+  {
+    id: 'finalize',
+    description: 'Produce the final user-facing answer from evidence and observations already gathered.',
+    promptId: 'finalize',
+    contextStrategy: 'finalization',
+    policyScopes: ['architecture', 'project', 'review'],
     enabled: true,
   },
   {

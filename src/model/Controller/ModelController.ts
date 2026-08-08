@@ -76,7 +76,7 @@ export class ModelController {
             toolContext: context.toolContext,
             project: context.project,
             availableOperations: this.operationRegistry.list().map(({ id, description }) => ({ id, description })),
-            availableTools: this.toolRegistry.definitions(),
+            availableTools: this.availableToolsFor(input.operation.id),
           }, null, 2),
         },
       ],
@@ -130,6 +130,13 @@ export class ModelController {
     }, logContext);
 
     return result;
+  }
+
+  private availableToolsFor(operationId: string) {
+    if (operationId === 'plan' || operationId === 'finalize') {
+      return [];
+    }
+    return this.toolRegistry.definitions();
   }
 
   private parseOperationResult(content: string): OperationResult {

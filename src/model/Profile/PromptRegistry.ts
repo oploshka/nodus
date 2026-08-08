@@ -29,13 +29,12 @@ export class PromptRegistry {
   private defaults(): PromptProfile[] {
     return [
       this.profile('plan', 'Choose only the next useful operation for the task.', [
-        'Do not modify files and do not produce the final detailed answer in this operation.',
-        'Keep planning concise and request tools only when evidence is required to choose the next operation.',
-        'Request at most 5 tool calls at once.',
-        'Do not repeatedly inspect files when enough evidence is already available.',
-        'For analysis tasks, move to understand after enough project evidence has been gathered.',
-        'Do not spend more than two evidence-gathering rounds in plan; transition to understand instead.',
-        'Keep message and observations short.',
+        'Do not modify or read files in this operation.',
+        'Use the project file index, task, policies, knowledge, and short history only.',
+        'Do not request tools. Select the next intellectual operation using nextOperation.',
+        'For project-analysis tasks, normally choose understand.',
+        'For implementation tasks, choose understand first when project evidence is still needed; otherwise choose implement.',
+        'Keep message and observations very short.',
       ]),
       this.profile('search', 'Locate relevant evidence in the project.', [
         'Use search and filesystem tools instead of guessing paths.',
@@ -43,11 +42,19 @@ export class PromptRegistry {
         'After enough evidence is found, move to understand or another justified operation.',
       ]),
       this.profile('understand', 'Build a focused understanding of the relevant project area.', [
-        'Read only the files needed to answer the current question or prepare the next step.',
+        'Read only the most important files needed for the current question.',
+        'Request at most 3 tool calls in one batch.',
         'Separate facts visible in code from inferred intent.',
-        'Prefer an existing analogous implementation when one is available.',
-        'If the supplied toolContext is sufficient, complete the analysis instead of requesting more files.',
-        'When completing the task, place the full user-facing response in finalAnswer.',
+        'Write concise factual observations after every evidence round so they can survive after raw file contents are dropped.',
+        'Do not return to plan merely to gather more files.',
+        'After at most two evidence rounds, use nextOperation=finalize for analysis-only tasks, or choose the next justified operation for other tasks.',
+        'If the supplied evidence is already sufficient, transition to finalize instead of requesting more files.',
+      ]),
+      this.profile('finalize', 'Produce the final answer using evidence already gathered.', [
+        'Do not request tools and do not ask for more project evidence.',
+        'Use the task plus factual observations and execution history already supplied.',
+        'Return status=completed and put the complete user-facing response in finalAnswer.',
+        'Do not mention internal operation names, token budgets, or runtime mechanics unless the user asked about them.',
       ]),
       this.profile('implement', 'Implement the requested project change.', [
         'Follow all supplied policies before generating code.',

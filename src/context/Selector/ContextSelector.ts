@@ -3,11 +3,14 @@ import type { Conversation } from '@core/Conversation/Conversation';
 import type { Execution } from '@core/Execution/Execution';
 import type { Task } from '@core/Task/Task';
 import type { ModelContext } from '@context/Context/ModelContext';
+import { ContextBudget } from '@context/Selector/ContextBudget';
 import type { KnowledgeResolver } from '@knowledge/Resolver/KnowledgeResolver';
 import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 
 export class ContextSelector {
+  private readonly budget = new ContextBudget();
+
   public constructor(private readonly knowledgeResolver: KnowledgeResolver) {}
 
   public select(
@@ -18,12 +21,13 @@ export class ContextSelector {
     operation: OperationProfile,
   ): ModelContext {
     const resolved = this.knowledgeResolver.resolve(task, operation);
-    const indexedFiles = this.selectIndexedFiles(task.description, projectSession, 120);
+    const budget = this.budget.profile(operation.id);
+    const indexedFiles = this.selectIndexedFiles(task.description, projectSession, budget.indexedFiles);
 
     return {
-      conversation: conversation.recent(6),
-      executionHistory: execution.history.slice(-16),
-      toolContext: execution.getToolContext(),
+      conversation: conversation.recent(4),
+      executionHistory: this.budget.history(execution.history, operation.id),
+      toolContext: this.budget.toolContext(execution.getToolContext(), operation.id),
       policies: resolved.policies,
       knowledge: resolved.knowledge,
       project: {
