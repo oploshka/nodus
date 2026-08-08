@@ -77,6 +77,7 @@ export class ModelController {
             project: context.project,
             availableOperations: this.operationRegistry.list().map(({ id, description }) => ({ id, description })),
             availableTools: this.availableToolsFor(input.operation.id),
+            responseProtocolReminder: 'Respond with one OperationResult JSON object only. The top-level object MUST contain status. Do not return an execution event, tool-result event, transcript entry, or copied context object.',
           }, null, 2),
         },
       ],
@@ -113,7 +114,7 @@ export class ModelController {
       responsePayloadPath = await this.payloadLogger.writeResponse(payloadContext, response);
     }
 
-    const result = this.parseOperationResult(response.content);
+    const result = await this.parseOrRepairOperationResult(response.content, request, input, logContext);
     input.execution.consumeToolContext();
     await this.logger.info('model-responded', {
       step: input.execution.currentStep,
@@ -137,6 +138,65 @@ export class ModelController {
       return [];
     }
     return this.toolRegistry.definitions();
+  }
+
+  private async parseOrRepairOperationResult(
+    content: string,
+    originalRequest: ModelRequest,
+    input: ModelExecutionInput,
+    logContext: {
+      projectId: string;
+      conversationId: string;
+      taskId: string;
+      executionId: string;
+    },
+  ): Promise<OperationResult> {
+    try {
+      return this.parseOperationResult(content);
+    } catch (error) {
+      await this.logger.warn('model-protocol-invalid', {
+        step: input.execution.currentStep,
+        operation: input.operation.id,
+        error: String(error),
+      }, logContext);
+
+      const repairRequest: ModelRequest = {
+        model: originalRequest.model,
+        temperature: 0,
+        maxTokens: Math.min(originalRequest.maxTokens ?? 1024, 512),
+        messages: [
+          {
+            role: 'system',
+            content: `You are a strict JSON protocol repairer. Convert the supplied malformed model output into exactly one valid OperationResult JSON object. Do not continue the task, do not add facts, and do not return an execution-history event. ${this.responseProtocol()}`,
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              operation: input.operation.id,
+              malformedOutput: content,
+              requirement: 'Return one top-level OperationResult object with a valid status field.',
+            }, null, 2),
+          },
+        ],
+      };
+
+      const repaired = await this.adapter.complete(repairRequest);
+      if (this.logging.modelPayload) {
+        await this.payloadLogger.writeResponse({
+          executionId: input.execution.id,
+          step: input.execution.currentStep,
+          operation: `${input.operation.id}-protocol-repair`,
+        }, repaired);
+      }
+
+      const result = this.parseOperationResult(repaired.content);
+      await this.logger.info('model-protocol-repaired', {
+        step: input.execution.currentStep,
+        operation: input.operation.id,
+        usage: repaired.usage,
+      }, logContext);
+      return result;
+    }
   }
 
   private parseOperationResult(content: string): OperationResult {

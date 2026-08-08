@@ -1,36 +1,17 @@
-Nodus v0.1 — context budget + deterministic analysis flow
+Nodus v0.1 — safe context + protocol hardening
 
-Apply this archive over the previous plan-final-result patch.
-No nodus.config.json changes are required.
-
-Changed:
-- src/agent/Runtime/AgentRuntime.ts
-  * plan can no longer execute tools
-  * understand: max 2 tool batches, max 3 calls per batch
-  * understand -> finalize after budget/no-action
-  * blocks understand -> plan bounce
-  * finalize forced to terminate instead of looping
-- src/agent/Execution/ToolExecutor.ts
-  * configurable per-operation batch limit
-  * raw toolContext survives for only the immediate next model call
-- src/context/Selector/ContextBudget.ts (new)
-  * operation-specific context budgets
-  * clips raw tool payloads by chars as a tokenizer-free MVP safeguard
-- src/context/Selector/ContextSelector.ts
-  * applies context budgets to history, file index and tool context
-- src/model/Profile/PromptRegistry.ts
-  * plan is router-only
-  * understand must summarize observations and stop gathering after two rounds
-  * new finalize prompt
+Changed files:
+- src/context/Selector/ContextBudget.ts
 - src/model/Controller/ModelController.ts
-  * plan/finalize do not expose tools to the model
-- src/operation/Default/DefaultOperationProfile.ts
-  * adds finalize operation
 
-Expected analysis flow:
-plan -> understand -> [<=3 reads] -> understand -> [<=3 reads] -> finalize -> completed
-Typical calls: 3-5, depending on whether understand needs one or two evidence batches.
+What changed:
+1. ContextBudget never slices an assembled prompt.
+2. executionHistory is now control-plane only; old tool-result events are excluded.
+3. History is bounded both by event count and character budget.
+4. Raw toolContext is bounded entry-by-entry while keeping valid JSON shapes.
+5. plan/understand/finalize context budgets were reduced to keep prompts compact.
+6. A protocol reminder is placed at the END of the user payload so local models see the required output shape close to generation time.
+7. If a model still returns event-shaped/malformed JSON, ModelController makes one small protocol-repair call instead of immediately entering resolve-failure.
+8. Protocol repair does not add task reasoning; it only normalizes the malformed output into OperationResult.
 
-Notes:
-- Context budget is intentionally implemented in characters for MVP, not tokenizer-specific tokens.
-- tsc could not be fully executed in the packaging environment because @types/node/node_modules are not installed there.
+No nodus.config.json changes are required.
