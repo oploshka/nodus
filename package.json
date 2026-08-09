@@ -11,7 +11,9 @@
     "test:model": "tsx src/test/ModelSmoke.ts",
     "test:dataflow": "tsx src/test/ExecutionContextSmoke.ts",
     "test:protocol": "tsx src/test/NodusProtocolSmoke.ts",
-    "test:protocol:model": "tsx src/test/NodusProtocolModelBenchmark.ts"
+    "test:protocol:model": "tsx src/test/NodusProtocolModelBenchmark.ts",
+    "test:protocol:edit": "tsx src/test/EditFileProtocolSmoke.ts",
+    "test:protocol:edit:model": "tsx src/test/EditFileProtocolModelBenchmark.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
