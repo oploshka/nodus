@@ -62,6 +62,7 @@ export class PlanExecutor {
 
       const step = state.plan.steps[state.planIndex];
       const composed = this.contextComposer.compose(state.executionContext, step);
+      this.reporter.contextCompose(step.inputs, composed.facts.map((fact) => fact.key), composed.missingInputs);
       if (composed.missingInputs.length > 0) {
         const blocked: StepResult = {
           goalSatisfied: false,
@@ -140,7 +141,8 @@ export class PlanExecutor {
       if (result.stepResult) {
         const merged = this.mergeStepResults(state.stepResults.get(step.id), result.stepResult);
         state.stepResults.set(step.id, merged);
-        state.executionContext.mergeStepResult(step, merged);
+        const mergedKeys = state.executionContext.mergeStepResult(step, merged);
+        this.reporter.factsMerged(mergedKeys);
         this.reporter.stepResult(merged);
       }
 
@@ -183,7 +185,8 @@ export class PlanExecutor {
           };
           const merged = this.mergeStepResults(state.stepResults.get(step.id), synthetic);
           state.stepResults.set(step.id, merged);
-          state.executionContext.mergeStepResult(step, merged);
+          const mergedKeys = state.executionContext.mergeStepResult(step, merged);
+          this.reporter.factsMerged(mergedKeys);
         }
       }
 

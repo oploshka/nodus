@@ -64,12 +64,45 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
     }
   }
 
+  public modelRequest(operation: string): void {
+    if (this.mode === 'quiet') return;
+    this.line(this.paint('dim', `  → Запрашиваю модель (${this.operationName(operation)})...`));
+  }
+
   public modelResponse(operation: string, durationMs: number, promptTokens?: number, completionTokens?: number): void {
-    if (this.mode !== 'verbose') return;
-    const tokens = promptTokens !== undefined
+    if (this.mode === 'quiet') return;
+    const tokens = this.mode === 'verbose' && promptTokens !== undefined
       ? ` · ${promptTokens} → ${completionTokens ?? 0} токенов`
       : '';
     this.line(this.paint('dim', `  ✓ Ответ модели (${operation}) за ${(durationMs / 1000).toFixed(1)} сек${tokens}`));
+  }
+
+
+  public contextCompose(inputs: string[], found: string[], missing: string[]): void {
+    if (this.mode === 'quiet' || inputs.length === 0) return;
+    this.line(this.paint('dim', `  → Собираю контекст: ${inputs.join(', ')}`));
+    if (missing.length === 0) {
+      this.line(this.paint('dim', `  ✓ Входы готовы ${found.length}/${inputs.length}`));
+    } else {
+      this.line(this.paint('yellow', `  ! Не хватает: ${missing.join(', ')}`));
+    }
+  }
+
+  public factsMerged(keys: string[]): void {
+    if (this.mode === 'quiet' || keys.length === 0) return;
+    this.line(this.paint('dim', `  ✓ Контекст обновлён: ${keys.join(', ')}`));
+  }
+
+  public protocolRetry(operation: string, truncated: boolean): void {
+    if (this.mode === 'quiet') return;
+    const reason = truncated ? 'ответ достиг лимита токенов' : 'ответ модели содержит некорректный JSON';
+    this.line(this.paint('yellow', `  ! ${reason}`));
+    this.line(this.paint('dim', `  → Повторяю ${this.operationName(operation)} в компактном формате`));
+  }
+
+  public protocolRepaired(operation: string, durationMs: number): void {
+    if (this.mode === 'quiet') return;
+    this.line(this.paint('dim', `  ✓ Протокол восстановлен (${this.operationName(operation)}) за ${(durationMs / 1000).toFixed(1)} сек`));
   }
 
   public tools(count: number): void {

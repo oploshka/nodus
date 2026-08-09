@@ -16,7 +16,8 @@ export interface ComposedStepContext {
 export class ExecutionContext {
   private readonly facts = new Map<FactKey, ExecutionFact>();
 
-  public mergeStepResult(step: PlanStep, result: StepResult): void {
+  public mergeStepResult(step: PlanStep, result: StepResult): FactKey[] {
+    const before = new Map(this.facts);
     for (const fact of result.facts) {
       if (step.outputs.includes(fact.key)) this.put(step.id, fact);
     }
@@ -33,6 +34,12 @@ export class ExecutionContext {
         });
       }
     }
+
+    return step.outputs.filter((key) => {
+      const previous = before.get(key);
+      const current = this.facts.get(key);
+      return Boolean(current && (!previous || previous.value !== current.value));
+    });
   }
 
   public has(key: FactKey): boolean {

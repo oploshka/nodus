@@ -133,6 +133,7 @@ export class ModelController {
       payload: requestPayloadPath,
     }, logContext);
 
+    this.reporter.modelRequest(input.operation.id);
     const modelStartedAt = Date.now();
     const response = await this.adapter.complete(request);
     const modelDurationMs = Date.now() - modelStartedAt;
@@ -142,7 +143,13 @@ export class ModelController {
       responsePayloadPath = await this.payloadLogger.writeResponse(payloadContext, response);
     }
 
-    const result = await this.parseOrRepairOperationResult(response.content, request, input, logContext);
+    const result = await this.parseOrRepairOperationResult(
+      response.content,
+      request,
+      input,
+      logContext,
+      response.usage?.completion_tokens,
+    );
     input.execution.addEvent('model-usage', { operation: input.operation.id, usage: response.usage });
     input.execution.consumeToolContext();
     this.reporter.modelResponse(
@@ -211,6 +218,7 @@ export class ModelController {
       taskId: string;
       executionId: string;
     },
+    completionTokens?: number,
   ): Promise<OperationResult> {
     try {
       return this.parseOperationResult(content);
@@ -221,14 +229,18 @@ export class ModelController {
         error: String(error),
       }, logContext);
 
+      const configuredLimit = originalRequest.maxTokens ?? 1024;
+      const likelyTruncated = completionTokens !== undefined && completionTokens >= configuredLimit;
+      this.reporter.protocolRetry(input.operation.id, likelyTruncated);
+
       const repairRequest: ModelRequest = {
         model: originalRequest.model,
         temperature: 0,
-        maxTokens: Math.min(originalRequest.maxTokens ?? 1024, 512),
+        maxTokens: Math.max(Math.min(originalRequest.maxTokens ?? 1024, 768), 768),
         messages: [
           {
             role: 'system',
-            content: `You are a strict JSON protocol repairer. Convert the supplied malformed model output into exactly one valid OperationResult JSON object. Do not continue the task, do not add facts, and do not return an execution-history event. ${this.responseProtocol()}`,
+            content: `You are a strict JSON protocol repairer. Return the SHORTEST valid OperationResult JSON that preserves the supplied result. Do not continue the task and do not add facts. Omit optional prose. Keep findings/facts compact. ${this.responseProtocol()}`,
           },
           {
             role: 'user',
@@ -241,7 +253,9 @@ export class ModelController {
         ],
       };
 
+      const repairStartedAt = Date.now();
       const repaired = await this.adapter.complete(repairRequest);
+      const repairDurationMs = Date.now() - repairStartedAt;
       if (this.logging.modelPayload) {
         await this.payloadLogger.writeResponse({
           executionId: input.execution.id,
@@ -251,6 +265,7 @@ export class ModelController {
       }
 
       const result = this.parseOperationResult(repaired.content);
+      this.reporter.protocolRepaired(input.operation.id, repairDurationMs);
       await this.logger.info('model-protocol-repaired', {
         step: input.execution.currentStep,
         operation: input.operation.id,
