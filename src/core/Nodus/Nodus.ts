@@ -27,7 +27,6 @@ import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import { MockModelAdapter } from '@model/Adapter/MockModelAdapter';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter';
 import { ModelController } from '@model/Controller/ModelController';
-import { PromptRegistry } from '@model/Profile/PromptRegistry';
 import { DEFAULT_OPERATION_PROFILES } from '@operation/Default/DefaultOperationProfile';
 import { OperationRegistry } from '@operation/Registry/OperationRegistry';
 import { ProjectSession } from '@project/ProjectSession/ProjectSession';
@@ -75,7 +74,6 @@ export class Nodus {
     this.toolRegistry.register(new SearchTool());
 
     const adapter = this.createModelAdapter(configuration);
-    const promptRegistry = new PromptRegistry();
     const knowledgeResolver = new KnowledgeResolver(knowledgeStore);
     const contextSelector = new ContextSelector(knowledgeResolver);
     const payloadLogger = new PayloadLogger(
@@ -90,7 +88,6 @@ export class Nodus {
     const planGenerator = new PlanGenerator(
       configuration.model,
       adapter,
-      promptRegistry,
       this.projectSession,
       this.logger,
       stepRegistry,
@@ -98,7 +95,6 @@ export class Nodus {
     const recoveryController = new RecoveryController(
       configuration.model,
       adapter,
-      promptRegistry,
       stepRegistry,
       this.logger,
     );
@@ -109,7 +105,6 @@ export class Nodus {
       configuration.agent,
       configuration.logging,
       adapter,
-      promptRegistry,
       contextSelector,
       this.projectSession,
       this.operationRegistry,

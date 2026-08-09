@@ -22,7 +22,10 @@
     "test:understand:derivation": "tsx src/test/UnderstandDerivationSmoke.ts",
     "test:evidence:accumulation": "tsx src/test/ToolEvidenceAccumulationSmoke.ts",
     "test:derivation:grounding": "tsx src/test/ConservativeDerivationSmoke.ts",
-    "test:edit-file:context": "tsx src/test/EditFileTargetContextSmoke.ts"
+    "test:edit-file:context": "tsx src/test/EditFileTargetContextSmoke.ts",
+    "test:scenario:status": "tsx src/test/StatusCommandScenarioSmoke.ts",
+    "test:prompt:contracts": "tsx src/test/PromptTemperatureContractSmoke.ts",
+    "test:operation:profiles": "tsx src/test/OperationProfileArchitectureSmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

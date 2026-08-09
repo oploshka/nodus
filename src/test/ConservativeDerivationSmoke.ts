@@ -4,7 +4,6 @@ import { StepRegistry } from '@agent/Planning/StepRegistry';
 import type { PlanStep } from '@agent/Planning/TaskPlan';
 import { Execution } from '@core/Execution/Execution';
 import { Task } from '@core/Task/Task';
-import { PromptRegistry } from '@model/Profile/PromptRegistry';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -60,7 +59,6 @@ const hallucinating = new RecoveryController(
       }),
     }),
   },
-  new PromptRegistry(),
   new StepRegistry(),
   logger,
 );
@@ -85,7 +83,6 @@ const grounded = new RecoveryController(
       }),
     }),
   },
-  new PromptRegistry(),
   new StepRegistry(),
   logger,
 );

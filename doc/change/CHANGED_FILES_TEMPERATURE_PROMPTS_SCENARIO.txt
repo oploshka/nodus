@@ -1,0 +1,18 @@
+Operation-specific temperatures:
+- src/operation/Profile/OperationProfile.ts
+- src/operation/Default/DefaultOperationProfile.ts
+- src/model/Controller/ModelController.ts
+
+Prompt contracts / no-goal-drift:
+- src/model/Prompt/DefaultPromptDefinitions.ts
+- src/agent/Planning/RecoveryController.ts
+
+Canonical scenario regression:
+- src/test/fixtures/StatusCommandScenario.ts
+- src/test/StatusCommandScenarioSmoke.ts
+- doc/scenarios/status-command.md
+- package.json
+- src/test/PromptTemperatureContractSmoke.ts
+
+Housekeeping:
+- CHANGED_FILES*.txt moved to doc/change/

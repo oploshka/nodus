@@ -14,11 +14,11 @@ export class KnowledgeResolver {
 
   public resolve(task: Task, operation: OperationProfile, limit: number = 12): ResolvedKnowledge {
     const active = this.store.all().filter((entry) => entry.status === 'active');
-    const terms = this.tokens(`${task.description} ${operation.id} ${operation.policyScopes.join(' ')}`);
+    const terms = this.tokens(`${task.description} ${operation.id} ${operation.execution.policyScopes.join(' ')}`);
 
     const policies = active
       .filter((entry) => entry.type === 'policy')
-      .filter((entry) => this.matchesPolicyScope(entry, operation.policyScopes))
+      .filter((entry) => this.matchesPolicyScope(entry, operation.execution.policyScopes))
       .sort((a, b) => this.score(b, terms) - this.score(a, terms))
       .slice(0, limit);
 

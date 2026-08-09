@@ -4,12 +4,61 @@ import type { Execution, ToolContextEntry } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
-import type { PromptRegistry } from '@model/Profile/PromptRegistry';
+import type { ModelCallProfile } from '@model/Profile/ModelCallProfile';
+import { composePrompt } from '@model/Prompt/PromptComposer';
 import type { ModelRequest } from '@model/Request/ModelRequest';
 import type { StepEvidenceItem, StepResult } from '@model/Result/OperationResult';
 import type { ExecutionFact } from '@agent/Planning/ExecutionContext';
 import type { PlanStep, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
 import type { StepRegistry } from '@agent/Planning/StepRegistry';
+
+const STEP_EVIDENCE_PROFILE: ModelCallProfile = {
+  prompt: {
+    purpose: 'Decide whether accumulated concrete evidence closes the active search/understand step.',
+    rules: [
+      'Never broaden or reinterpret the active goal.',
+      'For a generic request to find an API/source/access method, a directly usable property, field, method, or receiver chain is sufficient unless the goal explicitly requires a dedicated getter/service/CLI/HTTP API.',
+      'Never require a different abstraction merely because one could exist. Absence of a dedicated getter is not missing evidence when a direct access path already satisfies the goal.',
+      'Use only supplied indexed paths and evidence. Never invent directories or modules.',
+      'If sufficient, emit every requested output key. If insufficient, return the smallest missing detail that is strictly necessary for the original goal.',
+    ],
+  },
+  model: { temperature: 0, maxTokens: 512 },
+};
+
+const STEP_SATISFACTION_PROFILE: ModelCallProfile = {
+  prompt: {
+    purpose: 'Decide whether reusable facts already satisfy a plan-step postcondition.',
+    rules: [
+      'Treat outputs as postconditions and ask only whether they are derivable from supplied facts/evidence.',
+      'Never strengthen the original goal or demand a new API shape.',
+      'Preserve source-scoped access paths and receiver chains exactly unless evidence supports a replacement.',
+      'If all outputs can be conservatively derived, mark the step satisfied; otherwise state only the smallest original-goal blocker.',
+    ],
+  },
+  model: { temperature: 0, maxTokens: 256 },
+};
+
+const RECOVER_PLAN_PROFILE: ModelCallProfile = {
+  prompt: {
+    purpose: 'Recover a stalled or exhausted plan step without restarting the whole task.',
+    rules: [
+      'Diagnose only the current blocker using the supplied plan and recent execution evidence.',
+      'Prefer the smallest correction that can unblock the existing plan.',
+      'Use currentStepResult.missing as the authoritative blocker list. Insert steps only to resolve those concrete missing items.',
+      'You may retry the current step, insert up to three focused steps before it, skip it only when it is genuinely unnecessary, request human help, or fail clearly.',
+      'Use only the supplied available step types for inserted steps.',
+      'Do not edit files or solve the whole task inside recovery.',
+      'When a human hint is supplied, treat it as additional evidence and use it to guide the correction.',
+      'Do not silently discard completed plan steps.',
+      'Do not invent a concrete file path or directory unless it already exists in supplied project files or evidence.',
+      'Do not insert a step whose goal duplicates an already completed step or a previous recovery insertion. If no new evidence can be named, request human help instead of expanding the plan.',
+      'Do not broaden an access-path question into a search for getters, services, CLI APIs, or HTTP APIs unless the original step explicitly requires those forms.',
+      'When the runtime reports step-no-progress, do not choose retry-current unless a human hint supplied genuinely new information.',
+    ],
+  },
+  model: { temperature: 0, maxTokens: 768 },
+};
 
 export type RecoveryAction = 'retry-current' | 'insert-steps' | 'skip-current' | 'request-human' | 'fail';
 
@@ -35,7 +84,6 @@ export class RecoveryController {
   public constructor(
     private readonly configuration: ModelConfiguration,
     private readonly adapter: ModelAdapter,
-    private readonly promptRegistry: PromptRegistry,
     private readonly stepRegistry: StepRegistry,
     private readonly logger: Logger,
   ) {}
@@ -70,27 +118,24 @@ export class RecoveryController {
 
     const request: ModelRequest = {
       model: this.configuration.model,
-      temperature: 0,
-      maxTokens: Math.min(this.configuration.maxTokens ?? 512, 512),
+      temperature: STEP_EVIDENCE_PROFILE.model.temperature ?? this.configuration.temperature,
+      maxTokens: Math.min(this.configuration.maxTokens ?? 512, STEP_EVIDENCE_PROFILE.model.maxTokens ?? 512),
       messages: [
         {
           role: 'system',
-          content: [
-            'You are the evidence evaluator inside Nodus.',
-            `The active operation type is ${input.step.type}.`,
-            'Evaluate whether the accumulated information is sufficient for the active step goal.',
-            'Do not request tools and do not invent files, symbols, APIs, or facts.',
-            'Use accumulated findings/evidence, reusable known facts, and the latest tool results together.',
-            input.step.type === 'search'
-              ? 'SEARCH is evidence-driven: require concrete located project evidence for the requested outputs.'
-              : 'UNDERSTAND is derivational: you may combine supplied known facts and evidence into a conclusion; do not demand another file read merely to reconfirm facts already supplied.',
-            'If the goal is satisfied, emit one compact fact for EVERY requested output key.',
-            'If it is not satisfied, return only the smallest concrete missing information needed for the next attempt.',
-            input.step.type === 'search'
-              ? 'Evidence paths/symbols must be directly supported by supplied tool results or accumulated evidence.'
-              : 'For derived understanding, evidence may be inherited from the supplied known facts and accumulated evidence.',
-            'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"findings":["..."],"evidence":[{"path":"optional","symbol":"optional","fact":"supported fact"}],"facts":[{"key":"exact output key","value":"compact reusable value"}]}',
-          ].join('\n'),
+          content: composePrompt(STEP_EVIDENCE_PROFILE.prompt, {
+            rules: [
+              `The active operation type is ${input.step.type}.`,
+              input.step.type === 'search'
+                ? 'SEARCH is evidence-driven: require concrete located project evidence for the requested outputs.'
+                : 'UNDERSTAND is derivational: combine supplied known facts/evidence; do not demand another read merely to reconfirm them.',
+              'Use accumulated findings/evidence, reusable known facts, and the latest tool results together.',
+              input.step.type === 'search'
+                ? 'Evidence paths/symbols must be directly supported by supplied tool results or accumulated evidence.'
+                : 'For derived understanding, evidence may be inherited from supplied known facts and accumulated evidence.',
+            ],
+            returnFormat: 'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"findings":["..."],"evidence":[{"path":"optional","symbol":"optional","fact":"supported fact"}],"facts":[{"key":"exact output key","value":"compact reusable value"}]}',
+          }),
         },
         {
           role: 'user',
@@ -193,24 +238,21 @@ export class RecoveryController {
 
     const request: ModelRequest = {
       model: this.configuration.model,
-      temperature: 0,
-      maxTokens: Math.min(this.configuration.maxTokens ?? 256, 256),
+      temperature: STEP_SATISFACTION_PROFILE.model.temperature ?? this.configuration.temperature,
+      maxTokens: Math.min(this.configuration.maxTokens ?? 256, STEP_SATISFACTION_PROFILE.model.maxTokens ?? 256),
       messages: [
         {
           role: 'system',
-          content: [
-            'You are a strict data-flow gate inside Nodus.',
-            `The active operation type is ${input.step.type}.`,
-            'Decide whether the supplied reusable facts and accumulated step understanding ALREADY satisfy the active step goal.',
-            'Do not request tools, do not invent evidence, and do not broaden the goal.',
-            input.step.type === 'understand'
-              ? 'UNDERSTAND is a derivation step: combine declared input facts conservatively. Do not require a new project read merely to restate or connect facts that are already supplied. Never invent or substitute a concrete code access path: receiver chains such as configuration.project.id, conversation.id, nodus.projectSession, state.task, or this.index must be grounded in the supplied source evidence for the relevant code scope.'
-              : 'SEARCH is evidence-driven: do not claim satisfaction unless the supplied facts already contain the located evidence required by the goal.',
-            'Only return satisfied=true when no additional project evidence is required.',
-            'If satisfied, emit one compact fact for every requested output key using only supplied information.',
-            'When the goal names a concrete function or file, preserve that scope. A property access valid in another class is not automatically valid in the named function.',
-            'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"facts":[{"key":"exact output key","value":"compact derived value"}]}',
-          ].join('\n'),
+          content: composePrompt(STEP_SATISFACTION_PROFILE.prompt, {
+            rules: [
+              `The active operation type is ${input.step.type}.`,
+              input.step.type === 'understand'
+                ? 'UNDERSTAND is derivational: combine declared input facts conservatively and do not require a new read merely to reconnect supplied facts.'
+                : 'SEARCH is evidence-driven: only claim satisfaction when supplied facts contain located evidence required by the original goal.',
+              'When the goal names a concrete function or file, preserve that scope. A property access valid in another class is not automatically valid there.',
+            ],
+            returnFormat: 'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"facts":[{"key":"exact output key","value":"compact derived value"}]}',
+          }),
         },
         {
           role: 'user',
@@ -373,16 +415,15 @@ export class RecoveryController {
     executionFacts?: unknown[];
     previousRecoveryGoals?: string[];
   }): Promise<RecoveryDecision> {
-    const prompt = this.promptRegistry.get('recover-plan');
     const currentStep = input.plan.steps[input.stepIndex];
     const request: ModelRequest = {
       model: this.configuration.model,
-      temperature: 0,
-      maxTokens: Math.min(this.configuration.maxTokens ?? 1024, 768),
+      temperature: RECOVER_PLAN_PROFILE.model.temperature ?? this.configuration.temperature,
+      maxTokens: Math.min(this.configuration.maxTokens ?? 768, RECOVER_PLAN_PROFILE.model.maxTokens ?? 768),
       messages: [
         {
           role: 'system',
-          content: `${prompt.systemPrompt}\n\nPurpose: ${prompt.purpose}\n\nInstructions:\n${prompt.instructions.map((value) => `- ${value}`).join('\n')}\n\n${this.protocol()}`,
+          content: composePrompt(RECOVER_PLAN_PROFILE.prompt, { returnFormat: this.protocol() }),
         },
         {
           role: 'user',

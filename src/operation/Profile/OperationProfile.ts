@@ -1,13 +1,17 @@
 // OperationProfile.ts
-export interface OperationProfile {
-  id: string;
-  description: string;
-  promptId: string;
+import type { ModelCallProfile } from '@model/Profile/ModelCallProfile';
+
+export interface OperationExecutionSettings {
   contextStrategy: string;
   policyScopes: string[];
-  outputSchema?: string;
   fallback?: string;
   allowedTransitions?: string[];
   costWeight?: number;
+}
+
+export interface OperationProfile extends ModelCallProfile {
+  id: string;
+  description: string;
+  execution: OperationExecutionSettings;
   enabled: boolean;
 }

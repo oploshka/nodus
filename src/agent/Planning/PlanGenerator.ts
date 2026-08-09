@@ -1,33 +1,52 @@
+// PlanGenerator.ts
 import type { ModelConfiguration } from '@core/Configuration/Configuration';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
-import type { PromptRegistry } from '@model/Profile/PromptRegistry';
+import type { ModelCallProfile } from '@model/Profile/ModelCallProfile';
+import { composePrompt } from '@model/Prompt/PromptComposer';
 import type { ModelRequest } from '@model/Request/ModelRequest';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import type { PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
 import type { StepRegistry } from '@agent/Planning/StepRegistry';
 
+const TASK_PLAN_PROFILE: ModelCallProfile = {
+  prompt: {
+    purpose: 'Create a compact executable plan for the whole task before execution starts.',
+    rules: [
+      'Plan the whole task, not merely the next operation.',
+      'Use only the supplied project index; do not request tools and do not invent files, directories, APIs, or service layers.',
+      'Use the smallest useful number of steps. Every step must have one concrete, verifiable goal. Do not create separate steps merely to reconfirm a fact or access path that an earlier step is expected to establish.',
+      'Use understand only when search evidence is expected to be insufficient to define the change safely.',
+      'Use prepare-change to decide exactly what must change and edit-file to perform the concrete file edit.',
+      'End every plan with finalize. Add verify only when deterministic verification is useful.',
+      'Respect the supplied maximum attempt limits; never increase them.',
+      'Declare compact inputs and outputs for every step. Inputs may reference only outputs of earlier steps.',
+      'Prefer stable dot-separated output keys. Do not create a large ontology.',
+      'When a task asks to use existing APIs/structures, search for concrete existing sources/access paths/structures. A usable property/access path counts unless the task explicitly requires another abstraction.',
+    ],
+  },
+  model: { temperature: 0, maxTokens: 1024 },
+};
+
 export class PlanGenerator {
   public constructor(
     private readonly configuration: ModelConfiguration,
     private readonly adapter: ModelAdapter,
-    private readonly promptRegistry: PromptRegistry,
     private readonly projectSession: ProjectSession,
     private readonly logger: Logger,
     private readonly stepRegistry: StepRegistry,
   ) {}
 
   public async generate(task: Task, executionId: string): Promise<TaskPlan> {
-    const prompt = this.promptRegistry.get('task-plan');
     const request: ModelRequest = {
       model: this.configuration.model,
-      temperature: 0,
-      maxTokens: Math.min(this.configuration.maxTokens ?? 1024, 1024),
+      temperature: TASK_PLAN_PROFILE.model.temperature ?? this.configuration.temperature,
+      maxTokens: Math.min(this.configuration.maxTokens ?? 1024, TASK_PLAN_PROFILE.model.maxTokens ?? 1024),
       messages: [
         {
           role: 'system',
-          content: `${prompt.systemPrompt}\n\nPurpose: ${prompt.purpose}\n\nInstructions:\n${prompt.instructions.map((value) => `- ${value}`).join('\n')}\n\n${this.protocol()}`,
+          content: composePrompt(TASK_PLAN_PROFILE.prompt, { returnFormat: this.protocol() }),
         },
         {
           role: 'user',

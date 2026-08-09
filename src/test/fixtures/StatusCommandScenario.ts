@@ -1,0 +1,63 @@
+import type { TaskPlan } from '@agent/Planning/TaskPlan';
+
+export const STATUS_COMMAND_CANONICAL_PLAN: TaskPlan = {
+  version: 1,
+  goal: 'Добавить команду /status в CLI с использованием существующих источников данных.',
+  steps: [
+    {
+      id: 'step-1',
+      type: 'search',
+      goal: 'Найти CLI и механизм регистрации/обработки команд.',
+      status: 'pending',
+      maxAttempts: 3,
+      inputs: [],
+      outputs: ['cli.location', 'cli.command-registration-pattern'],
+    },
+    {
+      id: 'step-2',
+      type: 'search',
+      goal: 'Найти прямые существующие access paths для project ID, conversation ID и количества файлов индекса.',
+      status: 'pending',
+      maxAttempts: 3,
+      inputs: ['cli.location'],
+      outputs: ['project.id.source', 'conversation.id.source', 'index.files.count.source'],
+    },
+    {
+      id: 'step-3',
+      type: 'understand',
+      goal: 'Связать найденные access paths с контекстом runCli без повторного поиска альтернативных API.',
+      status: 'pending',
+      maxAttempts: 2,
+      inputs: ['cli.command-registration-pattern', 'project.id.source', 'conversation.id.source', 'index.files.count.source'],
+      outputs: ['cli.status.integration'],
+    },
+    {
+      id: 'step-4',
+      type: 'prepare-change',
+      goal: 'Подготовить минимальное изменение src/cli/Cli.ts для команды /status.',
+      status: 'pending',
+      maxAttempts: 1,
+      inputs: ['cli.status.integration'],
+      outputs: ['status.change-plan'],
+    },
+    {
+      id: 'step-5',
+      type: 'edit-file',
+      goal: 'Добавить /status в src/cli/Cli.ts.',
+      status: 'pending',
+      maxAttempts: 3,
+      inputs: ['status.change-plan'],
+      outputs: ['status.cli.updated'],
+      targetPath: 'src/cli/Cli.ts',
+    },
+    {
+      id: 'step-6',
+      type: 'finalize',
+      goal: 'Сообщить пользователю результат.',
+      status: 'pending',
+      maxAttempts: 1,
+      inputs: ['status.cli.updated'],
+      outputs: ['task.final-result'],
+    },
+  ],
+};

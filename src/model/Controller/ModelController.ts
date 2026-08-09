@@ -9,13 +9,14 @@ import type { PayloadLogger } from '@core/Logging/PayloadLogger';
 import type { Task } from '@core/Task/Task';
 import type { ContextSelector } from '@context/Selector/ContextSelector';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
-import type { PromptRegistry } from '@model/Profile/PromptRegistry';
 import type { ModelRequest } from '@model/Request/ModelRequest';
 import type { OperationResult, StepResult } from '@model/Result/OperationResult';
 import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import type { ToolRegistry } from '@tool/Registry/ToolRegistry';
+import { composePrompt } from '@model/Prompt/PromptComposer';
+import { OPERATION_RESULT_RETURN_FORMAT } from '@model/Protocol/OperationResultProtocol';
 import { EditFileRawProtocol } from '@model/Protocol/EditFileRawProtocol';
 
 export interface ModelExecutionInput {
@@ -35,7 +36,6 @@ export class ModelController {
     private readonly agentConfiguration: AgentConfiguration,
     private readonly logging: LoggingConfiguration,
     private readonly adapter: ModelAdapter,
-    private readonly promptRegistry: PromptRegistry,
     private readonly contextSelector: ContextSelector,
     private readonly projectSession: ProjectSession,
     private readonly operationRegistry: OperationRegistry,
@@ -46,7 +46,7 @@ export class ModelController {
   ) {}
 
   public async execute(input: ModelExecutionInput): Promise<OperationResult> {
-    const prompt = this.promptRegistry.get(input.operation.promptId);
+    const prompt = input.operation.prompt;
     const context = this.contextSelector.select(
       input.task,
       input.execution,
@@ -60,15 +60,15 @@ export class ModelController {
 
     const responseProtocol = input.operation.id === 'edit-file'
       ? this.editFileProtocol.instructions(input.activeStep?.targetPath)
-      : this.responseProtocol();
+      : prompt.returnFormat ?? OPERATION_RESULT_RETURN_FORMAT;
     const request: ModelRequest = {
       model: this.configuration.model,
-      temperature: this.configuration.temperature,
-      maxTokens: this.configuration.maxTokens,
+      temperature: input.operation.model.temperature ?? this.configuration.temperature,
+      maxTokens: input.operation.model.maxTokens ?? this.configuration.maxTokens,
       messages: [
         {
           role: 'system',
-          content: `${prompt.systemPrompt}\n\nOperation purpose: ${prompt.purpose}\n\nInstructions:\n${prompt.instructions.map((value) => `- ${value}`).join('\n')}\n\n${responseProtocol}`,
+          content: composePrompt(prompt, { returnFormat: responseProtocol }),
         },
         {
           role: 'user',
@@ -86,7 +86,7 @@ export class ModelController {
             operation: {
               id: input.operation.id,
               description: input.operation.description,
-              contextStrategy: input.operation.contextStrategy,
+              contextStrategy: input.operation.execution.contextStrategy,
             },
             activeStep: input.activeStep,
             stepContext: input.stepContext ?? { facts: [], missingInputs: [], activeEvidence: { findings: [], evidence: [], missing: [] } },
@@ -250,7 +250,7 @@ export class ModelController {
         messages: [
           {
             role: 'system',
-            content: `You are a strict JSON protocol repairer. Return the SHORTEST valid OperationResult JSON that preserves the supplied result. Do not continue the task and do not add facts. Omit optional prose. Keep findings/facts compact. ${this.responseProtocol()}`,
+            content: `You are a strict JSON protocol repairer. Return the SHORTEST valid OperationResult JSON that preserves the supplied result. Do not continue the task and do not add facts. Omit optional prose. Keep findings/facts compact. ${OPERATION_RESULT_RETURN_FORMAT}`,
           },
           {
             role: 'user',
@@ -377,29 +377,4 @@ export class ModelController {
     throw new Error('Model response does not contain a JSON object');
   }
 
-  private responseProtocol(): string {
-    return `Response protocol:
-Return ONLY valid JSON with this shape:
-{
-  "status": "continue | waiting | completed | failed",
-  "message": "short execution note",
-  "finalAnswer": "full user-facing answer; use only when status=completed",
-  "nextOperation": "optional operation id",
-  "intent": "read | write; set this in plan when task intent can be classified",
-  "toolCalls": [{ "tool": "tool id", "input": {} }],
-  "changes": [{ "type": "write", "path": "relative/path", "content": "..." }, { "type": "delete", "path": "relative/path" }],
-  "question": "question for human when status=waiting",
-  "observations": ["short factual observation"],
-  "stepResult": {
-    "goalSatisfied": true,
-    "targets": ["exact/relative/file.ts; prepare-change only"],
-    "findings": ["short result of the ACTIVE step only"],
-    "evidence": [{ "path": "optional/file", "symbol": "optional symbol", "fact": "fact supported by evidence" }],
-    "missing": ["specific evidence still missing"],
-    "facts": [{ "key": "one of activeStep.outputs", "value": "compact reusable fact", "evidence": [{ "path": "optional/file", "symbol": "optional symbol", "fact": "supporting fact" }] }]
-  },
-  "data": {}
-}
-For search, understand, prepare-change, review, and verify, always return stepResult. For prepare-change, put every exact relative file to be edited/deleted in stepResult.targets. The activeStep declares inputs and outputs. Use stepContext.facts as reusable results from prior semantic steps. stepContext.activeEvidence contains accumulated findings/evidence from earlier attempts of THIS step; use it instead of restarting the search from zero. When you establish an activeStep output, return it in stepResult.facts using EXACTLY one of activeStep.outputs as key. Set goalSatisfied=true when the ACTIVE step goal is satisfied or all declared outputs are established. Put only concrete unresolved evidence in missing. Do not work on later plan steps. When activeStep is supplied, leave nextOperation empty because PlanExecutor owns routing. When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
-  }
 }
