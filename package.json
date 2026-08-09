@@ -20,7 +20,9 @@
     "test:step:evidence": "tsx src/test/StepEvidenceEvaluatorSmoke.ts",
     "test:startup:cleanup": "tsx src/test/StartupCleanupSmoke.ts",
     "test:understand:derivation": "tsx src/test/UnderstandDerivationSmoke.ts",
-    "test:evidence:accumulation": "tsx src/test/ToolEvidenceAccumulationSmoke.ts"
+    "test:evidence:accumulation": "tsx src/test/ToolEvidenceAccumulationSmoke.ts",
+    "test:derivation:grounding": "tsx src/test/ConservativeDerivationSmoke.ts",
+    "test:edit-file:context": "tsx src/test/EditFileTargetContextSmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

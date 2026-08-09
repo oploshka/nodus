@@ -204,10 +204,11 @@ export class RecoveryController {
             'Decide whether the supplied reusable facts and accumulated step understanding ALREADY satisfy the active step goal.',
             'Do not request tools, do not invent evidence, and do not broaden the goal.',
             input.step.type === 'understand'
-              ? 'UNDERSTAND is a derivation step: combine declared input facts conservatively. Do not require a new project read merely to restate or connect facts that are already supplied.'
+              ? 'UNDERSTAND is a derivation step: combine declared input facts conservatively. Do not require a new project read merely to restate or connect facts that are already supplied. Never invent or substitute a concrete code access path: receiver chains such as configuration.project.id, conversation.id, nodus.projectSession, state.task, or this.index must be grounded in the supplied source evidence for the relevant code scope.'
               : 'SEARCH is evidence-driven: do not claim satisfaction unless the supplied facts already contain the located evidence required by the goal.',
             'Only return satisfied=true when no additional project evidence is required.',
             'If satisfied, emit one compact fact for every requested output key using only supplied information.',
+            'When the goal names a concrete function or file, preserve that scope. A property access valid in another class is not automatically valid in the named function.',
             'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"facts":[{"key":"exact output key","value":"compact derived value"}]}',
           ].join('\n'),
         },
@@ -241,14 +242,22 @@ export class RecoveryController {
         facts?: Array<{ key?: unknown; value?: unknown }>;
       };
       const requested = new Set(input.step.outputs);
-      const facts = (parsed.facts ?? [])
+      const candidates = (parsed.facts ?? [])
         .filter((fact) => typeof fact.key === 'string' && requested.has(fact.key) && typeof fact.value === 'string' && fact.value.trim())
         .map((fact) => ({ key: fact.key as string, value: (fact.value as string).trim() }));
+      const grounding = this.conservativelyGroundDerivedFacts(input.step, candidates, input.facts);
+      const facts = grounding.facts;
       const satisfied = parsed.satisfied === true && input.step.outputs.every((key) => facts.some((fact) => fact.key === key));
+      const parsedMissing = Array.isArray(parsed.missing) ? parsed.missing.map(String).filter(Boolean).slice(0, 6) : [];
+      const groundingMissing = grounding.rejected.length > 0
+        ? [`ungrounded derived references: ${grounding.rejected.slice(0, 4).join(', ')}`]
+        : [];
       const decision: StepSatisfactionDecision = {
         satisfied,
-        reason: typeof parsed.reason === 'string' ? parsed.reason : satisfied ? 'Known facts satisfy the step.' : 'More evidence is required.',
-        missing: Array.isArray(parsed.missing) ? parsed.missing.map(String).filter(Boolean).slice(0, 6) : [],
+        reason: grounding.rejected.length > 0
+          ? `Rejected derived code references that are not grounded in the relevant source evidence: ${grounding.rejected.slice(0, 4).join(', ')}`
+          : typeof parsed.reason === 'string' ? parsed.reason : satisfied ? 'Known facts satisfy the step.' : 'More evidence is required.',
+        missing: satisfied ? [] : [...parsedMissing, ...groundingMissing].slice(0, 6),
         facts: satisfied ? facts : [],
       };
       await this.logger.info('step-satisfaction-assessed', {
@@ -273,6 +282,83 @@ export class RecoveryController {
       });
       return { satisfied: false, reason: 'Semantic satisfaction check failed; execute the step normally.', missing: [], facts: [] };
     }
+  }
+
+  private conservativelyGroundDerivedFacts(
+    step: PlanStep,
+    facts: Array<{ key: string; value: string }>,
+    sourceFacts: ExecutionFact[],
+  ): { facts: Array<{ key: string; value: string }>; rejected: string[] } {
+    if (step.type !== 'understand') return { facts, rejected: [] };
+
+    const allEvidence = sourceFacts.flatMap((fact) => fact.evidence);
+    if (allEvidence.length === 0) {
+      const references = facts.flatMap((fact) => this.codeReferences(fact.value));
+      return references.length > 0 ? { facts: [], rejected: Array.from(new Set(references)) } : { facts, rejected: [] };
+    }
+
+    const scopedEvidence = this.scopeEvidence(step.goal, allEvidence);
+    const allCorpus = this.evidenceCorpus(allEvidence);
+    const scopedCorpus = this.evidenceCorpus(scopedEvidence.length > 0 ? scopedEvidence : allEvidence);
+    const accepted: Array<{ key: string; value: string }> = [];
+    const rejected: string[] = [];
+
+    for (const fact of facts) {
+      const references = this.codeReferences(fact.value);
+      const invalid = references.filter((reference) => !this.isGroundedReference(reference, scopedCorpus, allCorpus));
+      if (invalid.length > 0) {
+        rejected.push(...invalid);
+        continue;
+      }
+      accepted.push(fact);
+    }
+
+    return { facts: accepted, rejected: Array.from(new Set(rejected)) };
+  }
+
+  private scopeEvidence(goal: string, evidence: StepEvidenceItem[]): StepEvidenceItem[] {
+    const functionMatch = goal.match(/(?:function|функц[а-яё]*)\s+`([^`]+)`/iu);
+    const fileMatch = goal.match(/(?:file|файл[а-яё]*)\s+`([^`]+)`/iu);
+    const scopeHint = functionMatch?.[1]?.trim() || fileMatch?.[1]?.trim();
+    if (!scopeHint) return [];
+    const normalizedHint = this.normalizeReference(scopeHint).toLowerCase();
+    return evidence.filter((item) => {
+      const path = this.normalizeReference(item.path ?? '').toLowerCase();
+      const symbol = this.normalizeReference(item.symbol ?? '').toLowerCase();
+      const fact = this.normalizeReference(item.fact).toLowerCase();
+      return path.includes(normalizedHint) || symbol.includes(normalizedHint) || fact.includes(normalizedHint);
+    });
+  }
+
+  private evidenceCorpus(evidence: StepEvidenceItem[]): string {
+    return this.normalizeReference(evidence
+      .map((item) => `${item.path ?? ''}\n${item.symbol ?? ''}\n${item.fact}`)
+      .join('\n'))
+      .toLowerCase();
+  }
+
+  private codeReferences(value: string): string[] {
+    const normalized = value.replace(/\?\./g, '.');
+    const matches = normalized.match(/\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*){1,5}\b/g) ?? [];
+    return Array.from(new Set(matches.filter((match) => !match.includes('src.') && !match.endsWith('.ts'))));
+  }
+
+  private isGroundedReference(reference: string, scopedCorpus: string, allCorpus: string): boolean {
+    const normalized = this.normalizeReference(reference).toLowerCase();
+    if (scopedCorpus.includes(normalized)) return true;
+
+    const parts = normalized.split('.').filter(Boolean);
+    if (parts.length < 2) return true;
+    const receiver = `${parts[0]}.${parts[1]}`;
+
+    // The receiver must exist in the semantic scope of the goal (for example runCli),
+    // while trailing properties may be composed from other directly evidenced facts.
+    if (!scopedCorpus.includes(receiver)) return false;
+    return parts.slice(2).every((part) => allCorpus.includes(part));
+  }
+
+  private normalizeReference(value: string): string {
+    return value.replace(/\?\./g, '.').replace(/\s+/g, ' ').trim();
   }
 
   public async recover(input: {

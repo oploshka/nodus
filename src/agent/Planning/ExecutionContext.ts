@@ -20,7 +20,11 @@ export class ExecutionContext {
   public mergeStepResult(step: PlanStep, result: StepResult): FactKey[] {
     const before = new Map(this.facts);
     for (const fact of result.facts) {
-      if (step.outputs.includes(fact.key)) this.put(step.id, fact);
+      if (!step.outputs.includes(fact.key)) continue;
+      this.put(step.id, {
+        ...fact,
+        evidence: fact.evidence.length > 0 ? fact.evidence : result.evidence,
+      });
     }
 
     if (result.goalSatisfied) {

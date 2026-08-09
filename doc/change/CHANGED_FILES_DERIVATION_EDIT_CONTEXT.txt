@@ -1,0 +1,18 @@
+Nodus v0.1 - conservative derivation + edit-file target context
+
+Changed:
+- src/agent/Planning/ExecutionContext.ts
+  - semantic facts inherit concrete step evidence when the model omits per-fact evidence.
+- src/agent/Planning/RecoveryController.ts
+  - understand semantic derivation rejects code receiver chains not grounded in the relevant function/file evidence.
+  - derived code references preserve source scope instead of substituting unrelated this/state receivers.
+- src/agent/Planning/PlanExecutor.ts
+  - edit-file target is deterministically pre-read by runtime before the model call.
+  - target read context is cached per edit step and restored across attempts/resume.
+  - duplicate tool calls, especially repeated reads of the target file, are suppressed.
+- src/model/Prompt/DefaultPromptDefinitions.ts
+- src/model/Protocol/EditFileRawProtocol.ts
+  - explicitly tell edit-file that target source is preloaded and must not be re-read.
+- src/test/ConservativeDerivationSmoke.ts
+- src/test/EditFileTargetContextSmoke.ts
+- package.json

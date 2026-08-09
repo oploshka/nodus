@@ -10,6 +10,7 @@ import { ContextComposer } from '@agent/Planning/ContextComposer';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { Conversation } from '@core/Conversation/Conversation';
 import type { Execution, ToolContextEntry } from '@core/Execution/Execution';
+import type { LogContext } from '@core/Logging/Log';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
 import type { ModelController } from '@model/Controller/ModelController';
@@ -29,6 +30,8 @@ export interface PlanExecutionState {
   recoveryMissing: Map<string, string[]>;
   recoveryGoals: Set<string>;
   stepProgress?: Map<string, string[]>;
+  editFileToolContext?: Map<string, ToolContextEntry[]>;
+  stepToolCallSignatures?: Map<string, Set<string>>;
   resumes: number;
   startedAt: number;
   pauseReason?: string;
@@ -147,6 +150,10 @@ export class PlanExecutor {
         continue;
       }
 
+      if (step.type === 'edit-file') {
+        await this.ensureEditFileTargetContext(state, step, context);
+      }
+
       let result: OperationResult;
       try {
         result = await this.modelController.execute({
@@ -201,8 +208,18 @@ export class PlanExecutor {
       }
 
       if (result.toolCalls.length > 0) {
-        const summary = await this.toolExecutor.execute(result.toolCalls, state.execution, context);
+        const toolCalls = step.type === 'edit-file'
+          ? this.filterEditFileToolCalls(state, step, result.toolCalls)
+          : result.toolCalls;
+
+        if (step.type === 'edit-file' && toolCalls.length === 0) {
+          state.retryReason = `целевой файл ${step.targetPath ?? ''} уже предоставлен модели; повторное чтение пропущено`;
+          continue;
+        }
+
+        const summary = await this.toolExecutor.execute(toolCalls, state.execution, context);
         this.reporter.tools(summary.executed);
+        if (step.type === 'edit-file') this.rememberEditFileToolContext(state, step, toolCalls);
 
         // Search/understand no longer decide completion by themselves after a tool round.
         // A dedicated evaluator sees the accumulated evidence + the latest raw tool results
@@ -437,6 +454,81 @@ export class PlanExecutor {
     this.reporter.paused(message);
   }
 
+
+  private async ensureEditFileTargetContext(
+    state: PlanExecutionState,
+    step: PlanStep,
+    context: LogContext,
+  ): Promise<void> {
+    if (!step.targetPath) return;
+
+    const cache = state.editFileToolContext ?? (state.editFileToolContext = new Map());
+    const cached = cache.get(step.id);
+    if (cached && cached.length > 0) {
+      const current = state.execution.getToolContext();
+      const merged = [...cached, ...current].filter((entry, index, all) => (
+        all.findIndex((candidate) => this.toolCallSignature(candidate.call) === this.toolCallSignature(entry.call)) === index
+      ));
+      state.execution.setToolContext(merged, 1);
+      return;
+    }
+
+    const call = { tool: 'file-system', input: { action: 'read', path: step.targetPath } };
+    const summary = await this.toolExecutor.execute([call], state.execution, context, 1);
+    this.reporter.tools(summary.executed);
+    const entries = state.execution.getToolContext();
+    if (entries.length > 0) cache.set(step.id, entries);
+    this.rememberToolCallSignature(state, step.id, call);
+  }
+
+  private filterEditFileToolCalls(
+    state: PlanExecutionState,
+    step: PlanStep,
+    calls: OperationResult['toolCalls'],
+  ): OperationResult['toolCalls'] {
+    const seen = state.stepToolCallSignatures ?? (state.stepToolCallSignatures = new Map());
+    const signatures = seen.get(step.id) ?? new Set<string>();
+    const fresh = calls.filter((call) => {
+      const signature = this.toolCallSignature(call);
+      if (signatures.has(signature)) return false;
+      signatures.add(signature);
+      return true;
+    });
+    seen.set(step.id, signatures);
+    return fresh;
+  }
+
+  private rememberEditFileToolContext(
+    state: PlanExecutionState,
+    step: PlanStep,
+    calls: OperationResult['toolCalls'],
+  ): void {
+    for (const call of calls) this.rememberToolCallSignature(state, step.id, call);
+    const entries = state.execution.getToolContext();
+    if (entries.length === 0) return;
+    const cache = state.editFileToolContext ?? (state.editFileToolContext = new Map());
+    const previous = cache.get(step.id) ?? [];
+    const merged = [...previous, ...entries].filter((entry, index, all) => (
+      all.findIndex((candidate) => this.toolCallSignature(candidate.call) === this.toolCallSignature(entry.call)) === index
+    ));
+    cache.set(step.id, merged.slice(0, 3));
+  }
+
+  private rememberToolCallSignature(state: PlanExecutionState, stepId: string, call: OperationResult['toolCalls'][number]): void {
+    const map = state.stepToolCallSignatures ?? (state.stepToolCallSignatures = new Map());
+    const signatures = map.get(stepId) ?? new Set<string>();
+    signatures.add(this.toolCallSignature(call));
+    map.set(stepId, signatures);
+  }
+
+  private toolCallSignature(call: OperationResult['toolCalls'][number]): string {
+    if (call.tool === 'file-system') {
+      return `file-system:${String(call.input.action ?? '')}:${String(call.input.path ?? '')}`;
+    }
+    const keys = Object.keys(call.input).sort();
+    const normalized = Object.fromEntries(keys.map((key) => [key, call.input[key]]));
+    return `${call.tool}:${JSON.stringify(normalized)}`;
+  }
 
   private async evaluateToolRound(state: PlanExecutionState, step: PlanStep): Promise<boolean> {
     const toolContext = state.execution.getToolContext();

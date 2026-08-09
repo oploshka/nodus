@@ -31,11 +31,12 @@ context.mergeStepResult(producer, {
   facts: [{
     key: 'cli.structure',
     value: 'Commands are declared in COMMANDS and dispatched in Cli.run().',
-    evidence: [{ path: 'src/cli/Cli.ts', fact: 'COMMANDS contains command metadata.' }],
+    evidence: [],
   }],
 });
 
 const composed = new ContextComposer().compose(context, consumer);
 if (composed.missingInputs.length !== 0) throw new Error(`Unexpected missing inputs: ${composed.missingInputs.join(', ')}`);
 if (composed.facts[0]?.key !== 'cli.structure') throw new Error('Expected cli.structure fact');
+if (composed.facts[0]?.evidence[0]?.path !== 'src/cli/Cli.ts') throw new Error('Step evidence should be inherited when per-fact evidence is omitted');
 console.log('PASS: execution context data-flow works.');
