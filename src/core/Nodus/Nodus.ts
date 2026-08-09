@@ -7,6 +7,7 @@ import { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import { AgentRuntime } from '@agent/Runtime/AgentRuntime';
 import { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import { PlanGenerator } from '@agent/Planning/PlanGenerator';
+import type { TaskPlan } from '@agent/Planning/TaskPlan';
 import { PlanExecutor } from '@agent/Planning/PlanExecutor';
 import { PlanUpdater } from '@agent/Planning/PlanUpdater';
 import { RecoveryController } from '@agent/Planning/RecoveryController';
@@ -152,7 +153,7 @@ export class Nodus {
     return this.conversations.get(id);
   }
 
-  public async runTask(description: string, conversationId: string, context?: Record<string, unknown>): Promise<string> {
+  public async runTask(description: string, conversationId: string, context?: Record<string, unknown>, planOverride?: TaskPlan): Promise<string> {
     const conversation = this.conversations.get(conversationId);
     if (!conversation) {
       throw new Error(`Conversation not found: ${conversationId}`);
@@ -172,7 +173,7 @@ export class Nodus {
       taskId: task.id,
     });
 
-    const execution = await this.runtime.execute(task, conversation);
+    const execution = await this.runtime.execute(task, conversation, planOverride);
     const result = execution.result ?? execution.status;
     if (execution.status !== 'paused') conversation.completeTask(task.id, result);
     await this.logger.info('result', { status: execution.status, result }, {

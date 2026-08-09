@@ -6,6 +6,7 @@ import type { Conversation } from '@core/Conversation/Conversation';
 import { Execution } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
+import type { TaskPlan } from '@agent/Planning/TaskPlan';
 
 export class AgentRuntime {
   private readonly pausedByConversation = new Map<string, PlanExecutionState>();
@@ -31,13 +32,13 @@ export class AgentRuntime {
     return true;
   }
 
-  public async execute(task: Task, conversation: Conversation): Promise<Execution> {
+  public async execute(task: Task, conversation: Conversation, planOverride?: TaskPlan): Promise<Execution> {
     const execution = new Execution(task.id);
     execution.status = 'running';
     execution.addEvent('task', { description: task.description });
     this.reporter.task(task.description);
 
-    const plan = await this.planGenerator.generate(task, execution.id);
+    const plan = planOverride ? this.freshPlan(planOverride) : await this.planGenerator.generate(task, execution.id);
     execution.addEvent('task-plan', plan);
     this.reporter.plan(plan);
     execution.currentOperation = plan.steps[0]?.type;
@@ -89,6 +90,18 @@ export class AgentRuntime {
     this.pausedByConversation.delete(conversationId);
     if (canContinue && state.execution.status === 'running') await this.planExecutor.run(state);
     return this.finishOrPause(state);
+  }
+
+  private freshPlan(plan: TaskPlan): TaskPlan {
+    return {
+      ...plan,
+      steps: plan.steps.map((step) => ({
+        ...step,
+        status: 'pending',
+        inputs: [...step.inputs],
+        outputs: [...step.outputs],
+      })),
+    };
   }
 
   private finishOrPause(state: PlanExecutionState): Execution {
