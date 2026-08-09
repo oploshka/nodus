@@ -1,0 +1,13 @@
+File-system action contract regression fix
+
+Changed:
+- src/model/Prompt/ModelInputComposer.ts
+- src/model/Controller/ModelController.ts
+- test/FileSystemToolContractSmoke.ts
+- test/SearchToolPromptRegressionSmoke.ts
+- package.json
+
+Behavior:
+- Restore compact tool descriptions for search and other normal operations.
+- Keep exact file-system input schema only for understand, where source reads require the canonical action field.
+- Preserve ToolExecutor operation -> action compatibility normalization.

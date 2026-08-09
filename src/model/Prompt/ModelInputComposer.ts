@@ -112,6 +112,14 @@ export function knowledgeMessage(title: string, entries: KnowledgeEntry[]): Mode
 }
 
 
+export function toolDescriptionsMessage(definitions: ToolDefinition[]): ModelMessage | undefined {
+  if (definitions.length === 0) return undefined;
+  return userMessage(
+    'Available tools:',
+    definitions.map((tool) => `- ${tool.id}: ${tool.description}`).join('\n'),
+  );
+}
+
 export function toolDefinitionsMessage(definitions: ToolDefinition[]): ModelMessage | undefined {
   if (definitions.length === 0) return undefined;
   const lines = definitions.map((tool) => {

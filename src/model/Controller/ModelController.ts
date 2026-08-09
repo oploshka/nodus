@@ -25,6 +25,7 @@ import {
   projectMessage,
   taskMessage,
   toolDefinitionsMessage,
+  toolDescriptionsMessage,
   toolResultMessages,
   userMessage,
 } from '@model/Prompt/ModelInputComposer';
@@ -198,7 +199,12 @@ Response language: ${responseLanguage}`));
     }
 
     const tools = this.availableToolsFor(input.operation.id);
-    const toolsBlock = toolDefinitionsMessage(tools);
+    // Keep the historically stable compact tool block for normal operations.
+    // Understand is the one operation that needs the exact file-system input
+    // contract because it performs explicit source reads.
+    const toolsBlock = input.operation.id === 'understand'
+      ? toolDefinitionsMessage(tools)
+      : toolDescriptionsMessage(tools);
     if (toolsBlock) messages.push(toolsBlock);
 
     // Full source text is never copied from reusable facts. It appears only as transient

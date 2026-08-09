@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { normalizeToolCallRequest } from '@agent/Execution/ToolExecutor';
-import { toolDefinitionsMessage } from '@model/Prompt/ModelInputComposer';
+import { toolDefinitionsMessage, toolDescriptionsMessage } from '@model/Prompt/ModelInputComposer';
 import { FileSystemTool } from '@tool/FileSystem/FileSystemTool';
 
 console.log('## file-system tool contract smoke');
@@ -18,6 +18,13 @@ if (available.content.includes('operation: read')) {
   throw new Error('model tool schema should not advertise operation as the file-system action field');
 }
 console.log('model sees exact canonical input field names: OK');
+
+const compact = toolDescriptionsMessage([tool.definition]);
+if (!compact) throw new Error('compact tool description message missing');
+if (compact.content.includes('Input fields') || compact.content.includes('action: read')) {
+  throw new Error('compact tool description unexpectedly exposes schema details');
+}
+console.log('compact tool description preserves pre-schema prompt shape: OK');
 
 const normalized = normalizeToolCallRequest({
   tool: 'file-system',
