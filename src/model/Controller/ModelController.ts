@@ -24,6 +24,7 @@ import {
   knowledgeMessage,
   projectMessage,
   taskMessage,
+  toolDefinitionsMessage,
   toolResultMessages,
   userMessage,
 } from '@model/Prompt/ModelInputComposer';
@@ -197,9 +198,8 @@ Response language: ${responseLanguage}`));
     }
 
     const tools = this.availableToolsFor(input.operation.id);
-    if (tools.length > 0) {
-      messages.push(userMessage('Available tools:', tools.map((tool) => `- ${tool.id}: ${tool.description}`).join('\n')));
-    }
+    const toolsBlock = toolDefinitionsMessage(tools);
+    if (toolsBlock) messages.push(toolsBlock);
 
     // Full source text is never copied from reusable facts. It appears only as transient
     // source context: after an explicit understand read, or as the runtime-preloaded target

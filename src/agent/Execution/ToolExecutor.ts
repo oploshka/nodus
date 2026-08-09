@@ -14,6 +14,17 @@ export interface ToolExecutionSummary {
   useful: number;
 }
 
+export function normalizeToolCallRequest(call: ToolCallRequest): ToolCallRequest {
+  if (call.tool !== 'file-system') return call;
+
+  const input = { ...call.input };
+  if (input.action === undefined && typeof input.operation === 'string') {
+    input.action = input.operation;
+  }
+  delete input.operation;
+  return { ...call, input };
+}
+
 export class ToolExecutor {
   private static readonly DEFAULT_MAX_CALLS_PER_BATCH = 5;
 
@@ -41,7 +52,8 @@ export class ToolExecutor {
       truncated: Math.max(0, calls.length - selectedCalls.length),
     }, logContext);
 
-    for (const call of selectedCalls) {
+    for (const requestedCall of selectedCalls) {
+      const call = normalizeToolCallRequest(requestedCall);
       const tool = this.toolRegistry.get(call.tool);
       if (!tool) {
         failed += 1;

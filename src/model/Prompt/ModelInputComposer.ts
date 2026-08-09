@@ -3,6 +3,7 @@ import type { ToolContextEntry } from '@core/Execution/Execution';
 import type { KnowledgeEntry } from '@knowledge/Entry/KnowledgeEntry';
 import type { ModelMessage } from '@model/Request/ModelRequest';
 import type { StepEvidenceItem } from '@model/Result/OperationResult';
+import type { ToolDefinition } from '@tool/Tool/Tool';
 
 export interface LogicalFactView {
   key: string;
@@ -108,6 +109,21 @@ export function knowledgeMessage(title: string, entries: KnowledgeEntry[]): Mode
     return `- [${entry.type}; ${scope}] ${compactLogicalText(entry.content, 420)}`;
   });
   return userMessage(`${title}:`, lines.join('\n'));
+}
+
+
+export function toolDefinitionsMessage(definitions: ToolDefinition[]): ModelMessage | undefined {
+  if (definitions.length === 0) return undefined;
+  const lines = definitions.map((tool) => {
+    const schema = Object.entries(tool.inputSchema ?? {})
+      .map(([key, value]) => `  - ${key}: ${compactUnknown(value, 220)}`)
+      .join('\n');
+    return [
+      `- ${tool.id}: ${tool.description}`,
+      schema ? `  Input fields (use these exact names):\n${schema}` : '',
+    ].filter(Boolean).join('\n');
+  });
+  return userMessage('Available tools:', lines.join('\n'));
 }
 
 export function toolResultMessages(entries: ToolContextEntry[], targetPath?: string): ModelMessage[] {
