@@ -25,7 +25,8 @@
     "test:edit-file:context": "tsx src/test/EditFileTargetContextSmoke.ts",
     "test:scenario:status": "tsx src/test/StatusCommandScenarioSmoke.ts",
     "test:prompt:contracts": "tsx src/test/PromptTemperatureContractSmoke.ts",
-    "test:operation:profiles": "tsx src/test/OperationProfileArchitectureSmoke.ts"
+    "test:operation:profiles": "tsx src/test/OperationProfileArchitectureSmoke.ts",
+    "test:plan:actions": "tsx src/test/PlanActionWhitelistSmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

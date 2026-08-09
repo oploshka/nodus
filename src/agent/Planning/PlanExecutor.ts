@@ -161,7 +161,7 @@ export class PlanExecutor {
           execution: state.execution,
           conversation: state.conversation,
           operation,
-          activeStep: { id: step.id, type: step.type, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath },
+          activeStep: { id: step.id, type: step.type, action: step.action, subject: step.subject, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath },
           stepContext: {
             ...composed,
             activeEvidence: this.activeEvidence(state.stepResults.get(step.id)),

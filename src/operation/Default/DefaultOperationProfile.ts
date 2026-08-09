@@ -7,6 +7,15 @@ function jsonPrompt(purpose: string, rules: string[]): PromptSettings {
   return { purpose, rules, returnFormat: OPERATION_RESULT_RETURN_FORMAT };
 }
 
+
+const SEARCH_RETRIEVAL_RETURN_FORMAT = `Return ONLY valid JSON:
+{
+  "status": "continue | failed",
+  "message": "short retrieval note",
+  "toolCalls": [{ "tool": "tool id", "input": {} }]
+}
+Use status=continue when requesting tools. Search only chooses retrieval tool calls; the runtime evidence evaluator decides satisfaction, missing items, and output facts.`;
+
 function execution(
   contextStrategy: string,
   policyScopes: string[],
@@ -37,16 +46,18 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   },
   {
     id: 'search',
-    description: 'Locate relevant project files, symbols, examples, and references.',
-    prompt: jsonPrompt('Locate evidence required by the current plan step.', [
-      'Work only on the ACTIVE plan-step goal. Ignore future plan goals even when the full task mentions them.',
-      'Use search and filesystem tools instead of guessing paths. Search only project paths present in the supplied index or concrete evidence; never invent directories such as src/services or src/api.',
-      'Treat a directly usable existing property, field, method, or receiver chain as a valid access path. If the goal says API generically, do NOT reinterpret that as requiring a dedicated getter, public service, CLI API, or HTTP API unless the goal explicitly says so.',
-      'Never make the success criterion stricter between attempts. Missing items must be a subset/refinement of the original goal, not a new architectural requirement.',
-      'After tool results arrive, explicitly decide whether the active goal is satisfied using stepResult.',
-      'Set stepResult.goalSatisfied=true as soon as the requested files/symbols/locations/access paths are found; do not spend remaining attempts searching for alternative abstractions.',
-      'Record concise findings and evidence with file paths. Publish reusable results under the exact activeStep.outputs keys in stepResult.facts. Put only concrete unresolved items in stepResult.missing.',
-    ]),
+    description: 'Locate concrete project files, symbols, definitions, usages, references, or examples.',
+    prompt: {
+      purpose: 'Choose retrieval tool calls for the active search action and subject.',
+      rules: [
+        'Treat activeStep.action + activeStep.subject as the complete search request.',
+        'Allowed search actions are find-files, find-symbols, find-definitions, find-usages, find-references, and find-examples. Execute only the declared action.',
+        'Use the supplied project index and existing evidence to choose concrete search/filesystem tool calls.',
+        'On the first round, locate evidence for the declared subject. On later rounds, use stepContext.activeEvidence.missing to make the next retrieval narrower.',
+        'Return tool calls only. The evidence evaluator is the only component that decides whether the step is satisfied, which facts were established, and what is still missing.',
+      ],
+      returnFormat: SEARCH_RETRIEVAL_RETURN_FORMAT,
+    },
     model: { temperature: 0 },
     execution: execution('search', ['project'], {
       costWeight: 1,

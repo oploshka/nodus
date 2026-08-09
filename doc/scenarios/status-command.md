@@ -1,12 +1,16 @@
 # Canonical `/status` scenario
 
-This is a regression contract for orchestration, not a hard-coded production plan. The model may phrase facts differently, but a healthy execution should follow the same logical shape.
+This is a regression contract for orchestration, not a hard-coded production plan.
 
-1. **search** — locate `src/cli/Cli.ts` and establish how commands are registered/handled.
-2. **search** — locate directly usable existing access paths for project ID, conversation ID, and indexed-file count. A property/access chain is sufficient; do not escalate the goal into finding a dedicated getter, service, CLI API, or HTTP API.
-3. **understand** — connect those already-grounded facts to the `runCli` scope. This step should normally derive its output without broad new searching.
-4. **prepare-change** — produce one minimal change plan targeting `src/cli/Cli.ts`.
-5. **edit-file** — one guarded file edit using preloaded target source.
-6. **finalize** — report the result.
+The plan uses a small whitelist of concrete actions. `search` locates evidence; `understand` interprets it.
 
-Expected healthy behavior: no invented directories, no repeated search for alternate API shapes, no repeated read of the edit target, and no recovery on the happy path. Recovery is allowed only when concrete evidence is actually missing.
+1. **search / find-examples** — subject: existing CLI command handling. Expected evidence: `src/cli/Cli.ts`, `COMMANDS`, `runCli`, and at least one existing command example.
+2. **search / find-usages** — subject: `ProjectSession`, `ProjectIndex`, `projectId`, and `conversationId`. Expected result: directly usable existing source/access facts.
+3. **understand / determine-integration** — connect the located CLI example and data sources to `/status` in `runCli`.
+4. **prepare-change / define-change** — produce one minimal change plan targeting `src/cli/Cli.ts`.
+5. **edit-file / apply-change** — one guarded file edit using preloaded target source.
+6. **finalize / summarize-result** — report the result.
+
+The semantic source of truth for a step is `type + action + subject + inputs + outputs`. The human-readable goal is derived from that contract.
+
+Expected healthy behavior: search chooses retrieval tool calls only; the evidence evaluator decides satisfaction and missing evidence. No recovery is expected on the happy path.

@@ -1,0 +1,23 @@
+Plan action whitelist / search retrieval split
+
+Changed:
+- src/agent/Planning/TaskPlan.ts
+- src/agent/Planning/StepRegistry.ts
+- src/agent/Planning/PlanGenerator.ts
+- src/agent/Planning/PlanExecutor.ts
+- src/agent/Planning/RecoveryController.ts
+- src/model/Controller/ModelController.ts
+- src/operation/Default/DefaultOperationProfile.ts
+- src/test/PlanActionWhitelistSmoke.ts
+- src/test/StatusCommandScenarioSmoke.ts
+- src/test/fixtures/StatusCommandScenario.ts
+- doc/scenarios/status-command.md
+- package.json
+
+Behavior:
+- Planner selects only type-specific whitelisted actions.
+- Every generated step gets a concrete subject.
+- Human-readable step goals are derived from type + action + subject.
+- Search main-model call only chooses retrieval tool calls.
+- EvidenceEvaluator remains the authority for search satisfaction, facts, and missing evidence.
+- Recovery insertions use the same action whitelist.

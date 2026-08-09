@@ -7,27 +7,35 @@ import type { ModelCallProfile } from '@model/Profile/ModelCallProfile';
 import { composePrompt } from '@model/Prompt/PromptComposer';
 import type { ModelRequest } from '@model/Request/ModelRequest';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
-import type { PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
+import type { PlanStepAction, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
 import type { StepRegistry } from '@agent/Planning/StepRegistry';
 
 const TASK_PLAN_PROFILE: ModelCallProfile = {
   prompt: {
-    purpose: 'Create a compact executable plan for the whole task before execution starts.',
+    purpose: 'Create a compact executable plan by selecting only declared step types and actions.',
     rules: [
-      'Plan the whole task, not merely the next operation.',
-      'Use only the supplied project index; do not request tools and do not invent files, directories, APIs, or service layers.',
-      'Use the smallest useful number of steps. Every step must have one concrete, verifiable goal. Do not create separate steps merely to reconfirm a fact or access path that an earlier step is expected to establish.',
-      'Use understand only when search evidence is expected to be insufficient to define the change safely.',
-      'Use prepare-change to decide exactly what must change and edit-file to perform the concrete file edit.',
-      'End every plan with finalize. Add verify only when deterministic verification is useful.',
-      'Respect the supplied maximum attempt limits; never increase them.',
-      'Declare compact inputs and outputs for every step. Inputs may reference only outputs of earlier steps.',
-      'Prefer stable dot-separated output keys. Do not create a large ontology.',
-      'When a task asks to use existing APIs/structures, search for concrete existing sources/access paths/structures. A usable property/access path counts unless the task explicitly requires another abstraction.',
+      'Plan the whole task using the smallest useful number of steps.',
+      'For every step choose exactly one allowed action for that step type and give it one concrete subject.',
+      'Treat type + action + subject as the semantic contract of the step. Do not invent a broader free-form operation.',
+      'Use the supplied project index only as orientation. Do not invent files, directories, APIs, or service layers.',
+      'Search actions only locate concrete project evidence. Use understand actions only when located evidence must be interpreted before a safe change can be defined.',
+      'Use prepare-change before edit-file when code must change. End every plan with finalize. Add review or verify only when they add concrete value.',
+      'Inputs may reference only outputs of earlier steps. Use short stable dot-separated output keys.',
+      'Respect the supplied maximum attempt limits.',
     ],
   },
   model: { temperature: 0, maxTokens: 1024 },
 };
+
+interface RawPlanStep {
+  id?: unknown;
+  type?: unknown;
+  action?: unknown;
+  subject?: unknown;
+  maxAttempts?: unknown;
+  inputs?: unknown;
+  outputs?: unknown;
+}
 
 export class PlanGenerator {
   public constructor(
@@ -39,6 +47,7 @@ export class PlanGenerator {
   ) {}
 
   public async generate(task: Task, executionId: string): Promise<TaskPlan> {
+    const language = this.resolveLanguage(task.description);
     const request: ModelRequest = {
       model: this.configuration.model,
       temperature: TASK_PLAN_PROFILE.model.temperature ?? this.configuration.temperature,
@@ -57,10 +66,14 @@ export class PlanGenerator {
               id: this.projectSession.projectId,
               files: this.projectSession.index?.files.map((file) => file.path) ?? [],
             },
-            availableStepTypes: this.stepRegistry.listForPlanner().map((definition) => ({
+            availableSteps: this.stepRegistry.listForPlanner().map((definition) => ({
               type: definition.type,
               description: definition.description,
               maxAttempts: definition.maxAttempts,
+              actions: definition.actions.map((action) => ({
+                id: action.id,
+                description: action.description,
+              })),
             })),
           }, null, 2),
         },
@@ -69,7 +82,7 @@ export class PlanGenerator {
 
     try {
       const response = await this.adapter.complete(request);
-      const plan = this.parse(response.content);
+      const plan = this.parse(response.content, language);
       await this.logger.info('task-plan-created', { goal: plan.goal, steps: plan.steps }, {
         projectId: task.projectId,
         conversationId: task.conversationId,
@@ -78,7 +91,7 @@ export class PlanGenerator {
       });
       return plan;
     } catch (error) {
-      const fallback = this.fallback(task.description);
+      const fallback = this.fallback(task.description, language);
       await this.logger.warn('task-plan-generation-failed', { error: String(error), fallback }, {
         projectId: task.projectId,
         conversationId: task.conversationId,
@@ -89,9 +102,9 @@ export class PlanGenerator {
     }
   }
 
-  private parse(content: string): TaskPlan {
+  private parse(content: string, language: 'ru' | 'en'): TaskPlan {
     const raw = this.extractJson(content);
-    const parsed = JSON.parse(raw) as { goal?: unknown; steps?: Array<{ id?: unknown; type?: unknown; goal?: unknown; maxAttempts?: unknown; inputs?: unknown; outputs?: unknown }> };
+    const parsed = JSON.parse(raw) as { goal?: unknown; steps?: RawPlanStep[] };
     if (typeof parsed.goal !== 'string' || !Array.isArray(parsed.steps) || parsed.steps.length === 0) {
       throw new Error('Planner returned an invalid TaskPlan');
     }
@@ -102,6 +115,8 @@ export class PlanGenerator {
         throw new Error(`Planner returned unsupported step type: ${String(step.type)}`);
       }
       const type = step.type as PlanStepType;
+      const action = this.action(type, step.action);
+      const subject = this.subject(step.subject, type);
       const maxLimit = this.stepRegistry.limit(type);
       const requestedLimit = typeof step.maxAttempts === 'number' ? Math.floor(step.maxAttempts) : maxLimit;
       const id = typeof step.id === 'string' && step.id.trim() ? step.id : `step-${index + 1}`;
@@ -112,7 +127,9 @@ export class PlanGenerator {
       return {
         id,
         type,
-        goal: typeof step.goal === 'string' && step.goal.trim() ? step.goal.trim() : type,
+        action,
+        subject,
+        goal: this.stepRegistry.renderGoal(type, action, subject, language),
         status: 'pending' as const,
         maxAttempts: Math.max(1, Math.min(requestedLimit, maxLimit)),
         inputs,
@@ -121,12 +138,25 @@ export class PlanGenerator {
     });
 
     if (steps[steps.length - 1]?.type !== 'finalize') {
-      steps.push({ id: `step-${steps.length + 1}`, type: 'finalize', goal: 'Prepare the final user-facing result.', status: 'pending', maxAttempts: this.stepRegistry.limit('finalize'), inputs: Array.from(knownOutputs), outputs: ['task.final-result'] });
+      const type: PlanStepType = 'finalize';
+      const action = this.stepRegistry.defaultAction(type);
+      const subject = language === 'ru' ? 'выполненную задачу' : 'the completed task';
+      steps.push({
+        id: `step-${steps.length + 1}`,
+        type,
+        action,
+        subject,
+        goal: this.stepRegistry.renderGoal(type, action, subject, language),
+        status: 'pending',
+        maxAttempts: this.stepRegistry.limit(type),
+        inputs: Array.from(knownOutputs),
+        outputs: ['task.final-result'],
+      });
     }
-    return { version: 1, goal: parsed.goal.trim(), steps };
+    return { version: 2, goal: parsed.goal.trim(), steps };
   }
 
-  private fallback(description: string): TaskPlan {
+  private fallback(description: string, language: 'ru' | 'en'): TaskPlan {
     const normalized = description.toLowerCase();
     const write = ['добав', 'измени', 'измен', 'исправ', 'удали', 'создай', 'рефактор', 'реализ', 'add ', 'change ', 'modify ', 'fix ', 'delete ', 'create ', 'implement ', 'refactor ']
       .some((signal) => normalized.includes(signal));
@@ -134,18 +164,34 @@ export class PlanGenerator {
       ? ['search', 'understand', 'prepare-change', 'edit-file', 'review', 'finalize']
       : ['search', 'understand', 'finalize'];
     return {
-      version: 1,
+      version: 2,
       goal: description,
-      steps: types.map((type, index) => ({
-        id: `step-${index + 1}`,
-        type,
-        goal: type,
-        status: 'pending',
-        maxAttempts: this.stepRegistry.limit(type),
-        inputs: index === 0 ? [] : [`step-${index}.result`],
-        outputs: [`step-${index + 1}.result`],
-      })),
+      steps: types.map((type, index) => {
+        const action = this.stepRegistry.defaultAction(type);
+        const subject = description;
+        return {
+          id: `step-${index + 1}`,
+          type,
+          action,
+          subject,
+          goal: this.stepRegistry.renderGoal(type, action, subject, language),
+          status: 'pending',
+          maxAttempts: this.stepRegistry.limit(type),
+          inputs: index === 0 ? [] : [`step-${index}.result`],
+          outputs: [`step-${index + 1}.result`],
+        };
+      }),
     };
+  }
+
+  private action(type: PlanStepType, value: unknown): PlanStepAction {
+    if (typeof value === 'string' && this.stepRegistry.hasAction(type, value)) return value;
+    return this.stepRegistry.defaultAction(type);
+  }
+
+  private subject(value: unknown, type: PlanStepType): string {
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 240);
+    return this.stepRegistry.get(type).description;
   }
 
   private factKeys(value: unknown): string[] {
@@ -155,6 +201,12 @@ export class PlanGenerator {
       .map((item) => item.trim())
       .filter((item) => /^[a-z0-9][a-z0-9._-]{1,79}$/i.test(item))
       .slice(0, 8);
+  }
+
+  private resolveLanguage(description: string): 'ru' | 'en' {
+    const cyrillic = (description.match(/[А-Яа-яЁё]/g) ?? []).length;
+    const latin = (description.match(/[A-Za-z]/g) ?? []).length;
+    return cyrillic > latin ? 'ru' : 'en';
   }
 
   private extractJson(content: string): string {
@@ -169,7 +221,9 @@ export class PlanGenerator {
   }
 
   private protocol(): string {
-    const types = this.stepRegistry.listForPlanner().map((definition) => definition.type).join(' | ');
-    return `Return ONLY JSON:\n{\n  "goal": "short task goal",\n  "steps": [{ "id": "step-1", "type": "${types}", "goal": "one concrete verifiable goal", "maxAttempts": 1, "inputs": ["fact.key"], "outputs": ["fact.key"] }]\n}\nRules: inputs may reference only outputs of earlier steps. Use short stable dot-separated keys. Search/understand steps should output concrete facts needed later; prepare-change should consume those facts and output a change-plan fact; edit-file should consume the change-plan fact.`;
+    const actions = this.stepRegistry.listForPlanner()
+      .map((definition) => `${definition.type}: ${definition.actions.map((action) => action.id).join(' | ')}`)
+      .join('\n');
+    return `Choose only from this whitelist:\n${actions}\n\nReturn ONLY JSON:\n{\n  "goal": "short task goal",\n  "steps": [{ "id": "step-1", "type": "allowed type", "action": "allowed action for that type", "subject": "one concrete subject", "maxAttempts": 1, "inputs": ["fact.key"], "outputs": ["fact.key"] }]\n}\nDo not write a free-form per-step goal. Nodus derives it from type + action + subject.`;
   }
 }

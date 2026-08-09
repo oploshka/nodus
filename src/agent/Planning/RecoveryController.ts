@@ -9,18 +9,18 @@ import { composePrompt } from '@model/Prompt/PromptComposer';
 import type { ModelRequest } from '@model/Request/ModelRequest';
 import type { StepEvidenceItem, StepResult } from '@model/Result/OperationResult';
 import type { ExecutionFact } from '@agent/Planning/ExecutionContext';
-import type { PlanStep, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
+import type { PlanStep, PlanStepAction, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
 import type { StepRegistry } from '@agent/Planning/StepRegistry';
 
 const STEP_EVIDENCE_PROFILE: ModelCallProfile = {
   prompt: {
-    purpose: 'Decide whether accumulated concrete evidence closes the active search/understand step.',
+    purpose: 'Interpret accumulated evidence against the exact active step contract.',
     rules: [
-      'Never broaden or reinterpret the active goal.',
-      'For a generic request to find an API/source/access method, a directly usable property, field, method, or receiver chain is sufficient unless the goal explicitly requires a dedicated getter/service/CLI/HTTP API.',
-      'Never require a different abstraction merely because one could exist. Absence of a dedicated getter is not missing evidence when a direct access path already satisfies the goal.',
-      'Use only supplied indexed paths and evidence. Never invent directories or modules.',
-      'If sufficient, emit every requested output key. If insufficient, return the smallest missing detail that is strictly necessary for the original goal.',
+      'Use contract.action + contract.subject + contract.outputs as the complete success criterion.',
+      'For search, judge only whether the requested files, symbols, definitions, usages, references, or examples were located.',
+      'A concrete located property, method, receiver chain, file, symbol, or occurrence is valid evidence when it directly answers the declared subject.',
+      'Use only supplied indexed paths, accumulated evidence, known facts, and latest tool results.',
+      'If sufficient, emit every requested output key. If insufficient, return only the smallest retrieval detail still needed for the declared action and subject.',
     ],
   },
   model: { temperature: 0, maxTokens: 512 },
@@ -140,8 +140,12 @@ export class RecoveryController {
         {
           role: 'user',
           content: JSON.stringify({
-            goal: input.step.goal,
-            outputs: input.step.outputs,
+            contract: {
+              type: input.step.type,
+              action: input.step.action,
+              subject: input.step.subject,
+              outputs: input.step.outputs,
+            },
             accumulated: input.accumulated ? {
               findings: input.accumulated.findings,
               evidence: input.accumulated.evidence,
@@ -257,8 +261,12 @@ export class RecoveryController {
         {
           role: 'user',
           content: JSON.stringify({
-            goal: input.step.goal,
-            outputs: input.step.outputs,
+            contract: {
+              type: input.step.type,
+              action: input.step.action,
+              subject: input.step.subject,
+              outputs: input.step.outputs,
+            },
             knownFacts: input.facts.map((fact) => ({
               key: fact.key,
               value: fact.value,
@@ -436,12 +444,13 @@ export class RecoveryController {
             completedStepEvidence: input.completedStepEvidence ?? [],
             executionFacts: input.executionFacts ?? [],
             previousRecoveryGoals: input.previousRecoveryGoals ?? [],
-            plan: input.plan.steps.map((step, index) => ({ index, type: step.type, goal: step.goal, status: step.status })),
+            plan: input.plan.steps.map((step, index) => ({ index, type: step.type, action: step.action, subject: step.subject, status: step.status })),
             recentExecution: input.execution.history.slice(-12),
-            availableStepTypes: this.stepRegistry.listForPlanner().map((definition) => ({
+            availableSteps: this.stepRegistry.listForPlanner().map((definition) => ({
               type: definition.type,
               description: definition.description,
               maxAttempts: definition.maxAttempts,
+              actions: definition.actions.map((action) => ({ id: action.id, description: action.description })),
             })),
           }, null, 2),
         },
@@ -474,7 +483,7 @@ export class RecoveryController {
     const parsed = JSON.parse(raw) as {
       action?: unknown;
       reason?: unknown;
-      steps?: Array<{ id?: unknown; type?: unknown; goal?: unknown; maxAttempts?: unknown; inputs?: unknown; outputs?: unknown }>;
+      steps?: Array<{ id?: unknown; type?: unknown; action?: unknown; subject?: unknown; maxAttempts?: unknown; inputs?: unknown; outputs?: unknown }>;
     };
     const actions = new Set<RecoveryAction>(['retry-current', 'insert-steps', 'skip-current', 'request-human', 'fail']);
     if (typeof parsed.action !== 'string' || !actions.has(parsed.action as RecoveryAction)) {
@@ -487,13 +496,20 @@ export class RecoveryController {
         throw new Error(`Unsupported recovery step type: ${String(step.type)}`);
       }
       const type = step.type as PlanStepType;
+      const action = this.parseStepAction(type, step.action);
+      const subject = typeof step.subject === 'string' && step.subject.trim()
+        ? step.subject.trim().slice(0, 240)
+        : this.stepRegistry.get(type).description;
       const max = this.stepRegistry.limit(type);
       const requested = typeof step.maxAttempts === 'number' ? Math.floor(step.maxAttempts) : max;
       const id = typeof step.id === 'string' && step.id.trim() ? step.id : `recovery-${index + 1}`;
+      const language = this.resolveLanguage(subject);
       steps.push({
         id,
         type,
-        goal: typeof step.goal === 'string' && step.goal.trim() ? step.goal.trim() : this.stepRegistry.get(type).description,
+        action,
+        subject,
+        goal: this.stepRegistry.renderGoal(type, action, subject, language),
         status: 'pending',
         maxAttempts: Math.max(1, Math.min(requested, max)),
         inputs: this.factKeys(step.inputs),
@@ -539,6 +555,21 @@ export class RecoveryController {
   }
 
   private protocol(): string {
-    return `Return ONLY JSON:\n{\n  "action": "retry-current | insert-steps | skip-current | request-human | fail",\n  "reason": "short explanation",\n  "steps": [{ "id": "recovery-1", "type": "search | understand | prepare-change | edit-file | review | verify | finalize", "goal": "one concrete goal", "maxAttempts": 1, "inputs": ["existing.fact"], "outputs": ["missing.fact"] }]\n}\nFor insert-steps, outputs must describe the exact missing fact(s) needed by the blocked step. Do not invent concrete file paths.`;
+    const whitelist = this.stepRegistry.listForPlanner()
+      .map((definition) => `${definition.type}: ${definition.actions.map((action) => action.id).join(' | ')}`)
+      .join('\n');
+    return `Choose inserted steps only from this whitelist:\n${whitelist}\n\nReturn ONLY JSON:\n{\n  "action": "retry-current | insert-steps | skip-current | request-human | fail",\n  "reason": "short explanation",\n  "steps": [{ "id": "recovery-1", "type": "allowed type", "action": "allowed action for that type", "subject": "one concrete missing subject", "maxAttempts": 1, "inputs": ["existing.fact"], "outputs": ["missing.fact"] }]\n}\nFor insert-steps, choose an action that resolves exactly the current missing fact.`;
   }
+
+  private parseStepAction(type: PlanStepType, value: unknown): PlanStepAction {
+    if (typeof value === 'string' && this.stepRegistry.hasAction(type, value)) return value;
+    return this.stepRegistry.defaultAction(type);
+  }
+
+  private resolveLanguage(value: string): 'ru' | 'en' {
+    const cyrillic = (value.match(/[А-Яа-яЁё]/g) ?? []).length;
+    const latin = (value.match(/[A-Za-z]/g) ?? []).length;
+    return cyrillic > latin ? 'ru' : 'en';
+  }
+
 }

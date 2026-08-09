@@ -24,7 +24,7 @@ export interface ModelExecutionInput {
   execution: Execution;
   conversation: Conversation;
   operation: OperationProfile;
-  activeStep?: { id: string; type: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string };
+  activeStep?: { id: string; type: string; action?: string; subject?: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string };
   stepContext?: { facts: Array<{ key: string; value: string; evidence: unknown[]; producerStepId: string }>; missingInputs: string[]; activeEvidence?: { findings: string[]; evidence: unknown[]; missing: string[] } };
 }
 
@@ -91,7 +91,7 @@ export class ModelController {
             activeStep: input.activeStep,
             stepContext: input.stepContext ?? { facts: [], missingInputs: [], activeEvidence: { findings: [], evidence: [], missing: [] } },
             stepIsolationRule: input.activeStep
-              ? `Work ONLY on the active step goal: ${input.activeStep.goal}. Do not perform goals assigned to later plan steps.`
+              ? `Work ONLY on activeStep.action for activeStep.subject. The action/subject contract is authoritative; the human-readable goal is descriptive only.`
               : undefined,
             policies: context.policies,
             knowledge: context.knowledge,

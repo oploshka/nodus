@@ -3,9 +3,30 @@ export type PlanStepType = 'search' | 'understand' | 'prepare-change' | 'edit-fi
 export type PlanStepStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type FactKey = string;
 
+export type PlanStepAction =
+  | 'find-files'
+  | 'find-symbols'
+  | 'find-definitions'
+  | 'find-usages'
+  | 'find-references'
+  | 'find-examples'
+  | 'explain-relationship'
+  | 'trace-data-flow'
+  | 'identify-source'
+  | 'identify-pattern'
+  | 'determine-integration'
+  | 'define-change'
+  | 'select-targets'
+  | 'apply-change'
+  | 'review-change'
+  | 'run-checks'
+  | 'summarize-result';
+
 export interface PlanStep {
   id: string;
   type: PlanStepType;
+  action?: PlanStepAction;
+  subject?: string;
   goal: string;
   status: PlanStepStatus;
   maxAttempts: number;

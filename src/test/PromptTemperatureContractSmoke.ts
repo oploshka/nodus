@@ -13,8 +13,9 @@ if ((operations.get('finalize')?.model.temperature ?? 0) > 0.2) throw new Error(
 const search = operations.get('search');
 if (!search) throw new Error('search operation profile missing');
 const searchRules = search.prompt.rules.join('\n');
-if (!searchRules.includes('directly usable existing property')) throw new Error('search prompt is missing direct-access closure rule');
-if (!searchRules.includes('Never make the success criterion stricter')) throw new Error('search prompt is missing no-goal-drift rule');
+if (!searchRules.includes('activeStep.action + activeStep.subject')) throw new Error('search prompt is missing action/subject contract');
+if (!searchRules.includes('Return tool calls only')) throw new Error('search prompt still mixes retrieval with evidence interpretation');
+if (!search.prompt.returnFormat?.includes('evidence evaluator decides satisfaction')) throw new Error('search return format is not retrieval-only');
 if (!search.execution.contextStrategy || search.execution.policyScopes.length === 0) throw new Error('search execution settings missing');
 
 const composed = composePrompt(search.prompt);
@@ -23,6 +24,6 @@ if (!composed.includes('Rules:')) throw new Error('composed prompt is missing ru
 if (!composed.includes('Return format:')) throw new Error('composed prompt is missing return format block');
 
 console.log('model settings live inside operation profiles: OK');
+console.log('search prompt is retrieval-only and action-scoped: OK');
 console.log('prompt rules + return format compose from one profile: OK');
-console.log('execution/context settings are grouped next to the operation: OK');
 console.log('PASS: operation behavior is configured through one generalized profile shape.');
