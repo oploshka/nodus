@@ -1,0 +1,23 @@
+Step-oriented scenario testing and understand continuation fix
+
+Production changes:
+- src/agent/Planning/PlanExecutor.ts
+  - understand tool reads are internal continuations of one semantic attempt
+  - maxAttempts no longer counts read -> model continuations as new attempts
+  - bounded internal understand tool rounds
+  - transient source reads are cached only for the active understand step
+
+Test layout:
+- moved tests from src/test to test
+- fixed relative source references after the move
+- added test/Support/StepHarness.ts
+- added independent /status stage tests under test/scenario/status
+- package.json exposes one command per stage plus the aggregate stage suite
+
+Documentation:
+- doc/TESTING.md
+
+Development principle:
+- seed a stage with fixture outputs from previous stages
+- test the changed stage directly
+- reserve full live model end-to-end runs for integration checkpoints

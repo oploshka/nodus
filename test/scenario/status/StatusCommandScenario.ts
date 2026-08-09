@@ -74,3 +74,38 @@ export const STATUS_COMMAND_CANONICAL_PLAN: TaskPlan = {
     },
   ],
 };
+
+export const STATUS_SEARCH_FACTS = [
+  {
+    key: 'cli.command.example',
+    value: 'src/cli/Cli.ts: COMMANDS array + inline runCli command branches',
+    evidence: [{ path: 'src/cli/Cli.ts', symbol: 'runCli', fact: 'Existing CLI commands are listed in COMMANDS and handled inline.' }],
+  },
+  {
+    key: 'project.id.source',
+    value: 'nodus.projectSession.projectId',
+    evidence: [{ path: 'src/project/ProjectSession/ProjectSession.ts', symbol: 'projectId', fact: 'ProjectSession exposes projectId.' }],
+  },
+  {
+    key: 'conversation.id.source',
+    value: 'conversation.id',
+    evidence: [{ path: 'src/core/Conversation/Conversation.ts', symbol: 'id', fact: 'Conversation exposes readonly id.' }],
+  },
+  {
+    key: 'index.files.count.source',
+    value: 'nodus.projectSession.index?.files.length',
+    evidence: [{ path: 'src/project/ProjectSession/ProjectSession.ts', symbol: 'index', fact: 'Existing code uses this.index.files.length.' }],
+  },
+] as const;
+
+export const STATUS_INTEGRATION_FACT = {
+  key: 'cli.status.integration',
+  value: 'Add /status to COMMANDS and add one inline runCli branch that prints projectSession.projectId, conversation.id, and projectSession.index?.files.length when index exists.',
+} as const;
+
+export const STATUS_CHANGE_FACT = {
+  key: 'status.change-plan',
+  value: 'Edit only src/cli/Cli.ts: add /status to COMMANDS and one inline handler using nodus.projectSession.projectId, conversation.id, and nodus.projectSession.index?.files.length.',
+} as const;
+
+export const STATUS_CLI_SOURCE = `// Cli.ts\nconst COMMANDS = [\n  { name: '/help', description: 'Show help.' },\n];\n\nexport async function runCli(): Promise<void> {\n  const value = '/help';\n  if (value === '/help') console.log('help');\n}\n`;

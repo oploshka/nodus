@@ -1,6 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { ConfigurationLoader } from '@core/Configuration/ConfigurationLoader';
-import { NodusResponseProtocol } from '../model/Protocol/NodusResponseProtocol';
+import { NodusResponseProtocol } from '../src/model/Protocol/NodusResponseProtocol';
 
 type Format = 'json' | 'nodus';
 

@@ -1,6 +1,6 @@
 // PlanActionWhitelistSmoke.ts
 import { StepRegistry } from '@agent/Planning/StepRegistry';
-import { STATUS_COMMAND_CANONICAL_PLAN } from './fixtures/StatusCommandScenario';
+import { STATUS_COMMAND_CANONICAL_PLAN } from './scenario/status/StatusCommandScenario';
 
 console.log('## Plan action whitelist smoke test');
 

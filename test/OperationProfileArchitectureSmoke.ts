@@ -9,10 +9,10 @@ for (const profile of DEFAULT_OPERATION_PROFILES) {
   if (!profile.model || !profile.execution) throw new Error(`${profile.id}: grouped settings missing`);
 }
 
-const nodusSource = await readFile(new URL('../core/Nodus/Nodus.ts', import.meta.url), 'utf8');
+const nodusSource = await readFile(new URL('../src/core/Nodus/Nodus.ts', import.meta.url), 'utf8');
 if (nodusSource.includes('PromptRegistry')) throw new Error('Nodus still wires the legacy PromptRegistry');
 
-const modelSource = await readFile(new URL('../model/Controller/ModelController.ts', import.meta.url), 'utf8');
+const modelSource = await readFile(new URL('../src/model/Controller/ModelController.ts', import.meta.url), 'utf8');
 if (modelSource.includes('promptRegistry')) throw new Error('ModelController still depends on the legacy PromptRegistry');
 
 console.log('all operations expose prompt/model/execution groups: OK');

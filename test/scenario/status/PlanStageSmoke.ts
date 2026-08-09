@@ -1,6 +1,6 @@
 // StatusCommandScenarioSmoke.ts
 import { StepRegistry } from '@agent/Planning/StepRegistry';
-import { STATUS_COMMAND_CANONICAL_PLAN } from './fixtures/StatusCommandScenario';
+import { STATUS_COMMAND_CANONICAL_PLAN } from './StatusCommandScenario';
 
 console.log('## /status canonical scenario contract');
 

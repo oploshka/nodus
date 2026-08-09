@@ -31,6 +31,8 @@ export interface PlanExecutionState {
   recoveryGoals: Set<string>;
   stepProgress?: Map<string, string[]>;
   editFileToolContext?: Map<string, ToolContextEntry[]>;
+  understandToolContext?: Map<string, ToolContextEntry[]>;
+  understandContinuation?: { stepId: string; toolRounds: number };
   resumes: number;
   startedAt: number;
   pauseReason?: string;
@@ -43,6 +45,7 @@ export class PlanExecutor {
   public static readonly MAX_RESUMES = 3;
   private readonly contextComposer = new ContextComposer();
   private static readonly SAFETY_NODE_EXECUTIONS = 50;
+  private static readonly MAX_UNDERSTAND_TOOL_ROUNDS = 3;
 
   public constructor(
     private readonly operationRegistry: OperationRegistry,
@@ -101,26 +104,30 @@ export class PlanExecutor {
         if (!recovered) return state.pauseReason ? 'paused' : 'finished';
         continue;
       }
-      if (state.stepAttempts >= step.maxAttempts) {
+      const understandContinuation = step.type === 'understand' && state.understandContinuation?.stepId === step.id;
+      if (!understandContinuation && state.stepAttempts >= step.maxAttempts) {
         const reason = this.hasRepeatedStepProgress(state, step.id) ? 'step-no-progress' : 'step-attempt-budget';
         const recovered = await this.recover(state, reason);
         if (!recovered) return state.pauseReason ? 'paused' : 'finished';
         continue;
       }
 
+      const displayedAttempt = understandContinuation
+        ? Math.max(state.stepAttempts, 1)
+        : state.stepAttempts + 1;
       this.reporter.planStep(
         state.planIndex,
         state.plan.steps.length,
         step.goal,
         step.type,
-        state.stepAttempts + 1,
+        displayedAttempt,
         step.maxAttempts,
         state.retryReason,
       );
       state.retryReason = undefined;
       this.reporter.contextCompose(step.inputs, composed.facts.map((fact) => fact.key), composed.missingInputs);
 
-      state.stepAttempts += 1;
+      if (!understandContinuation) state.stepAttempts += 1;
       step.status = 'running';
       state.execution.currentStep += 1;
       state.execution.currentOperation = step.type;
@@ -131,6 +138,8 @@ export class PlanExecutor {
         type: step.type,
         goal: step.goal,
         attempt: state.stepAttempts,
+        continuation: understandContinuation,
+        toolRound: understandContinuation ? state.understandContinuation?.toolRounds : 0,
       });
       await this.logger.info('plan-step-started', {
         planIndex: state.planIndex,
@@ -138,6 +147,8 @@ export class PlanExecutor {
         type: step.type,
         goal: step.goal,
         attempt: state.stepAttempts,
+        continuation: understandContinuation,
+        toolRound: understandContinuation ? state.understandContinuation?.toolRounds : 0,
       }, context);
       const operation = this.operationRegistry.get(step.type);
       if (!operation) {
@@ -148,6 +159,9 @@ export class PlanExecutor {
 
       if (step.type === 'edit-file') {
         await this.ensureEditFileTargetContext(state, step, context);
+      }
+      if (step.type === 'understand') {
+        this.restoreUnderstandToolContext(state, step);
       }
 
       let result: OperationResult;
@@ -213,6 +227,16 @@ export class PlanExecutor {
         }
 
         const toolCalls = result.toolCalls;
+        if (step.type === 'understand') {
+          const currentToolRounds = state.understandContinuation?.stepId === step.id
+            ? state.understandContinuation.toolRounds
+            : 0;
+          if (currentToolRounds >= PlanExecutor.MAX_UNDERSTAND_TOOL_ROUNDS) {
+            state.understandContinuation = undefined;
+            state.retryReason = `исчерпан лимит внутренних чтений (${PlanExecutor.MAX_UNDERSTAND_TOOL_ROUNDS}) в одной попытке анализа`;
+            continue;
+          }
+        }
         const summary = step.type === 'understand'
           ? await this.toolExecutor.execute(toolCalls, state.execution, context, 3)
           : await this.toolExecutor.execute(toolCalls, state.execution, context);
@@ -232,7 +256,12 @@ export class PlanExecutor {
         // as compact evidence and the raw requested source is sent directly into the next
         // understand model call. No second LLM evaluator is inserted between read -> model.
         if (step.type === 'understand') {
+          const currentToolRounds = state.understandContinuation?.stepId === step.id
+            ? state.understandContinuation.toolRounds
+            : 0;
+          this.retainUnderstandToolContext(state, step);
           this.recordUnderstandToolRound(state, step);
+          state.understandContinuation = { stepId: step.id, toolRounds: currentToolRounds + 1 };
           state.retryReason = `получены запрошенные данные (${summary.executed} инструментов)`;
           continue;
         }
@@ -243,6 +272,10 @@ export class PlanExecutor {
           ? `нужны дополнительные данные: ${missing.slice(0, 2).join('; ')}`
           : `модель запросила дополнительные данные (${result.toolCalls.length} инструментов)`;
         continue;
+      }
+
+      if (step.type === 'understand') {
+        state.understandContinuation = undefined;
       }
 
       if (result.changes.length > 0) {
@@ -338,6 +371,8 @@ export class PlanExecutor {
     step.status = 'pending';
     state.stepAttempts = 0;
     state.retryReason = 'продолжение после паузы';
+    state.understandContinuation = undefined;
+    state.understandToolContext?.delete(step.id);
     state.recoveryAttempts.set(step.id, 0);
     state.execution.status = 'running';
     state.execution.currentOperation = step.type;
@@ -354,6 +389,8 @@ export class PlanExecutor {
     state.planIndex += 1;
     state.stepAttempts = 0;
     state.retryReason = undefined;
+    if (state.understandContinuation?.stepId === step.id) state.understandContinuation = undefined;
+    state.understandToolContext?.delete(step.id);
     const next = state.plan.steps[state.planIndex];
     state.execution.currentOperation = next?.type;
     if (next) this.reporter.planAdvance(state.planIndex, state.plan.steps.length, next.goal, next.type);
@@ -401,6 +438,8 @@ export class PlanExecutor {
       }
       current.status = 'pending';
       state.stepAttempts = 0;
+      state.understandContinuation = undefined;
+      state.understandToolContext?.delete(current.id);
       state.retryReason = decision.reason || 'recovery requested retry';
       return true;
     }
@@ -435,6 +474,8 @@ export class PlanExecutor {
       this.planUpdater.insertBefore(state.plan, state.planIndex, freshSteps);
       this.planUpdater.markPendingFrom(state.plan, state.planIndex);
       state.stepAttempts = 0;
+      state.understandContinuation = undefined;
+      state.understandToolContext?.delete(current.id);
       state.retryReason = undefined;
       this.reporter.planUpdated(state.plan, state.planIndex, freshSteps.length);
       return true;
@@ -443,6 +484,8 @@ export class PlanExecutor {
       current.status = 'completed';
       state.planIndex += 1;
       state.stepAttempts = 0;
+      state.understandContinuation = undefined;
+      state.understandToolContext?.delete(current.id);
       return state.planIndex < state.plan.steps.length;
     }
     if (decision.action === 'request-human') {
@@ -462,6 +505,24 @@ export class PlanExecutor {
     this.reporter.paused(message);
   }
 
+
+  private retainUnderstandToolContext(state: PlanExecutionState, step: PlanStep): void {
+    const latest = state.execution.getToolContext();
+    if (latest.length === 0) return;
+    const cache = state.understandToolContext ?? (state.understandToolContext = new Map());
+    const existing = cache.get(step.id) ?? [];
+    const merged = [...existing, ...latest].filter((entry, index, all) => (
+      all.findIndex((candidate) => this.toolCallSignature(candidate.call) === this.toolCallSignature(entry.call)) === index
+    ));
+    cache.set(step.id, merged);
+    state.execution.setToolContext(merged, 1);
+  }
+
+  private restoreUnderstandToolContext(state: PlanExecutionState, step: PlanStep): void {
+    const cached = state.understandToolContext?.get(step.id);
+    if (!cached || cached.length === 0) return;
+    state.execution.setToolContext(cached, 1);
+  }
 
   private async ensureEditFileTargetContext(
     state: PlanExecutionState,

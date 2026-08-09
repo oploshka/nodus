@@ -27,7 +27,7 @@ const plan: TaskPlan = {
     subject: 'CLI registration pattern',
     goal: 'Understand how CLI registration works',
     status: 'pending',
-    maxAttempts: 2,
+    maxAttempts: 1,
     inputs: ['cli.file'],
     outputs: ['cli.integration'],
   }],

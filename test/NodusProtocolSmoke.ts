@@ -1,4 +1,4 @@
-import { NodusResponseProtocol } from '../model/Protocol/NodusResponseProtocol';
+import { NodusResponseProtocol } from '../src/model/Protocol/NodusResponseProtocol';
 
 const fakeTask = 'Add /status command using existing project, conversation and index APIs.';
 const fakeCode = `if (value === '/status') {\n  console.log(\`project: \${configuration.project.id}\`);\n  console.log(\`conversation: \${conversation.id}\`);\n  console.log(\`files: \${nodus.projectSession.index.files.length}\`);\n}`;
