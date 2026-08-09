@@ -1,0 +1,17 @@
+Nodus v0.1 understand derivation / no-progress patch
+
+Changed:
+- src/agent/Planning/PlanExecutor.ts
+- src/agent/Planning/RecoveryController.ts
+- src/agent/Runtime/AgentRuntime.ts
+- src/model/Prompt/DefaultPromptDefinitions.ts
+- src/test/UnderstandDerivationSmoke.ts
+- package.json
+
+Behavior:
+- understand may be satisfied by deriving outputs from declared input facts before a full operation call;
+- search remains evidence-driven;
+- understand evidence evaluation may inherit evidence from known input facts instead of demanding redundant file reads;
+- accumulated understanding participates in semantic satisfaction checks;
+- repeated identical step progress is detected;
+- recovery retry-current is blocked when the last attempts produced no new information.

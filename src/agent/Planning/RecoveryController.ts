@@ -77,12 +77,18 @@ export class RecoveryController {
           role: 'system',
           content: [
             'You are the evidence evaluator inside Nodus.',
-            'Evaluate whether the CURRENT accumulated tool evidence is sufficient for the active step goal.',
+            `The active operation type is ${input.step.type}.`,
+            'Evaluate whether the accumulated information is sufficient for the active step goal.',
             'Do not request tools and do not invent files, symbols, APIs, or facts.',
-            'Use accumulated findings/evidence plus the latest tool results together.',
+            'Use accumulated findings/evidence, reusable known facts, and the latest tool results together.',
+            input.step.type === 'search'
+              ? 'SEARCH is evidence-driven: require concrete located project evidence for the requested outputs.'
+              : 'UNDERSTAND is derivational: you may combine supplied known facts and evidence into a conclusion; do not demand another file read merely to reconfirm facts already supplied.',
             'If the goal is satisfied, emit one compact fact for EVERY requested output key.',
-            'If it is not satisfied, return only the smallest concrete missing information needed for the NEXT search attempt.',
-            'Evidence paths/symbols must be directly supported by the supplied tool results or accumulated evidence.',
+            'If it is not satisfied, return only the smallest concrete missing information needed for the next attempt.',
+            input.step.type === 'search'
+              ? 'Evidence paths/symbols must be directly supported by supplied tool results or accumulated evidence.'
+              : 'For derived understanding, evidence may be inherited from the supplied known facts and accumulated evidence.',
             'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"findings":["..."],"evidence":[{"path":"optional","symbol":"optional","fact":"supported fact"}],"facts":[{"key":"exact output key","value":"compact reusable value"}]}',
           ].join('\n'),
         },
@@ -179,6 +185,7 @@ export class RecoveryController {
     execution: Execution;
     step: PlanStep;
     facts: ExecutionFact[];
+    accumulated?: StepResult;
   }): Promise<StepSatisfactionDecision> {
     if (input.facts.length === 0 || input.step.outputs.length === 0) {
       return { satisfied: false, reason: 'No reusable facts are available.', missing: input.step.outputs, facts: [] };
@@ -193,10 +200,14 @@ export class RecoveryController {
           role: 'system',
           content: [
             'You are a strict data-flow gate inside Nodus.',
-            'Decide whether the supplied reusable facts ALREADY fully satisfy the active step goal.',
+            `The active operation type is ${input.step.type}.`,
+            'Decide whether the supplied reusable facts and accumulated step understanding ALREADY satisfy the active step goal.',
             'Do not request tools, do not invent evidence, and do not broaden the goal.',
+            input.step.type === 'understand'
+              ? 'UNDERSTAND is a derivation step: combine declared input facts conservatively. Do not require a new project read merely to restate or connect facts that are already supplied.'
+              : 'SEARCH is evidence-driven: do not claim satisfaction unless the supplied facts already contain the located evidence required by the goal.',
             'Only return satisfied=true when no additional project evidence is required.',
-            'If satisfied, emit one compact fact for every requested output key using only supplied facts.',
+            'If satisfied, emit one compact fact for every requested output key using only supplied information.',
             'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"facts":[{"key":"exact output key","value":"compact derived value"}]}',
           ].join('\n'),
         },
@@ -211,6 +222,11 @@ export class RecoveryController {
               evidence: fact.evidence,
               producerStepId: fact.producerStepId,
             })),
+            accumulatedUnderstanding: input.accumulated ? {
+              findings: input.accumulated.findings,
+              evidence: input.accumulated.evidence,
+              missing: input.accumulated.missing,
+            } : undefined,
           }),
         },
       ],

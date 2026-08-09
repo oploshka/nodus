@@ -18,7 +18,9 @@
     "test:plan:postcondition": "tsx src/test/PlanPostconditionSmoke.ts",
     "test:plan:satisfaction": "tsx src/test/PlanSemanticSatisfactionSmoke.ts",
     "test:step:evidence": "tsx src/test/StepEvidenceEvaluatorSmoke.ts",
-    "test:startup:cleanup": "tsx src/test/StartupCleanupSmoke.ts"
+    "test:startup:cleanup": "tsx src/test/StartupCleanupSmoke.ts",
+    "test:understand:derivation": "tsx src/test/UnderstandDerivationSmoke.ts",
+    "test:evidence:accumulation": "tsx src/test/ToolEvidenceAccumulationSmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

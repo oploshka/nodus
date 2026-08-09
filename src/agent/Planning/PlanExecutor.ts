@@ -9,7 +9,7 @@ import { ExecutionContext, type ExecutionFact } from '@agent/Planning/ExecutionC
 import { ContextComposer } from '@agent/Planning/ContextComposer';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { Conversation } from '@core/Conversation/Conversation';
-import type { Execution } from '@core/Execution/Execution';
+import type { Execution, ToolContextEntry } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
 import type { ModelController } from '@model/Controller/ModelController';
@@ -28,6 +28,7 @@ export interface PlanExecutionState {
   executionContext: ExecutionContext;
   recoveryMissing: Map<string, string[]>;
   recoveryGoals: Set<string>;
+  stepProgress?: Map<string, string[]>;
   resumes: number;
   startedAt: number;
   pauseReason?: string;
@@ -102,7 +103,8 @@ export class PlanExecutor {
         continue;
       }
       if (state.stepAttempts >= step.maxAttempts) {
-        const recovered = await this.recover(state, 'step-attempt-budget');
+        const reason = this.hasRepeatedStepProgress(state, step.id) ? 'step-no-progress' : 'step-attempt-budget';
+        const recovered = await this.recover(state, reason);
         if (!recovered) return state.pauseReason ? 'paused' : 'finished';
         continue;
       }
@@ -283,6 +285,7 @@ export class PlanExecutor {
           continue;
         }
         if (state.stepAttempts < step.maxAttempts) {
+          this.recordStepProgress(state, step.id, mergedResult);
           const missing = mergedResult?.missing ?? [];
           state.retryReason = missing.length > 0
             ? `цель ещё не достигнута: ${missing.slice(0, 2).join('; ')}`
@@ -363,6 +366,14 @@ export class PlanExecutor {
     state.execution.addEvent('plan-recovery', decision);
 
     if (decision.action === 'retry-current') {
+      if (this.hasRepeatedStepProgress(state, current.id)) {
+        this.pause(
+          state,
+          `step:${current.id}:recovery-no-progress`,
+          `Повтор шага «${current.goal}» остановлен: последние попытки не дали новых данных.`,
+        );
+        return false;
+      }
       current.status = 'pending';
       state.stepAttempts = 0;
       state.retryReason = decision.reason || 'recovery requested retry';
@@ -431,8 +442,24 @@ export class PlanExecutor {
     const toolContext = state.execution.getToolContext();
     if (toolContext.length === 0) return false;
 
-    const accumulated = state.stepResults.get(step.id);
-    this.reporter.evidenceCheck(step.goal, toolContext.length, accumulated?.evidence.length ?? 0);
+    // Persist concrete tool evidence BEFORE asking the LLM evaluator what it means.
+    // Previously an unsatisfied evaluator response could return evidence: [], which meant
+    // the next attempt effectively forgot the successful tool round and displayed
+    // "accumulated evidence 0" forever. Raw payloads are short-lived, normalized
+    // evidence is the durable representation carried between attempts.
+    const previous = state.stepResults.get(step.id);
+    const normalizedEvidence = this.normalizeToolEvidence(toolContext);
+    const normalizedRound: StepResult = {
+      goalSatisfied: false,
+      findings: [],
+      evidence: normalizedEvidence,
+      missing: previous?.missing ?? [],
+      facts: [],
+    };
+    const accumulated = this.mergeStepResults(previous, normalizedRound);
+    state.stepResults.set(step.id, accumulated);
+
+    this.reporter.evidenceCheck(step.goal, toolContext.length, accumulated.evidence.length);
     const startedAt = Date.now();
     const decision = await this.recoveryController.assessToolEvidence({
       task: state.task,
@@ -446,7 +473,9 @@ export class PlanExecutor {
 
     const evaluated: StepResult = {
       goalSatisfied: decision.satisfied,
-      findings: decision.findings.length > 0 ? decision.findings : [decision.reason],
+      findings: decision.findings.length > 0
+        ? decision.findings
+        : decision.reason.startsWith('Evidence evaluation failed') ? [] : [decision.reason],
       evidence: decision.evidence,
       missing: decision.satisfied ? [] : decision.missing,
       facts: decision.satisfied
@@ -465,10 +494,81 @@ export class PlanExecutor {
       return true;
     }
 
+    this.recordStepProgress(state, step.id, merged);
     state.retryReason = decision.missing.length > 0
       ? `после проверки evidence не хватает: ${decision.missing.slice(0, 2).join('; ')}`
       : 'после проверки evidence цель шага ещё не подтверждена';
     return false;
+  }
+
+  private normalizeToolEvidence(toolContext: ToolContextEntry[]): StepResult['evidence'] {
+    const evidence: StepResult['evidence'] = [];
+    const push = (item: StepResult['evidence'][number]): void => {
+      const fact = item.fact.trim();
+      if (!fact) return;
+      const key = `${item.path ?? ''}|${item.symbol ?? ''}|${fact}`;
+      if (evidence.some((candidate) => `${candidate.path ?? ''}|${candidate.symbol ?? ''}|${candidate.fact}` === key)) return;
+      evidence.push({ ...item, fact });
+    };
+    const compact = (value: unknown, limit = 900): string => {
+      let text: string;
+      if (typeof value === 'string') text = value;
+      else {
+        try { text = JSON.stringify(value); } catch { text = String(value); }
+      }
+      return text.replace(/\r/g, '').trim().slice(0, limit);
+    };
+
+    for (const entry of toolContext) {
+      const input = entry.call.input ?? {};
+      const tool = entry.call.tool;
+      if (!entry.result.ok) {
+        push({
+          path: typeof input.path === 'string' ? input.path : undefined,
+          fact: `${tool} failed: ${entry.result.error ?? 'unknown error'}`,
+        });
+        continue;
+      }
+
+      if (tool === 'search' && Array.isArray(entry.result.data)) {
+        for (const match of entry.result.data.slice(0, 12)) {
+          if (!match || typeof match !== 'object') continue;
+          const item = match as Record<string, unknown>;
+          const path = typeof item.path === 'string' ? item.path : undefined;
+          const line = typeof item.line === 'number' ? `:${item.line}` : '';
+          const text = typeof item.text === 'string' ? item.text.trim() : compact(item, 500);
+          push({ path, fact: `Search match${line}: ${text}` });
+        }
+        if (entry.result.data.length === 0) {
+          push({
+            path: typeof input.path === 'string' ? input.path : undefined,
+            fact: `Search for ${JSON.stringify(String(input.query ?? ''))} returned no matches.`,
+          });
+        }
+        continue;
+      }
+
+      if (tool === 'file-system') {
+        const action = String(input.action ?? '');
+        const path = typeof input.path === 'string' ? input.path : undefined;
+        if (action === 'read') {
+          push({ path, fact: `File read succeeded. Content excerpt:
+${compact(entry.result.data, 1800)}` });
+        } else if (action === 'list') {
+          push({ path, fact: `Directory listing: ${compact(entry.result.data, 1200)}` });
+        } else {
+          push({ path, fact: `file-system ${action || 'operation'} succeeded: ${compact(entry.result.data, 700)}` });
+        }
+        continue;
+      }
+
+      push({
+        path: typeof input.path === 'string' ? input.path : undefined,
+        fact: `${tool} succeeded: ${compact(entry.result.data, 1000)}`,
+      });
+    }
+
+    return evidence.slice(0, 20);
   }
 
   private activeEvidence(result?: StepResult): { findings: string[]; evidence: StepResult['evidence']; missing: string[] } {
@@ -489,6 +589,7 @@ export class PlanExecutor {
       execution: state.execution,
       step,
       facts,
+      accumulated: state.stepResults.get(step.id),
     });
     this.reporter.semanticCheckResult(decision.satisfied, decision.reason, decision.missing, Date.now() - startedAt);
     if (!decision.satisfied) return false;
@@ -528,6 +629,7 @@ export class PlanExecutor {
       execution: state.execution,
       step: parent,
       facts: availableFacts,
+      accumulated: state.stepResults.get(parent.id),
     });
     this.reporter.semanticCheckResult(decision.satisfied, decision.reason, decision.missing, Date.now() - startedAt, true);
     if (!decision.satisfied) return false;
@@ -552,6 +654,11 @@ export class PlanExecutor {
     if (step.type !== 'search' && step.type !== 'understand') return false;
     if (step.outputs.length === 0 || facts.length === 0) return false;
     if (step.outputs.every((key) => facts.some((fact) => fact.key === key))) return false;
+
+    // `understand` is a derivation step: when its declared inputs are already present,
+    // let the small semantic gate derive the requested outputs before asking the main
+    // operation to read the same project files again. Search remains evidence-driven.
+    if (step.type === 'understand') return step.inputs.every((key) => facts.some((fact) => fact.key === key));
     if (recoveryBranch) return true;
     return step.id.startsWith('recovery-') || facts.some((fact) => fact.producerStepId.startsWith('recovery-'));
   }
@@ -578,6 +685,12 @@ export class PlanExecutor {
       return missing.length > 0
         ? `цель шага не подтверждена; не хватает: ${missing.slice(0, 3).join('; ')}`
         : 'цель шага не подтверждена после всех попыток';
+    }
+    if (reason === 'step-no-progress') {
+      const missing = result?.missing ?? [];
+      return missing.length > 0
+        ? `повторные попытки не дали новых данных; всё ещё не хватает: ${missing.slice(0, 3).join('; ')}`
+        : 'повторные попытки не изменили найденные факты или evidence';
     }
     if (reason.startsWith('missing-inputs:')) return `отсутствуют входные факты: ${reason.slice('missing-inputs:'.length)}`;
     if (reason.startsWith('model-error:')) return `ошибка вызова модели: ${reason.slice('model-error:'.length)}`;
@@ -673,6 +786,33 @@ export class PlanExecutor {
     state.plan.steps.splice(editIndex, 1, ...replacements);
     state.plan.version += 1;
     this.reporter.planUpdated(state.plan, editIndex, replacements.length - 1);
+  }
+
+
+  private recordStepProgress(state: PlanExecutionState, stepId: string, result?: StepResult): void {
+    if (!result) return;
+    const signature = this.stepProgressSignature(result);
+    const map = state.stepProgress ?? (state.stepProgress = new Map());
+    const history = map.get(stepId) ?? [];
+    history.push(signature);
+    map.set(stepId, history.slice(-3));
+  }
+
+  private hasRepeatedStepProgress(state: PlanExecutionState, stepId: string): boolean {
+    const history = state.stepProgress?.get(stepId) ?? [];
+    if (history.length < 2) return false;
+    return history[history.length - 1] === history[history.length - 2];
+  }
+
+  private stepProgressSignature(result: StepResult): string {
+    const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+    const findings = result.findings.map(normalize).sort();
+    const missing = result.missing.map(normalize).sort();
+    const evidence = result.evidence
+      .map((item) => normalize(`${item.path ?? ''}|${item.symbol ?? ''}|${item.fact}`))
+      .sort();
+    const facts = result.facts.map((fact) => normalize(`${fact.key}|${fact.value}`)).sort();
+    return JSON.stringify({ findings, missing, evidence, facts });
   }
 
   private missingReduced(previous: string[], current: string[]): boolean {

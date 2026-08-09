@@ -54,6 +54,7 @@ export class AgentRuntime {
       executionContext: new ExecutionContext(),
       recoveryMissing: new Map(),
       recoveryGoals: new Set(),
+      stepProgress: new Map(),
       resumes: 0,
       startedAt: Date.now(),
     };
