@@ -13,7 +13,8 @@
       "dist",
       ".git",
       ".nodus"
-    ]
+    ],
+    "clearCacheOnStart": false
   },
   "model": {
     "provider": "mock",
@@ -39,6 +40,7 @@
     "payloadPath": ".nodus/log/executions",
     "executionPath": ".nodus/log/executions",
     "consoleMode": "normal",
-    "colors": true
+    "colors": true,
+    "clearOnStart": false
   }
 }

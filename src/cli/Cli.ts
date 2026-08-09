@@ -26,11 +26,14 @@ class ConsoleHumanInteraction implements HumanInteraction {
 }
 
 export async function runCli(args: string[]): Promise<void> {
-  const configPath = args[0] ?? 'nodus.config.json';
+  const startup = parseStartupArgs(args);
   const readline = createInterface({ input, output });
 
   try {
-    const configuration = await ConfigurationLoader.load(configPath);
+    const configuration = await ConfigurationLoader.load(startup.configPath);
+    if (startup.clearCache !== undefined) configuration.project.clearCacheOnStart = startup.clearCache;
+    if (startup.clearLogs !== undefined) configuration.logging.clearOnStart = startup.clearLogs;
+    if (startup.scan) configuration.project.scanMode = 'on-open';
     const human = new ConsoleHumanInteraction(readline);
     const nodus = new Nodus(configuration, human);
     await nodus.initialize();
@@ -103,4 +106,45 @@ function parseResumeInput(value: string): { requested: boolean; hint?: string } 
   if (!match) return { requested: false };
   const hint = match[1]?.trim();
   return { requested: true, hint: hint || undefined };
+}
+
+
+interface StartupArguments {
+  configPath: string;
+  clearCache?: boolean;
+  clearLogs?: boolean;
+  scan: boolean;
+}
+
+function parseStartupArgs(args: string[]): StartupArguments {
+  let configPath = 'nodus.config.json';
+  let clearCache: boolean | undefined;
+  let clearLogs: boolean | undefined;
+  let scan = false;
+
+  for (const arg of args) {
+    if (arg === '--clear-cache') {
+      clearCache = true;
+      continue;
+    }
+    if (arg === '--keep-cache') {
+      clearCache = false;
+      continue;
+    }
+    if (arg === '--clear-logs') {
+      clearLogs = true;
+      continue;
+    }
+    if (arg === '--keep-logs') {
+      clearLogs = false;
+      continue;
+    }
+    if (arg === '--scan') {
+      scan = true;
+      continue;
+    }
+    if (!arg.startsWith('--')) configPath = arg;
+  }
+
+  return { configPath, clearCache, clearLogs, scan };
 }

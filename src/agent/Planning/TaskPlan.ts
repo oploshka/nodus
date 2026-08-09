@@ -1,3 +1,4 @@
+// TaskPlan.ts
 export type PlanStepType = 'search' | 'understand' | 'prepare-change' | 'edit-file' | 'review' | 'verify' | 'finalize';
 export type PlanStepStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type FactKey = string;
@@ -11,6 +12,7 @@ export interface PlanStep {
   inputs: FactKey[];
   outputs: FactKey[];
   targetPath?: string;
+  recoveryForStepId?: string;
 }
 
 export interface TaskPlan {

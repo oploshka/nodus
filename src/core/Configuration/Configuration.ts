@@ -10,6 +10,7 @@ export interface ProjectConfiguration {
   root: string;
   scanMode: ScanMode;
   cachePath?: string;
+  clearCacheOnStart: boolean;
   knowledgePath?: string;
   include?: string[];
   exclude?: string[];
@@ -47,6 +48,7 @@ export interface LoggingConfiguration {
   executionPath?: string;
   consoleMode: ConsoleMode;
   colors: boolean;
+  clearOnStart: boolean;
 }
 
 export interface NodusConfiguration {

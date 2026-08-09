@@ -1,5 +1,5 @@
 // ProjectSession.ts
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import type { ProjectConfiguration } from '@core/Configuration/Configuration';
 import type { Logger } from '@core/Logging/Logger';
@@ -28,6 +28,7 @@ export class ProjectSession {
 
   public async open(): Promise<void> {
     await this.knowledge.load(this.resolveOptionalPath(this.configuration.knowledgePath));
+    if (this.configuration.clearCacheOnStart) await this.clearCache();
     await this.loadSnapshot();
 
     await this.logger.info('project-opened', {
@@ -40,6 +41,15 @@ export class ProjectSession {
     if (this.configuration.scanMode === 'on-open') {
       await this.scan();
     }
+  }
+
+
+  public async clearCache(): Promise<void> {
+    this.index = undefined;
+    const cachePath = this.resolveOptionalPath(this.configuration.cachePath);
+    if (!cachePath) return;
+    await rm(cachePath, { force: true });
+    await this.logger.info('project-cache-cleared', { path: cachePath }, { projectId: this.projectId });
   }
 
   public async scan(): Promise<ProjectIndex> {

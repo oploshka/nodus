@@ -1,4 +1,5 @@
 // Nodus.ts
+import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
@@ -142,6 +143,7 @@ export class Nodus {
   }
 
   public async initialize(): Promise<void> {
+    if (this.configuration.logging.clearOnStart) await this.clearLogs();
     await this.projectSession.open();
   }
 
@@ -211,6 +213,26 @@ export class Nodus {
       executionId: execution.id,
     });
     return result;
+  }
+
+
+  private async clearLogs(): Promise<void> {
+    const entries = new Map<string, boolean>();
+    const add = (path: string | undefined, recursive: boolean) => {
+      if (!path) return;
+      const absolute = resolve(this.configuration.project.root, path);
+      entries.set(absolute, Boolean(entries.get(absolute)) || recursive);
+    };
+
+    add(this.configuration.logging.path ?? '.nodus/log/nodus.log', false);
+    add(this.configuration.logging.executionPath ?? '.nodus/log/executions', true);
+    add(this.configuration.logging.payloadPath ?? '.nodus/log/executions', true);
+
+    for (const [path, recursive] of entries) {
+      await rm(path, { recursive, force: true });
+    }
+
+    await this.logger.info('logs-cleared', { paths: Array.from(entries.keys()) }, { projectId: this.configuration.project.id });
   }
 
   private createModelAdapter(configuration: NodusConfiguration): ModelAdapter {

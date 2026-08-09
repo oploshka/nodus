@@ -58,7 +58,7 @@ const executor = new PlanExecutor(
   { info: async () => {}, error: async () => {} } as never,
   {
     planStep() {},
-    stepAlreadySatisfied(keys: string[]) { reporterEvents.push(keys.join(',')); },
+    stepAlreadySatisfiedAt(_index: number, _total: number, _goal: string, _type: string, keys: string[]) { reporterEvents.push(keys.join(',')); },
     planAdvance() {},
   } as never,
 );

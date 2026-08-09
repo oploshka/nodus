@@ -1,3 +1,4 @@
+// ExecutionContext.ts
 import type { FactKey, PlanStep } from '@agent/Planning/TaskPlan';
 import type { StepEvidenceItem, StepFact, StepResult } from '@model/Result/OperationResult';
 
@@ -59,6 +60,12 @@ export class ExecutionContext {
 
   public all(): ExecutionFact[] {
     return Array.from(this.facts.values());
+  }
+
+  public select(keys: FactKey[]): ExecutionFact[] {
+    return keys
+      .map((key) => this.facts.get(key))
+      .filter((fact): fact is ExecutionFact => Boolean(fact));
   }
 
   private put(stepId: string, fact: StepFact): void {

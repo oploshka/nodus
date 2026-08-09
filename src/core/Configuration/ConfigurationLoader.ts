@@ -24,6 +24,7 @@ export class ConfigurationLoader {
         root: resolve(configurationDirectory, parsed.project.root),
         scanMode: parsed.project.scanMode ?? 'manual',
         cachePath: parsed.project.cachePath,
+        clearCacheOnStart: parsed.project.clearCacheOnStart ?? false,
         knowledgePath: parsed.project.knowledgePath,
         include: parsed.project.include ?? [],
         exclude: parsed.project.exclude ?? ['node_modules', 'dist', '.git', '.nodus'],
@@ -54,6 +55,7 @@ export class ConfigurationLoader {
         executionPath: parsed.logging?.executionPath ?? '.nodus/log/executions',
         consoleMode: parsed.logging?.consoleMode ?? 'normal',
         colors: parsed.logging?.colors ?? true,
+        clearOnStart: parsed.logging?.clearOnStart ?? false,
       },
     };
   }

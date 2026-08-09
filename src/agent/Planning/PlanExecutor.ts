@@ -1,10 +1,11 @@
+// PlanExecutor.ts
 import type { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
 import type { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import type { PlanUpdater } from '@agent/Planning/PlanUpdater';
 import type { RecoveryController, RecoveryDecision } from '@agent/Planning/RecoveryController';
 import type { PlanStep, TaskPlan } from '@agent/Planning/TaskPlan';
-import { ExecutionContext } from '@agent/Planning/ExecutionContext';
+import { ExecutionContext, type ExecutionFact } from '@agent/Planning/ExecutionContext';
 import { ContextComposer } from '@agent/Planning/ContextComposer';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { Conversation } from '@core/Conversation/Conversation';
@@ -30,6 +31,7 @@ export interface PlanExecutionState {
   resumes: number;
   startedAt: number;
   pauseReason?: string;
+  retryReason?: string;
 }
 
 export type PlanRunResult = 'finished' | 'paused';
@@ -61,28 +63,31 @@ export class PlanExecutor {
       nodeExecutions += 1;
 
       const step = state.plan.steps[state.planIndex];
-      // Show the semantic node before its internal data-flow/model phases. Missing inputs do not consume an attempt.
-      this.reporter.planStep(
-        state.planIndex,
-        state.plan.steps.length,
-        step.goal,
-        step.type,
-        state.stepAttempts + 1,
-        step.maxAttempts,
-      );
+
+      if (step.status === 'completed') {
+        state.planIndex += 1;
+        state.stepAttempts = 0;
+        state.retryReason = undefined;
+        continue;
+      }
+
+      if (step.recoveryForStepId && await this.tryPruneRecoveryBranch(state, step.recoveryForStepId)) {
+        continue;
+      }
 
       // Step outputs are postconditions. If recovery or an earlier equivalent step has already
       // established every output, there is nothing left for the model to do here.
-      // prepare-change is intentionally excluded because its targets are needed to expand
-      // concrete edit-file nodes; finalize must still produce the user-facing answer.
       if (this.outputsAlreadySatisfied(state, step)) {
-        this.reporter.stepAlreadySatisfied(step.outputs);
+        this.reporter.stepAlreadySatisfiedAt(state.planIndex, state.plan.steps.length, step.goal, step.type, step.outputs);
         this.completeStep(state, step, 'outputs-already-satisfied');
         continue;
       }
 
       const composed = this.contextComposer.compose(state.executionContext, step);
-      this.reporter.contextCompose(step.inputs, composed.facts.map((fact) => fact.key), composed.missingInputs);
+      if (await this.trySemanticSatisfaction(state, step, composed.facts)) {
+        continue;
+      }
+
       if (composed.missingInputs.length > 0) {
         const blocked: StepResult = {
           goalSatisfied: false,
@@ -101,6 +106,18 @@ export class PlanExecutor {
         if (!recovered) return state.pauseReason ? 'paused' : 'finished';
         continue;
       }
+
+      this.reporter.planStep(
+        state.planIndex,
+        state.plan.steps.length,
+        step.goal,
+        step.type,
+        state.stepAttempts + 1,
+        step.maxAttempts,
+        state.retryReason,
+      );
+      state.retryReason = undefined;
+      this.reporter.contextCompose(step.inputs, composed.facts.map((fact) => fact.key), composed.missingInputs);
 
       state.stepAttempts += 1;
       step.status = 'running';
@@ -183,6 +200,11 @@ export class PlanExecutor {
         this.reporter.tools(summary.executed);
         // Tool calls gather raw evidence for the immediate next model call.
         // The model must summarize that evidence into stepResult before the semantic step can complete.
+        const currentResult = state.stepResults.get(step.id);
+        const missing = currentResult?.missing ?? [];
+        state.retryReason = missing.length > 0
+          ? `нужны дополнительные данные: ${missing.slice(0, 2).join('; ')}`
+          : `модель запросила дополнительные данные (${result.toolCalls.length} инструментов)`;
         continue;
       }
 
@@ -250,7 +272,13 @@ export class PlanExecutor {
           this.completeStep(state, step, outputsReady ? 'outputs-ready' : 'goal-satisfied');
           continue;
         }
-        if (state.stepAttempts < step.maxAttempts) continue;
+        if (state.stepAttempts < step.maxAttempts) {
+          const missing = mergedResult?.missing ?? [];
+          state.retryReason = missing.length > 0
+            ? `цель ещё не достигнута: ${missing.slice(0, 2).join('; ')}`
+            : 'цель шага ещё не подтверждена';
+          continue;
+        }
         const recovered = await this.recover(state, 'step-goal-not-satisfied');
         if (!recovered) return state.pauseReason ? 'paused' : 'finished';
         continue;
@@ -271,6 +299,7 @@ export class PlanExecutor {
     if (!step) return;
     step.status = 'pending';
     state.stepAttempts = 0;
+    state.retryReason = 'продолжение после паузы';
     state.recoveryAttempts.set(step.id, 0);
     state.execution.status = 'running';
     state.execution.currentOperation = step.type;
@@ -286,6 +315,7 @@ export class PlanExecutor {
     state.execution.addEvent('plan-step-completed', { stepId: step.id, type: step.type, reason });
     state.planIndex += 1;
     state.stepAttempts = 0;
+    state.retryReason = undefined;
     const next = state.plan.steps[state.planIndex];
     state.execution.currentOperation = next?.type;
     if (next) this.reporter.planAdvance(state.planIndex, state.plan.steps.length, next.goal, next.type);
@@ -301,7 +331,7 @@ export class PlanExecutor {
     }
 
     state.recoveryAttempts.set(step.id, count + 1);
-    this.reporter.recovery(step.goal, reason);
+    this.reporter.recovery(state.planIndex, step.goal, this.humanRecoveryReason(reason, state.stepResults.get(step.id)));
     const decision = await this.recoveryController.recover({
       task: state.task,
       execution: state.execution,
@@ -325,6 +355,7 @@ export class PlanExecutor {
     if (decision.action === 'retry-current') {
       current.status = 'pending';
       state.stepAttempts = 0;
+      state.retryReason = decision.reason || 'recovery requested retry';
       return true;
     }
     if (decision.action === 'insert-steps' && decision.steps.length > 0) {
@@ -345,6 +376,7 @@ export class PlanExecutor {
       state.recoveryMissing.set(current.id, [...missing]);
       this.ensureUniqueStepIds(state.plan, freshSteps);
       for (const step of freshSteps) {
+        step.recoveryForStepId = current.id;
         step.inputs = step.inputs.filter((key) => state.executionContext.has(key));
         state.recoveryGoals.add(this.goalSignature(step.goal));
         for (const output of step.outputs) {
@@ -357,6 +389,7 @@ export class PlanExecutor {
       this.planUpdater.insertBefore(state.plan, state.planIndex, freshSteps);
       this.planUpdater.markPendingFrom(state.plan, state.planIndex);
       state.stepAttempts = 0;
+      state.retryReason = undefined;
       this.reporter.planUpdated(state.plan, state.planIndex, freshSteps.length);
       return true;
     }
@@ -383,6 +416,111 @@ export class PlanExecutor {
     this.reporter.paused(message);
   }
 
+
+  private async trySemanticSatisfaction(state: PlanExecutionState, step: PlanStep, facts: ExecutionFact[]): Promise<boolean> {
+    if (!this.canUseSemanticSatisfaction(step, facts)) return false;
+
+    this.reporter.semanticCheck(step.goal, facts.map((fact) => fact.key));
+    const startedAt = Date.now();
+    const decision = await this.recoveryController.assessStepSatisfaction({
+      task: state.task,
+      execution: state.execution,
+      step,
+      facts,
+    });
+    this.reporter.semanticCheckResult(decision.satisfied, decision.reason, decision.missing, Date.now() - startedAt);
+    if (!decision.satisfied) return false;
+
+    const evidence = facts.flatMap((fact) => fact.evidence).slice(0, 20);
+    const derived: StepResult = {
+      goalSatisfied: true,
+      findings: [decision.reason],
+      evidence,
+      missing: [],
+      facts: decision.facts.map((fact) => ({ ...fact, evidence })),
+    };
+    state.stepResults.set(step.id, this.mergeStepResults(state.stepResults.get(step.id), derived));
+    const mergedKeys = state.executionContext.mergeStepResult(step, derived);
+    this.reporter.factsMerged(mergedKeys);
+    this.completeStep(state, step, 'semantic-postcondition-satisfied');
+    return true;
+  }
+
+  private async tryPruneRecoveryBranch(state: PlanExecutionState, parentStepId: string): Promise<boolean> {
+    const parent = state.plan.steps.find((step) => step.id === parentStepId);
+    if (!parent || parent.status === 'completed') return false;
+
+    if (this.outputsAlreadySatisfied(state, parent)) {
+      const pruned = this.markRecoveryChildrenCompleted(state.plan, parentStepId);
+      if (pruned > 0) this.reporter.recoveryPruned(parent.goal, pruned, parent.outputs);
+      return pruned > 0;
+    }
+
+    const availableFacts = state.executionContext.select(parent.inputs);
+    if (availableFacts.length === 0 || !this.canUseSemanticSatisfaction(parent, availableFacts, true)) return false;
+
+    this.reporter.semanticCheck(parent.goal, availableFacts.map((fact) => fact.key), true);
+    const startedAt = Date.now();
+    const decision = await this.recoveryController.assessStepSatisfaction({
+      task: state.task,
+      execution: state.execution,
+      step: parent,
+      facts: availableFacts,
+    });
+    this.reporter.semanticCheckResult(decision.satisfied, decision.reason, decision.missing, Date.now() - startedAt, true);
+    if (!decision.satisfied) return false;
+
+    const evidence = availableFacts.flatMap((fact) => fact.evidence).slice(0, 20);
+    const derived: StepResult = {
+      goalSatisfied: true,
+      findings: [decision.reason],
+      evidence,
+      missing: [],
+      facts: decision.facts.map((fact) => ({ ...fact, evidence })),
+    };
+    state.stepResults.set(parent.id, this.mergeStepResults(state.stepResults.get(parent.id), derived));
+    const mergedKeys = state.executionContext.mergeStepResult(parent, derived);
+    this.reporter.factsMerged(mergedKeys);
+    const pruned = this.markRecoveryChildrenCompleted(state.plan, parentStepId);
+    this.reporter.recoveryPruned(parent.goal, pruned, parent.outputs);
+    return pruned > 0;
+  }
+
+  private canUseSemanticSatisfaction(step: PlanStep, facts: ExecutionFact[], recoveryBranch = false): boolean {
+    if (step.type !== 'search' && step.type !== 'understand') return false;
+    if (step.outputs.length === 0 || facts.length === 0) return false;
+    if (step.outputs.every((key) => facts.some((fact) => fact.key === key))) return false;
+    if (recoveryBranch) return true;
+    return step.id.startsWith('recovery-') || facts.some((fact) => fact.producerStepId.startsWith('recovery-'));
+  }
+
+  private markRecoveryChildrenCompleted(plan: TaskPlan, parentStepId: string): number {
+    let pruned = 0;
+    for (const step of plan.steps) {
+      if (step.recoveryForStepId !== parentStepId || step.status === 'completed') continue;
+      step.status = 'completed';
+      pruned += 1;
+    }
+    return pruned;
+  }
+
+  private humanRecoveryReason(reason: string, result?: StepResult): string {
+    if (reason === 'step-attempt-budget') {
+      const missing = result?.missing ?? [];
+      return missing.length > 0
+        ? `исчерпан лимит попыток; не хватает: ${missing.slice(0, 3).join('; ')}`
+        : 'исчерпан лимит попыток шага';
+    }
+    if (reason === 'step-goal-not-satisfied') {
+      const missing = result?.missing ?? [];
+      return missing.length > 0
+        ? `цель шага не подтверждена; не хватает: ${missing.slice(0, 3).join('; ')}`
+        : 'цель шага не подтверждена после всех попыток';
+    }
+    if (reason.startsWith('missing-inputs:')) return `отсутствуют входные факты: ${reason.slice('missing-inputs:'.length)}`;
+    if (reason.startsWith('model-error:')) return `ошибка вызова модели: ${reason.slice('model-error:'.length)}`;
+    return reason;
+  }
 
   private outputsAlreadySatisfied(state: PlanExecutionState, step: PlanStep): boolean {
     if (step.type === 'prepare-change' || step.type === 'finalize') return false;

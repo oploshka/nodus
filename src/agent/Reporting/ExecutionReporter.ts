@@ -5,7 +5,7 @@ import type { StepResult } from '@model/Result/OperationResult';
 
 export class ExecutionReporter {
   private activePlanStep?: string;
-  private recoverySequence = 0;
+  private activeAttempt = 1;
 
   public constructor(
     private readonly mode: ConsoleMode,
@@ -31,14 +31,34 @@ export class ExecutionReporter {
   }
 
 
-  public planStep(index: number, total: number, goal: string, type: string, attempt: number, maxAttempts: number): void {
+  public planStep(index: number, total: number, goal: string, type: string, attempt: number, maxAttempts: number, retryReason?: string): void {
     this.activePlanStep = String(index + 1);
-    this.recoverySequence = 0;
+    this.activeAttempt = attempt;
     if (this.mode === 'quiet') return;
-    const retry = attempt > 1 ? this.paint('dim', ` · попытка ${attempt}/${maxAttempts}`) : '';
+
+    if (attempt === 1) {
+      this.line(`
+${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}`);
+      this.line(this.paint('dim', `  ${goal}`));
+      this.line(this.paint('dim', `  ${index + 1}.1 Выполнение · попытка 1/${maxAttempts}`));
+      return;
+    }
+
     this.line(`
-${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${retry}`);
+${this.paint('yellow', `↻ ${index + 1}.${attempt} Повтор ${this.operationName(type)} · попытка ${attempt}/${maxAttempts}`)}`);
+    if (retryReason?.trim()) this.line(this.paint('dim', `  Причина: ${retryReason.trim()}`));
+  }
+
+  public stepAlreadySatisfiedAt(index: number, total: number, goal: string, type: string, outputs: string[]): void {
+    this.activePlanStep = String(index + 1);
+    this.activeAttempt = 0;
+    if (this.mode === 'quiet') return;
+    this.line(`
+${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}`);
     this.line(this.paint('dim', `  ${goal}`));
+    const suffix = outputs.length > 0 ? `: ${outputs.join(', ')}` : '';
+    this.line(this.paint('green', `  ✓ Результат уже известен${suffix}`));
+    this.line(this.paint('dim', '    Пропускаю вызов модели: postcondition шага уже выполнен.'));
   }
 
   public planAdvance(index: number, total: number, goal: string, type: string): void {
@@ -71,7 +91,7 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
 
   public modelRequest(operation: string): void {
     if (this.mode === 'quiet') return;
-    this.line(this.paint('dim', `  → ${this.substep('2')} Запрашиваю модель (${this.operationName(operation)})...`));
+    this.line(this.paint('dim', `    → модель (${this.operationName(operation)})...`));
   }
 
   public modelResponse(operation: string, durationMs: number, promptTokens?: number, completionTokens?: number): void {
@@ -79,30 +99,30 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
     const tokens = this.mode === 'verbose' && promptTokens !== undefined
       ? ` · ${promptTokens} → ${completionTokens ?? 0} токенов`
       : '';
-    this.line(this.paint('dim', `  ✓ ${this.substep('2')} Ответ модели (${operation}) за ${(durationMs / 1000).toFixed(1)} сек${tokens}`));
+    this.line(this.paint('dim', `    ✓ ответ модели (${operation}) за ${(durationMs / 1000).toFixed(1)} сек${tokens}`));
   }
 
 
   public contextCompose(inputs: string[], found: string[], missing: string[]): void {
     if (this.mode === 'quiet' || inputs.length === 0) return;
-    this.line(this.paint('dim', `  → ${this.substep('1')} Собираю контекст: ${inputs.join(', ')}`));
+    this.line(this.paint('dim', `    · контекст: ${inputs.join(', ')}`));
     if (missing.length === 0) {
-      this.line(this.paint('dim', `  ✓ ${this.substep('1')} Входы готовы ${found.length}/${inputs.length}`));
+      this.line(this.paint('dim', `    ✓ входы готовы ${found.length}/${inputs.length}`));
     } else {
-      this.line(this.paint('yellow', `  ! ${this.substep('1')} Не хватает: ${missing.join(', ')}`));
+      this.line(this.paint('yellow', `    ! не хватает: ${missing.join(', ')}`));
     }
   }
 
   public stepAlreadySatisfied(outputs: string[]): void {
     if (this.mode === 'quiet') return;
     const suffix = outputs.length > 0 ? `: ${outputs.join(', ')}` : '';
-    this.line(this.paint('green', `  ✓ ${this.substep('0')} Результат уже известен${suffix}`));
+    this.line(this.paint('green', `  ✓ Результат уже известен${suffix}`));
     this.line(this.paint('dim', '    Пропускаю вызов модели: postcondition шага уже выполнен.'));
   }
 
   public factsMerged(keys: string[]): void {
     if (this.mode === 'quiet' || keys.length === 0) return;
-    this.line(this.paint('dim', `  ✓ ${this.substep('3.1')} Контекст обновлён: ${keys.join(', ')}`));
+    this.line(this.paint('dim', `    · факты объединены: ${keys.join(', ')}`));
   }
 
   public protocolRetry(operation: string, truncated: boolean): void {
@@ -130,8 +150,7 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
 
   public stepResult(result: StepResult): void {
     if (this.mode === 'quiet') return;
-    const label = this.substep('3.2');
-    const prefix = result.goalSatisfied ? this.paint('green', `✓ ${label} Результат шага`) : this.paint('yellow', `· ${label} Промежуточный результат`);
+    const prefix = result.goalSatisfied ? this.paint('green', '    ✓ результат шага') : this.paint('yellow', '    · промежуточный результат');
     this.line(prefix);
     const findings = result.findings.slice(0, this.mode === 'verbose' ? 5 : 3);
     for (const finding of findings) this.line(`  ${finding}`);
@@ -153,13 +172,39 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
   }
 
 
-  public recovery(stepGoal: string, reason: string): void {
+  public recovery(stepIndex: number, stepGoal: string, reason: string): void {
     if (this.mode === 'quiet') return;
-    this.recoverySequence += 1;
-    const label = this.activePlanStep ? `${this.activePlanStep}.R.${this.recoverySequence}` : `R.${this.recoverySequence}`;
-    this.line(`\n${this.paint('yellow', `↻ ${label} Восстановление шага`)}`);
+    this.activePlanStep = String(stepIndex + 1);
+    this.line(`
+${this.paint('yellow', `↻ Восстановление шага ${stepIndex + 1}`)}`);
     this.line(`  ${stepGoal}`);
-    if (this.mode === 'verbose') this.line(this.paint('dim', `  Причина: ${reason}`));
+    this.line(this.paint('yellow', `  Причина: ${reason}`));
+  }
+
+  public semanticCheck(goal: string, factKeys: string[], recoveryBranch = false): void {
+    if (this.mode === 'quiet') return;
+    const prefix = recoveryBranch ? '  ↻' : '    ·';
+    this.line(this.paint('dim', `${prefix} проверяю, достаточно ли уже найденных данных (${factKeys.join(', ')})`));
+    if (this.mode === 'verbose') this.line(this.paint('dim', `      цель: ${goal}`));
+  }
+
+  public semanticCheckResult(satisfied: boolean, reason: string, missing: string[], durationMs: number, recoveryBranch = false): void {
+    if (this.mode === 'quiet') return;
+    if (satisfied) {
+      this.line(this.paint('green', `    ✓ известных данных достаточно · ${(durationMs / 1000).toFixed(1)} сек`));
+      this.line(this.paint('dim', `      ${reason}`));
+      return;
+    }
+    const detail = missing.length > 0 ? ` · не хватает: ${missing.slice(0, 2).join('; ')}` : '';
+    const prefix = recoveryBranch ? '  ·' : '    ·';
+    this.line(this.paint('dim', `${prefix} нужны дополнительные данные · ${(durationMs / 1000).toFixed(1)} сек${detail}`));
+  }
+
+  public recoveryPruned(parentGoal: string, count: number, outputs: string[]): void {
+    if (this.mode === 'quiet' || count <= 0) return;
+    this.line(this.paint('green', `  ✓ Recovery-ветка сокращена: пропущено шагов ${count}`));
+    this.line(this.paint('dim', `    Цель уже закрыта: ${parentGoal}`));
+    if (outputs.length > 0) this.line(this.paint('dim', `    postcondition: ${outputs.join(', ')}`));
   }
 
   public recoveryDecision(action: string, reason: string): void {
