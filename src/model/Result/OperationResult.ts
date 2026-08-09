@@ -23,6 +23,7 @@ export interface StepFact {
 
 export interface StepResult {
   goalSatisfied: boolean;
+  targets?: string[];
   findings: string[];
   evidence: StepEvidenceItem[];
   missing: string[];

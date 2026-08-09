@@ -10,6 +10,7 @@ export interface PlanStep {
   maxAttempts: number;
   inputs: FactKey[];
   outputs: FactKey[];
+  targetPath?: string;
 }
 
 export interface TaskPlan {

@@ -16,17 +16,20 @@ import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import type { ToolRegistry } from '@tool/Registry/ToolRegistry';
+import { EditFileRawProtocol } from '@model/Protocol/EditFileRawProtocol';
 
 export interface ModelExecutionInput {
   task: Task;
   execution: Execution;
   conversation: Conversation;
   operation: OperationProfile;
-  activeStep?: { id: string; type: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[] };
+  activeStep?: { id: string; type: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string };
   stepContext?: { facts: Array<{ key: string; value: string; evidence: unknown[]; producerStepId: string }>; missingInputs: string[] };
 }
 
 export class ModelController {
+  private readonly editFileProtocol = new EditFileRawProtocol();
+
   public constructor(
     private readonly configuration: ModelConfiguration,
     private readonly agentConfiguration: AgentConfiguration,
@@ -55,6 +58,9 @@ export class ModelController {
     const responseLanguage = this.resolveResponseLanguage(input.task.description);
     const contextTelemetry = this.contextTelemetry(context);
 
+    const responseProtocol = input.operation.id === 'edit-file'
+      ? this.editFileProtocol.instructions(input.activeStep?.targetPath)
+      : this.responseProtocol();
     const request: ModelRequest = {
       model: this.configuration.model,
       temperature: this.configuration.temperature,
@@ -62,7 +68,7 @@ export class ModelController {
       messages: [
         {
           role: 'system',
-          content: `${prompt.systemPrompt}\n\nOperation purpose: ${prompt.purpose}\n\nInstructions:\n${prompt.instructions.map((value) => `- ${value}`).join('\n')}\n\n${this.responseProtocol()}`,
+          content: `${prompt.systemPrompt}\n\nOperation purpose: ${prompt.purpose}\n\nInstructions:\n${prompt.instructions.map((value) => `- ${value}`).join('\n')}\n\n${responseProtocol}`,
         },
         {
           role: 'user',
@@ -95,9 +101,11 @@ export class ModelController {
             project: context.project,
             availableOperations: input.activeStep ? [] : this.operationRegistry.list().map(({ id, description }) => ({ id, description })),
             availableTools: this.availableToolsFor(input.operation.id),
-            responseProtocolReminder: input.activeStep
-              ? 'Respond with one OperationResult JSON object only. Work only on activeStep. Leave nextOperation empty because PlanExecutor owns routing.'
-              : 'Respond with one OperationResult JSON object only. The top-level object MUST contain status. Do not return an execution event, tool-result event, transcript entry, or copied context object.',
+            responseProtocolReminder: input.operation.id === 'edit-file'
+              ? 'Use the edit-file raw protocol from the system message. Edit exactly activeStep.targetPath. Do not return JSON for a completed file write.'
+              : input.activeStep
+                ? 'Respond with one OperationResult JSON object only. Work only on activeStep. Leave nextOperation empty because PlanExecutor owns routing.'
+                : 'Respond with one OperationResult JSON object only. The top-level object MUST contain status. Do not return an execution event, tool-result event, transcript entry, or copied context object.',
           }, null, 2),
         },
       ],
@@ -143,13 +151,15 @@ export class ModelController {
       responsePayloadPath = await this.payloadLogger.writeResponse(payloadContext, response);
     }
 
-    const result = await this.parseOrRepairOperationResult(
-      response.content,
-      request,
-      input,
-      logContext,
-      response.usage?.completion_tokens,
-    );
+    const result = input.operation.id === 'edit-file'
+      ? this.editFileProtocol.parse(response.content, input.activeStep?.targetPath)
+      : await this.parseOrRepairOperationResult(
+          response.content,
+          request,
+          input,
+          logContext,
+          response.usage?.completion_tokens,
+        );
     input.execution.addEvent('model-usage', { operation: input.operation.id, usage: response.usage });
     input.execution.consumeToolContext();
     this.reporter.modelResponse(
@@ -334,8 +344,12 @@ export class ModelController {
           return [{ key: entry.key.trim(), value: entry.value.trim(), evidence: factEvidence.slice(0, 8) }];
         })
       : [];
+    const targets = Array.isArray(raw.targets)
+      ? raw.targets.map(String).map((item) => item.trim()).filter((item) => item && !item.startsWith('/') && !item.includes('..')).slice(0, 16)
+      : undefined;
     return {
       goalSatisfied: raw.goalSatisfied === true,
+      targets,
       findings: Array.isArray(raw.findings) ? raw.findings.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 8) : [],
       evidence: evidence.slice(0, 12),
       missing: Array.isArray(raw.missing) ? raw.missing.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 8) : [],
@@ -378,6 +392,7 @@ Return ONLY valid JSON with this shape:
   "observations": ["short factual observation"],
   "stepResult": {
     "goalSatisfied": true,
+    "targets": ["exact/relative/file.ts; prepare-change only"],
     "findings": ["short result of the ACTIVE step only"],
     "evidence": [{ "path": "optional/file", "symbol": "optional symbol", "fact": "fact supported by evidence" }],
     "missing": ["specific evidence still missing"],
@@ -385,6 +400,6 @@ Return ONLY valid JSON with this shape:
   },
   "data": {}
 }
-For search, understand, prepare-change, review, and verify, always return stepResult. The activeStep declares inputs and outputs. Use only stepContext.facts as reusable results from prior semantic steps. When you establish an activeStep output, return it in stepResult.facts using EXACTLY one of activeStep.outputs as key. Set goalSatisfied=true when the ACTIVE step goal is satisfied or all declared outputs are established. Put only concrete unresolved evidence in missing. Do not work on later plan steps. When activeStep is supplied, leave nextOperation empty because PlanExecutor owns routing. When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
+For search, understand, prepare-change, review, and verify, always return stepResult. For prepare-change, put every exact relative file to be edited/deleted in stepResult.targets. The activeStep declares inputs and outputs. Use only stepContext.facts as reusable results from prior semantic steps. When you establish an activeStep output, return it in stepResult.facts using EXACTLY one of activeStep.outputs as key. Set goalSatisfied=true when the ACTIVE step goal is satisfied or all declared outputs are established. Put only concrete unresolved evidence in missing. Do not work on later plan steps. When activeStep is supplied, leave nextOperation empty because PlanExecutor owns routing. When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
   }
 }

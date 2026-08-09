@@ -124,7 +124,7 @@ export class PlanExecutor {
           execution: state.execution,
           conversation: state.conversation,
           operation,
-          activeStep: { id: step.id, type: step.type, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs },
+          activeStep: { id: step.id, type: step.type, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath },
           stepContext: composed,
         });
       } catch (error) {
@@ -198,7 +198,7 @@ export class PlanExecutor {
       }
 
       if (step.type === 'edit-file') {
-        const changed = result.changes.length > 0 || this.hasAppliedChanges(state.execution);
+        const changed = result.changes.length > 0;
         if (!changed) {
           const recovered = await this.recover(state, 'edit-file produced no applied changes');
           if (!recovered) return state.pauseReason ? 'paused' : 'finished';
@@ -226,6 +226,16 @@ export class PlanExecutor {
         const mergedResult = state.stepResults.get(step.id);
         const outputsReady = step.outputs.length > 0 && step.outputs.every((key) => state.executionContext.has(key));
         if (mergedResult?.goalSatisfied || outputsReady) {
+          if (step.type === 'prepare-change') {
+            const targets = mergedResult?.targets ?? [];
+            if (targets.length === 0) {
+              if (state.stepAttempts < step.maxAttempts) continue;
+              const recovered = await this.recover(state, 'prepare-change produced no target files');
+              if (!recovered) return state.pauseReason ? 'paused' : 'finished';
+              continue;
+            }
+            this.expandEditFileSteps(state, targets);
+          }
           this.completeStep(state, step, outputsReady ? 'outputs-ready' : 'goal-satisfied');
           continue;
         }
@@ -358,10 +368,6 @@ export class PlanExecutor {
     this.reporter.paused(message);
   }
 
-  private hasAppliedChanges(execution: Execution): boolean {
-    return execution.history.some((event) => event.type === 'change-applied');
-  }
-
 
   private requiresExplicitStepResult(type: string): boolean {
     return type === 'search' || type === 'understand' || type === 'prepare-change' || type === 'review' || type === 'verify';
@@ -388,11 +394,50 @@ export class PlanExecutor {
     const facts = [...previous.facts, ...current.facts].filter((item, index, all) => all.findIndex((candidate) => factKey(candidate) === factKey(item)) === index).slice(0, 20);
     return {
       goalSatisfied: previous.goalSatisfied || current.goalSatisfied,
+      targets: uniqueStrings([...(previous.targets ?? []), ...(current.targets ?? [])]),
       findings: uniqueStrings([...previous.findings, ...current.findings]),
       evidence,
       missing: current.missing,
       facts,
     };
+  }
+
+  private expandEditFileSteps(state: PlanExecutionState, targets: string[]): void {
+    const editIndex = state.plan.steps.findIndex((candidate, index) => index > state.planIndex && candidate.type === 'edit-file');
+    if (editIndex < 0) return;
+    const original = state.plan.steps[editIndex];
+    const uniqueTargets = Array.from(new Set(targets.map((target) => target.trim()).filter(Boolean)));
+    if (uniqueTargets.length === 0) return;
+
+    if (uniqueTargets.length === 1) {
+      original.targetPath = uniqueTargets[0];
+      original.goal = `${original.goal} (${uniqueTargets[0]})`;
+      state.plan.version += 1;
+      return;
+    }
+
+    const replacements: PlanStep[] = [];
+    let previousOutput: string | undefined;
+    uniqueTargets.forEach((targetPath, index) => {
+      const isLast = index === uniqueTargets.length - 1;
+      const syntheticOutput = isLast ? original.outputs : [`${original.id}.file-${index + 1}.applied`];
+      const inputs = [...original.inputs];
+      if (previousOutput && !inputs.includes(previousOutput)) inputs.push(previousOutput);
+      replacements.push({
+        ...original,
+        id: `${original.id}.${index + 1}`,
+        goal: `${original.goal} (${targetPath})`,
+        status: 'pending',
+        targetPath,
+        inputs,
+        outputs: syntheticOutput,
+      });
+      previousOutput = syntheticOutput[0];
+    });
+
+    state.plan.steps.splice(editIndex, 1, ...replacements);
+    state.plan.version += 1;
+    this.reporter.planUpdated(state.plan, editIndex, replacements.length - 1);
   }
 
   private missingReduced(previous: string[], current: string[]): boolean {
