@@ -1,0 +1,17 @@
+Postcondition/recovery fix
+
+Changed:
+- src/agent/Planning/PlanExecutor.ts
+  - skips model calls when all non-finalize/non-prepare-change outputs are already present in ExecutionContext
+  - treats outputs as step postconditions
+  - prevents recovery child outputs from becoming self-dependencies when they equal parent outputs
+  - guarantees unique IDs for inserted recovery steps
+- src/agent/Reporting/ExecutionReporter.ts
+  - reports when a step is skipped because its result is already known
+- src/test/PlanPostconditionSmoke.ts
+  - smoke test for postcondition skip, no-attempt consumption, recovery self-dependency guard, and unique recovery IDs
+- package.json
+  - adds npm run test:plan:postcondition
+
+Validation:
+- tsc --noEmit passed using temporary local symlinks to system Node typings; no node_modules included in archive.

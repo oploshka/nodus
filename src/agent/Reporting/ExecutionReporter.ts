@@ -93,6 +93,13 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
     }
   }
 
+  public stepAlreadySatisfied(outputs: string[]): void {
+    if (this.mode === 'quiet') return;
+    const suffix = outputs.length > 0 ? `: ${outputs.join(', ')}` : '';
+    this.line(this.paint('green', `  ✓ ${this.substep('0')} Результат уже известен${suffix}`));
+    this.line(this.paint('dim', '    Пропускаю вызов модели: postcondition шага уже выполнен.'));
+  }
+
   public factsMerged(keys: string[]): void {
     if (this.mode === 'quiet' || keys.length === 0) return;
     this.line(this.paint('dim', `  ✓ ${this.substep('3.1')} Контекст обновлён: ${keys.join(', ')}`));

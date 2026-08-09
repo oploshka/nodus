@@ -70,6 +70,17 @@ export class PlanExecutor {
         state.stepAttempts + 1,
         step.maxAttempts,
       );
+
+      // Step outputs are postconditions. If recovery or an earlier equivalent step has already
+      // established every output, there is nothing left for the model to do here.
+      // prepare-change is intentionally excluded because its targets are needed to expand
+      // concrete edit-file nodes; finalize must still produce the user-facing answer.
+      if (this.outputsAlreadySatisfied(state, step)) {
+        this.reporter.stepAlreadySatisfied(step.outputs);
+        this.completeStep(state, step, 'outputs-already-satisfied');
+        continue;
+      }
+
       const composed = this.contextComposer.compose(state.executionContext, step);
       this.reporter.contextCompose(step.inputs, composed.facts.map((fact) => fact.key), composed.missingInputs);
       if (composed.missingInputs.length > 0) {
@@ -332,10 +343,14 @@ export class PlanExecutor {
       }
 
       state.recoveryMissing.set(current.id, [...missing]);
+      this.ensureUniqueStepIds(state.plan, freshSteps);
       for (const step of freshSteps) {
         step.inputs = step.inputs.filter((key) => state.executionContext.has(key));
         state.recoveryGoals.add(this.goalSignature(step.goal));
         for (const output of step.outputs) {
+          // A recovery step that produces one of the parent's own outputs satisfies the
+          // parent's postcondition. Do not turn that output into a self-dependency.
+          if (current.outputs.includes(output)) continue;
           if (!current.inputs.includes(output)) current.inputs.push(output);
         }
       }
@@ -368,6 +383,26 @@ export class PlanExecutor {
     this.reporter.paused(message);
   }
 
+
+  private outputsAlreadySatisfied(state: PlanExecutionState, step: PlanStep): boolean {
+    if (step.type === 'prepare-change' || step.type === 'finalize') return false;
+    return step.outputs.length > 0 && step.outputs.every((key) => state.executionContext.has(key));
+  }
+
+  private ensureUniqueStepIds(plan: TaskPlan, steps: PlanStep[]): void {
+    const used = new Set(plan.steps.map((step) => step.id));
+    for (const step of steps) {
+      const base = step.id || 'recovery';
+      let candidate = base;
+      let suffix = 2;
+      while (used.has(candidate)) {
+        candidate = `${base}-${suffix}`;
+        suffix += 1;
+      }
+      step.id = candidate;
+      used.add(candidate);
+    }
+  }
 
   private requiresExplicitStepResult(type: string): boolean {
     return type === 'search' || type === 'understand' || type === 'prepare-change' || type === 'review' || type === 'verify';
