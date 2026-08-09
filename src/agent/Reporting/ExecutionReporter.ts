@@ -4,6 +4,9 @@ import type { TaskPlan } from '@agent/Planning/TaskPlan';
 import type { StepResult } from '@model/Result/OperationResult';
 
 export class ExecutionReporter {
+  private activePlanStep?: string;
+  private recoverySequence = 0;
+
   public constructor(
     private readonly mode: ConsoleMode,
     private readonly colors: boolean,
@@ -29,6 +32,8 @@ export class ExecutionReporter {
 
 
   public planStep(index: number, total: number, goal: string, type: string, attempt: number, maxAttempts: number): void {
+    this.activePlanStep = String(index + 1);
+    this.recoverySequence = 0;
     if (this.mode === 'quiet') return;
     const retry = attempt > 1 ? this.paint('dim', ` · попытка ${attempt}/${maxAttempts}`) : '';
     this.line(`
@@ -66,7 +71,7 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
 
   public modelRequest(operation: string): void {
     if (this.mode === 'quiet') return;
-    this.line(this.paint('dim', `  → Запрашиваю модель (${this.operationName(operation)})...`));
+    this.line(this.paint('dim', `  → ${this.substep('2')} Запрашиваю модель (${this.operationName(operation)})...`));
   }
 
   public modelResponse(operation: string, durationMs: number, promptTokens?: number, completionTokens?: number): void {
@@ -74,23 +79,23 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
     const tokens = this.mode === 'verbose' && promptTokens !== undefined
       ? ` · ${promptTokens} → ${completionTokens ?? 0} токенов`
       : '';
-    this.line(this.paint('dim', `  ✓ Ответ модели (${operation}) за ${(durationMs / 1000).toFixed(1)} сек${tokens}`));
+    this.line(this.paint('dim', `  ✓ ${this.substep('2')} Ответ модели (${operation}) за ${(durationMs / 1000).toFixed(1)} сек${tokens}`));
   }
 
 
   public contextCompose(inputs: string[], found: string[], missing: string[]): void {
     if (this.mode === 'quiet' || inputs.length === 0) return;
-    this.line(this.paint('dim', `  → Собираю контекст: ${inputs.join(', ')}`));
+    this.line(this.paint('dim', `  → ${this.substep('1')} Собираю контекст: ${inputs.join(', ')}`));
     if (missing.length === 0) {
-      this.line(this.paint('dim', `  ✓ Входы готовы ${found.length}/${inputs.length}`));
+      this.line(this.paint('dim', `  ✓ ${this.substep('1')} Входы готовы ${found.length}/${inputs.length}`));
     } else {
-      this.line(this.paint('yellow', `  ! Не хватает: ${missing.join(', ')}`));
+      this.line(this.paint('yellow', `  ! ${this.substep('1')} Не хватает: ${missing.join(', ')}`));
     }
   }
 
   public factsMerged(keys: string[]): void {
     if (this.mode === 'quiet' || keys.length === 0) return;
-    this.line(this.paint('dim', `  ✓ Контекст обновлён: ${keys.join(', ')}`));
+    this.line(this.paint('dim', `  ✓ ${this.substep('3.1')} Контекст обновлён: ${keys.join(', ')}`));
   }
 
   public protocolRetry(operation: string, truncated: boolean): void {
@@ -118,7 +123,8 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
 
   public stepResult(result: StepResult): void {
     if (this.mode === 'quiet') return;
-    const prefix = result.goalSatisfied ? this.paint('green', '✓ Результат шага') : this.paint('yellow', '· Промежуточный результат');
+    const label = this.substep('3.2');
+    const prefix = result.goalSatisfied ? this.paint('green', `✓ ${label} Результат шага`) : this.paint('yellow', `· ${label} Промежуточный результат`);
     this.line(prefix);
     const findings = result.findings.slice(0, this.mode === 'verbose' ? 5 : 3);
     for (const finding of findings) this.line(`  ${finding}`);
@@ -142,7 +148,9 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
 
   public recovery(stepGoal: string, reason: string): void {
     if (this.mode === 'quiet') return;
-    this.line(`\n${this.paint('yellow', '↻ Восстановление шага')}`);
+    this.recoverySequence += 1;
+    const label = this.activePlanStep ? `${this.activePlanStep}.R.${this.recoverySequence}` : `R.${this.recoverySequence}`;
+    this.line(`\n${this.paint('yellow', `↻ ${label} Восстановление шага`)}`);
     this.line(`  ${stepGoal}`);
     if (this.mode === 'verbose') this.line(this.paint('dim', `  Причина: ${reason}`));
   }
@@ -193,6 +201,10 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}${
       'resolve-failure': 'разбор ошибки', 'extract-knowledge': 'извлечение знаний',
     };
     return names[operation] ?? operation;
+  }
+
+  private substep(suffix: string): string {
+    return this.activePlanStep ? `${this.activePlanStep}.${suffix}` : suffix;
   }
 
   private line(value: string): void { console.log(value); }

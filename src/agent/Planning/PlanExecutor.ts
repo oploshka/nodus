@@ -61,6 +61,15 @@ export class PlanExecutor {
       nodeExecutions += 1;
 
       const step = state.plan.steps[state.planIndex];
+      // Show the semantic node before its internal data-flow/model phases. Missing inputs do not consume an attempt.
+      this.reporter.planStep(
+        state.planIndex,
+        state.plan.steps.length,
+        step.goal,
+        step.type,
+        state.stepAttempts + 1,
+        step.maxAttempts,
+      );
       const composed = this.contextComposer.compose(state.executionContext, step);
       this.reporter.contextCompose(step.inputs, composed.facts.map((fact) => fact.key), composed.missingInputs);
       if (composed.missingInputs.length > 0) {
@@ -101,8 +110,6 @@ export class PlanExecutor {
         goal: step.goal,
         attempt: state.stepAttempts,
       }, context);
-      this.reporter.planStep(state.planIndex, state.plan.steps.length, step.goal, step.type, state.stepAttempts, step.maxAttempts);
-
       const operation = this.operationRegistry.get(step.type);
       if (!operation) {
         const recovered = await this.recover(state, `operation-not-available:${step.type}`);
