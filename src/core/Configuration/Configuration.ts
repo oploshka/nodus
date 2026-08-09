@@ -3,6 +3,7 @@ export type ScanMode = 'manual' | 'on-open' | 'disabled';
 export type KnowledgeGenerationMode = 'disabled' | 'manual';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export type ModelProvider = 'mock' | 'openai-compatible';
+export type ModelMessageLayout = 'collapsed-user' | 'layered';
 export type ConsoleMode = 'quiet' | 'normal' | 'verbose';
 
 export interface ProjectConfiguration {
@@ -23,6 +24,7 @@ export interface ModelConfiguration {
   apiKey?: string;
   temperature?: number;
   maxTokens?: number;
+  messageLayout?: ModelMessageLayout;
 }
 
 export type ResponseLanguage = 'auto' | string;

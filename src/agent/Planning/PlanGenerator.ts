@@ -7,6 +7,7 @@ import type { ModelCallProfile } from '@model/Profile/ModelCallProfile';
 import { composePrompt } from '@model/Prompt/PromptComposer';
 import { taskMessage, userMessage } from '@model/Prompt/ModelInputComposer';
 import type { ModelRequest } from '@model/Request/ModelRequest';
+import { transportMessages } from '@model/Request/ModelMessageTransport';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import type { PlanStepAction, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
 import type { StepRegistry } from '@agent/Planning/StepRegistry';
@@ -21,6 +22,8 @@ const TASK_PLAN_PROFILE: ModelCallProfile = {
       'Treat type + action + subject as the semantic contract of the step. Do not invent a broader free-form operation.',
       'Use the supplied project index only as orientation. Do not invent files, directories, APIs, or service layers.',
       'Search actions only locate concrete project evidence. Use understand actions only when located evidence must be interpreted before a safe change can be defined.',
+      'Choose find-definitions when the task asks where a value comes from, where it is stored/declared, or how a value is exposed by a named class/file. Choose find-usages only for actual call sites/occurrences of an already known symbol. Choose find-examples for an existing implementation pattern.',
+      'Do not turn a semantic value name such as conversation ID into an assumed code identifier such as conversationId unless that exact identifier was supplied by project evidence.',
       'Use prepare-change before edit-file when code must change. End every plan with finalize. Add review or verify only when they add concrete value.',
       'Inputs may reference only outputs of earlier steps. Use short stable dot-separated output keys.',
       'Respect the supplied maximum attempt limits.',
@@ -54,7 +57,7 @@ export class PlanGenerator {
       model: this.configuration.model,
       temperature: TASK_PLAN_PROFILE.model.temperature ?? this.configuration.temperature,
       maxTokens: Math.min(this.configuration.maxTokens ?? 1024, TASK_PLAN_PROFILE.model.maxTokens ?? 1024),
-      messages: [
+      messages: transportMessages([
         {
           role: 'system',
           content: composePrompt(TASK_PLAN_PROFILE.prompt, { returnFormat: this.protocol() }),
@@ -67,7 +70,7 @@ export class PlanGenerator {
         userMessage('Attempt limits:', this.stepRegistry.listForPlanner()
           .map((definition) => `- ${definition.type}: ${definition.maxAttempts}`)
           .join('\n')),
-      ],
+      ], this.configuration.messageLayout),
     };
 
     try {
@@ -105,8 +108,8 @@ export class PlanGenerator {
         throw new Error(`Planner returned unsupported step type: ${String(step.type)}`);
       }
       const type = step.type as PlanStepType;
-      const action = this.action(type, step.action);
       const subject = this.subject(step.subject, type);
+      const action = this.stepRegistry.normalizeAction(type, this.action(type, step.action), subject);
       const maxLimit = this.stepRegistry.limit(type);
       const requestedLimit = typeof step.maxAttempts === 'number' ? Math.floor(step.maxAttempts) : maxLimit;
       const id = typeof step.id === 'string' && step.id.trim() ? step.id : `step-${index + 1}`;

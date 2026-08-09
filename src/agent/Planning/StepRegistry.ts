@@ -117,6 +117,22 @@ export class StepRegistry {
     return action.id;
   }
 
+
+  public normalizeAction(type: PlanStepType, requested: PlanStepAction, subject: string): PlanStepAction {
+    if (type !== 'search') return requested;
+    if (requested !== 'find-usages') return requested;
+
+    const scopedToSourceFile = /\bsrc\/[\w./-]+\.ts\b/i.test(subject) || /\b[\w.-]+\.ts\b/i.test(subject);
+    const asksForValueSource = /(\b(?:id|identifier)\b[^\n]{0,48}\b(?:source|retrieval|origin|definition|exposed|stored)\b)|(\b(?:source|origin|definition)\b[^\n]{0,48}\b(?:id|identifier)\b)|(источник|определени|объявлен|хранит|доступ[^\n]{0,24}(?:id|идентификатор))/iu.test(subject);
+    const asksForDefinitionShape = /(retrieval logic|file count logic|internal structure|property|field|definition|declaration|структур|свойств|поле|определени|объявлен)/iu.test(subject);
+
+    // A usage search is for call sites/occurrences. When the subject asks where a value
+    // comes from or how it is exposed inside a concrete source file, definitions are the
+    // narrower and more reliable retrieval primitive.
+    if (asksForValueSource || (scopedToSourceFile && asksForDefinitionShape)) return 'find-definitions';
+    return requested;
+  }
+
   public renderGoal(type: PlanStepType, actionId: PlanStepAction, subject: string, language: 'ru' | 'en'): string {
     const action = this.get(type).actions.find((candidate) => candidate.id === actionId);
     if (!action) throw new Error(`Unsupported action ${actionId} for plan step type ${type}`);

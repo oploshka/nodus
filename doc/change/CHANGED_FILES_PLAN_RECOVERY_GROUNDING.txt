@@ -1,0 +1,14 @@
+Plan/recovery grounding patch
+
+Changed:
+- src/agent/Planning/PlanGenerator.ts
+- src/agent/Planning/StepRegistry.ts
+- src/agent/Planning/RecoveryController.ts
+- test/PlannerRecoveryGroundingSmoke.ts
+- package.json
+
+Behavior:
+- planner is explicitly taught source-vs-usage action selection;
+- conservative normalization converts source/retrieval lookups in concrete source files from find-usages to find-definitions;
+- recovery subjects cannot introduce code-like identifiers that are absent from task/evidence/facts;
+- semantic attempt exhaustion cannot retry the same step without new human evidence; transient model/tool/protocol failures may still retry.

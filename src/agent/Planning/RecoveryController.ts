@@ -16,6 +16,7 @@ import {
   userMessage,
 } from '@model/Prompt/ModelInputComposer';
 import type { ModelRequest } from '@model/Request/ModelRequest';
+import { transportMessages } from '@model/Request/ModelMessageTransport';
 import type { StepEvidenceItem, StepResult } from '@model/Result/OperationResult';
 import type { ExecutionFact } from '@agent/Planning/ExecutionContext';
 import type { PlanStep, PlanStepAction, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
@@ -64,6 +65,8 @@ const RECOVER_PLAN_PROFILE: ModelCallProfile = {
       'Do not insert a step whose goal duplicates an already completed step or a previous recovery insertion. If no new evidence can be named, request human help instead of expanding the plan.',
       'Do not broaden an access-path question into a search for getters, services, CLI APIs, or HTTP APIs unless the original step explicitly requires those forms.',
       'When the runtime reports step-no-progress, do not choose retry-current unless a human hint supplied genuinely new information.',
+      'Keep recovery subjects grounded in supplied evidence. Do not convert a semantic phrase such as conversation ID into a guessed identifier such as conversationId.',
+      'For retrieval recovery, choose find-definitions for the source/declaration of a value and find-usages only for actual call sites of an evidenced symbol.',
     ],
   },
   model: { temperature: 0, maxTokens: 768 },
@@ -129,7 +132,7 @@ export class RecoveryController {
       model: this.configuration.model,
       temperature: STEP_EVIDENCE_PROFILE.model.temperature ?? this.configuration.temperature,
       maxTokens: Math.min(this.configuration.maxTokens ?? 512, STEP_EVIDENCE_PROFILE.model.maxTokens ?? 512),
-      messages: [
+      messages: transportMessages([
         {
           role: 'system',
           content: composePrompt(STEP_EVIDENCE_PROFILE.prompt, {
@@ -156,7 +159,7 @@ export class RecoveryController {
           missing: input.accumulated.missing,
         } : undefined)),
         ...toolResultMessages(compactToolContext),
-      ],
+      ], this.configuration.messageLayout),
     };
 
     try {
@@ -207,7 +210,7 @@ export class RecoveryController {
         taskId: input.task.id,
         executionId: input.execution.id,
       });
-      return decision;
+      return guarded;
     } catch (error) {
       await this.logger.warn('step-evidence-assessment-failed', { stepId: input.step.id, error: String(error) }, {
         projectId: input.task.projectId,
@@ -241,7 +244,7 @@ export class RecoveryController {
       model: this.configuration.model,
       temperature: STEP_SATISFACTION_PROFILE.model.temperature ?? this.configuration.temperature,
       maxTokens: Math.min(this.configuration.maxTokens ?? 256, STEP_SATISFACTION_PROFILE.model.maxTokens ?? 256),
-      messages: [
+      messages: transportMessages([
         {
           role: 'system',
           content: composePrompt(STEP_SATISFACTION_PROFILE.prompt, {
@@ -269,7 +272,7 @@ export class RecoveryController {
           evidence: input.accumulated.evidence,
           missing: input.accumulated.missing,
         } : undefined)),
-      ],
+      ], this.configuration.messageLayout),
     };
 
     try {
@@ -311,7 +314,7 @@ export class RecoveryController {
         taskId: input.task.id,
         executionId: input.execution.id,
       });
-      return decision;
+      return guarded;
     } catch (error) {
       await this.logger.warn('step-satisfaction-assessment-failed', { stepId: input.step.id, error: String(error) }, {
         projectId: input.task.projectId,
@@ -417,7 +420,7 @@ export class RecoveryController {
       model: this.configuration.model,
       temperature: RECOVER_PLAN_PROFILE.model.temperature ?? this.configuration.temperature,
       maxTokens: Math.min(this.configuration.maxTokens ?? 768, RECOVER_PLAN_PROFILE.model.maxTokens ?? 768),
-      messages: [
+      messages: transportMessages([
         {
           role: 'system',
           content: composePrompt(RECOVER_PLAN_PROFILE.prompt, { returnFormat: this.protocol() }),
@@ -435,19 +438,20 @@ export class RecoveryController {
         ...this.recoveryEvidenceMessages(input.completedStepEvidence ?? []),
         userMessage('Current plan:', input.plan.steps.map((step, index) => `- ${index + 1}. ${step.type}/${step.action ?? ''} — ${step.subject ?? step.goal} [${step.status}]`).join('\n')),
         userMessage('Available recovery steps:', this.stepRegistry.listForPlanner().map((definition) => `- ${definition.type}: ${definition.actions.map((action) => action.id).join(' | ')}; max ${definition.maxAttempts}`).join('\n')),
-      ],
+      ], this.configuration.messageLayout),
     };
 
     try {
       const response = await this.adapter.complete(request);
-      const decision = this.parse(response.content);
-      await this.logger.info('plan-recovery-decided', { action: decision.action, reason: decision.reason, steps: decision.steps }, {
+      const decision = this.parse(response.content, input);
+      const guarded = this.guardRecoveryDecision(decision, input);
+      await this.logger.info('plan-recovery-decided', { action: guarded.action, reason: guarded.reason, steps: guarded.steps }, {
         projectId: input.task.projectId,
         conversationId: input.task.conversationId,
         taskId: input.task.id,
         executionId: input.execution.id,
       });
-      return decision;
+      return guarded;
     } catch (error) {
       await this.logger.warn('plan-recovery-failed', { error: String(error) }, {
         projectId: input.task.projectId,
@@ -481,7 +485,14 @@ export class RecoveryController {
     return lines.length > 0 ? [userMessage('Completed-step evidence:', lines.join('\n'))] : [];
   }
 
-  private parse(content: string): RecoveryDecision {
+  private parse(content: string, input?: {
+    task: Task;
+    plan: TaskPlan;
+    stepIndex: number;
+    currentStepResult?: StepResult;
+    completedStepEvidence?: unknown[];
+    executionFacts?: ExecutionFact[];
+  }): RecoveryDecision {
     const raw = this.extractJson(content);
     const parsed = JSON.parse(raw) as {
       action?: unknown;
@@ -499,10 +510,11 @@ export class RecoveryController {
         throw new Error(`Unsupported recovery step type: ${String(step.type)}`);
       }
       const type = step.type as PlanStepType;
-      const action = this.parseStepAction(type, step.action);
-      const subject = typeof step.subject === 'string' && step.subject.trim()
+      const proposedSubject = typeof step.subject === 'string' && step.subject.trim()
         ? step.subject.trim().slice(0, 240)
         : this.stepRegistry.get(type).description;
+      const subject = input ? this.groundedRecoverySubject(proposedSubject, input) : proposedSubject;
+      const action = this.stepRegistry.normalizeAction(type, this.parseStepAction(type, step.action), subject);
       const max = this.stepRegistry.limit(type);
       const requested = typeof step.maxAttempts === 'number' ? Math.floor(step.maxAttempts) : max;
       const id = typeof step.id === 'string' && step.id.trim() ? step.id : `recovery-${index + 1}`;
@@ -526,6 +538,90 @@ export class RecoveryController {
       reason: typeof parsed.reason === 'string' ? parsed.reason : 'Recovery decision',
       steps,
     };
+  }
+
+  private guardRecoveryDecision(decision: RecoveryDecision, input: {
+    reason: string;
+    humanHint?: string;
+  }): RecoveryDecision {
+    if (decision.action !== 'retry-current' || input.humanHint?.trim()) return decision;
+
+    const semanticExhaustion = /(step-no-progress|no progress|stalled|attempt[^\n]{0,16}(?:budget|exhaust)|budget exhaustion|исчерпан[^\n]{0,24}(?:лимит|попыт)|нет прогресс|цель шага не подтверждена)/iu.test(input.reason);
+    const transientFailure = /(terminated|timeout|timed out|model-error|tool-error|protocol-error|ошибка вызова модели|ошибка инструмента|ошибка протокола)/iu.test(input.reason);
+    if (!semanticExhaustion || transientFailure) return decision;
+
+    return {
+      action: 'request-human',
+      reason: `${decision.reason} Retry blocked because the exhausted semantic step has no new evidence.`,
+      steps: [],
+    };
+  }
+
+  private groundedRecoverySubject(proposed: string, input: {
+    task: Task;
+    plan: TaskPlan;
+    stepIndex: number;
+    currentStepResult?: StepResult;
+    completedStepEvidence?: unknown[];
+    executionFacts?: ExecutionFact[];
+  }): string {
+    const current = input.plan.steps[input.stepIndex];
+    const fallback = input.currentStepResult?.missing.find((item) => item.trim())
+      ?? current?.subject
+      ?? current?.goal
+      ?? proposed;
+    const corpus = this.recoveryGroundingCorpus(input);
+    const ungrounded = this.codeLikeIdentifiers(proposed).filter((identifier) => !corpus.includes(identifier.toLowerCase()));
+    return ungrounded.length > 0 ? fallback.slice(0, 240) : proposed;
+  }
+
+  private recoveryGroundingCorpus(input: {
+    task: Task;
+    plan: TaskPlan;
+    stepIndex: number;
+    currentStepResult?: StepResult;
+    completedStepEvidence?: unknown[];
+    executionFacts?: ExecutionFact[];
+  }): string {
+    const current = input.plan.steps[input.stepIndex];
+    const parts: string[] = [input.task.description, current?.subject ?? '', current?.goal ?? ''];
+    parts.push(...(input.currentStepResult?.missing ?? []));
+    parts.push(...(input.currentStepResult?.findings ?? []));
+    for (const evidence of input.currentStepResult?.evidence ?? []) parts.push(evidence.path ?? '', evidence.symbol ?? '', evidence.fact);
+    for (const fact of input.executionFacts ?? []) {
+      parts.push(fact.key, fact.value);
+      for (const evidence of fact.evidence ?? []) parts.push(evidence.path ?? '', evidence.symbol ?? '', evidence.fact);
+    }
+    for (const value of input.completedStepEvidence ?? []) {
+      if (!value || typeof value !== 'object') continue;
+      const entry = value as { goal?: unknown; findings?: unknown; evidence?: unknown };
+      if (typeof entry.goal === 'string') parts.push(entry.goal);
+      if (Array.isArray(entry.findings)) parts.push(...entry.findings.map(String));
+      if (Array.isArray(entry.evidence)) {
+        for (const raw of entry.evidence) {
+          if (!raw || typeof raw !== 'object') continue;
+          const evidence = raw as { path?: unknown; symbol?: unknown; fact?: unknown };
+          if (typeof evidence.path === 'string') parts.push(evidence.path);
+          if (typeof evidence.symbol === 'string') parts.push(evidence.symbol);
+          if (typeof evidence.fact === 'string') parts.push(evidence.fact);
+        }
+      }
+    }
+    return parts.join('\n').toLowerCase();
+  }
+
+  private codeLikeIdentifiers(value: string): string[] {
+    const identifiers = new Set<string>();
+    for (const match of value.matchAll(/`([^`]+)`/g)) {
+      const token = match[1]?.trim();
+      if (token && /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(token)) identifiers.add(token);
+    }
+    for (const match of value.matchAll(/\b[a-z_$][\w$]*[A-Z][\w$]*\b/g)) identifiers.add(match[0]);
+    for (const match of value.matchAll(/\b[A-Z][a-z0-9_$]+(?:[A-Z][A-Za-z0-9_$]*)+\b/g)) identifiers.add(match[0]);
+    for (const match of value.matchAll(/\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+\b/g)) {
+      if (!match[0].endsWith('.ts')) identifiers.add(match[0]);
+    }
+    return Array.from(identifiers);
   }
 
   private factKeys(value: unknown): string[] {

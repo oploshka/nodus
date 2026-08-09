@@ -10,6 +10,7 @@ import type { Task } from '@core/Task/Task';
 import type { ContextSelector } from '@context/Selector/ContextSelector';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { ModelRequest } from '@model/Request/ModelRequest';
+import { transportMessages } from '@model/Request/ModelMessageTransport';
 import type { OperationResult, StepEvidenceItem, StepResult } from '@model/Result/OperationResult';
 import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
@@ -215,7 +216,7 @@ Response language: ${responseLanguage}`));
           ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. Use the output protocol from the system message.`
           : 'Perform the requested operation now using the supplied context and the output protocol from the system message.',
     ));
-    return messages;
+    return transportMessages(messages, this.configuration.messageLayout);
   }
 
   private resolveResponseLanguage(description: string): string {

@@ -21,7 +21,8 @@
     "endpoint": "http://127.0.0.1:11434/v1",
     "model": "local-model",
     "temperature": 0.2,
-    "maxTokens": 4096
+    "maxTokens": 4096,
+    "messageLayout": "collapsed-user"
   },
   "agent": {
     "maxSteps": 20,

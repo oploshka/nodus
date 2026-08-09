@@ -36,6 +36,7 @@ export class ConfigurationLoader {
         apiKey: parsed.model.apiKey,
         temperature: parsed.model.temperature ?? 0.2,
         maxTokens: parsed.model.maxTokens ?? 4096,
+        messageLayout: parsed.model.messageLayout ?? 'collapsed-user',
       },
       agent: {
         maxSteps: parsed.agent?.maxSteps ?? 20,

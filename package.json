@@ -34,7 +34,8 @@
     "test:status:understand": "tsx test/scenario/status/UnderstandStageSmoke.ts",
     "test:status:prepare": "tsx test/scenario/status/PrepareChangeStageSmoke.ts",
     "test:status:edit": "tsx test/scenario/status/EditStageSmoke.ts",
-    "test:status:finalize": "tsx test/scenario/status/FinalizeStageSmoke.ts"
+    "test:status:finalize": "tsx test/scenario/status/FinalizeStageSmoke.ts",
+    "test:plan:grounding": "tsx test/PlannerRecoveryGroundingSmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
