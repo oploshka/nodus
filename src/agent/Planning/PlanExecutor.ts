@@ -153,7 +153,10 @@ export class PlanExecutor {
           conversation: state.conversation,
           operation,
           activeStep: { id: step.id, type: step.type, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath },
-          stepContext: composed,
+          stepContext: {
+            ...composed,
+            activeEvidence: this.activeEvidence(state.stepResults.get(step.id)),
+          },
         });
       } catch (error) {
         await this.logger.error('model-error', { operation: step.type, error: String(error) }, context);
@@ -198,8 +201,15 @@ export class PlanExecutor {
       if (result.toolCalls.length > 0) {
         const summary = await this.toolExecutor.execute(result.toolCalls, state.execution, context);
         this.reporter.tools(summary.executed);
-        // Tool calls gather raw evidence for the immediate next model call.
-        // The model must summarize that evidence into stepResult before the semantic step can complete.
+
+        // Search/understand no longer decide completion by themselves after a tool round.
+        // A dedicated evaluator sees the accumulated evidence + the latest raw tool results
+        // and decides the step postcondition before another expensive search attempt is allowed.
+        if (step.type === 'search' || step.type === 'understand') {
+          const evaluated = await this.evaluateToolRound(state, step);
+          if (evaluated) continue;
+        }
+
         const currentResult = state.stepResults.get(step.id);
         const missing = currentResult?.missing ?? [];
         state.retryReason = missing.length > 0
@@ -416,6 +426,58 @@ export class PlanExecutor {
     this.reporter.paused(message);
   }
 
+
+  private async evaluateToolRound(state: PlanExecutionState, step: PlanStep): Promise<boolean> {
+    const toolContext = state.execution.getToolContext();
+    if (toolContext.length === 0) return false;
+
+    const accumulated = state.stepResults.get(step.id);
+    this.reporter.evidenceCheck(step.goal, toolContext.length, accumulated?.evidence.length ?? 0);
+    const startedAt = Date.now();
+    const decision = await this.recoveryController.assessToolEvidence({
+      task: state.task,
+      execution: state.execution,
+      step,
+      toolContext,
+      accumulated,
+      knownFacts: state.executionContext.all(),
+    });
+    this.reporter.evidenceCheckResult(decision.satisfied, decision.reason, decision.missing, Date.now() - startedAt);
+
+    const evaluated: StepResult = {
+      goalSatisfied: decision.satisfied,
+      findings: decision.findings.length > 0 ? decision.findings : [decision.reason],
+      evidence: decision.evidence,
+      missing: decision.satisfied ? [] : decision.missing,
+      facts: decision.satisfied
+        ? decision.facts.map((fact) => ({ key: fact.key, value: fact.value, evidence: decision.evidence }))
+        : [],
+    };
+    const merged = this.mergeStepResults(accumulated, evaluated);
+    state.stepResults.set(step.id, merged);
+
+    if (decision.satisfied) {
+      const mergedKeys = state.executionContext.mergeStepResult(step, merged);
+      this.reporter.factsMerged(mergedKeys);
+      this.reporter.stepResult(merged);
+      state.execution.setToolContext([], 0);
+      this.completeStep(state, step, 'tool-evidence-satisfied');
+      return true;
+    }
+
+    state.retryReason = decision.missing.length > 0
+      ? `после проверки evidence не хватает: ${decision.missing.slice(0, 2).join('; ')}`
+      : 'после проверки evidence цель шага ещё не подтверждена';
+    return false;
+  }
+
+  private activeEvidence(result?: StepResult): { findings: string[]; evidence: StepResult['evidence']; missing: string[] } {
+    return {
+      findings: result?.findings ?? [],
+      evidence: result?.evidence ?? [],
+      missing: result?.missing ?? [],
+    };
+  }
 
   private async trySemanticSatisfaction(state: PlanExecutionState, step: PlanStep, facts: ExecutionFact[]): Promise<boolean> {
     if (!this.canUseSemanticSatisfaction(step, facts)) return false;

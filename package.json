@@ -17,6 +17,7 @@
     "test:edit-file:raw": "tsx src/test/EditFileRawProductionSmoke.ts",
     "test:plan:postcondition": "tsx src/test/PlanPostconditionSmoke.ts",
     "test:plan:satisfaction": "tsx src/test/PlanSemanticSatisfactionSmoke.ts",
+    "test:step:evidence": "tsx src/test/StepEvidenceEvaluatorSmoke.ts",
     "test:startup:cleanup": "tsx src/test/StartupCleanupSmoke.ts"
   },
   "devDependencies": {

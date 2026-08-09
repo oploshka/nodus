@@ -1,0 +1,23 @@
+Step evidence evaluator iteration
+
+Changed:
+- src/agent/Planning/PlanExecutor.ts
+  - evaluate every search/understand tool round before another normal model attempt
+  - accumulate active-step findings/evidence/missing across attempts
+  - complete the step immediately when evaluated evidence satisfies its outputs
+  - preserve latest raw tool context only when more evidence is still required
+- src/agent/Planning/RecoveryController.ts
+  - added strict assessToolEvidence gate over accumulated evidence + latest tool results
+  - evaluator emits concrete missing evidence or exact output facts
+- src/model/Controller/ModelController.ts
+  - passes activeEvidence from earlier attempts into the next operation request
+- src/agent/Reporting/ExecutionReporter.ts
+  - reports evidence evaluation and its reason/missing data
+- src/test/StepEvidenceEvaluatorSmoke.ts
+  - verifies that sufficient tool evidence closes a search step without another search call
+- package.json
+  - added test:step:evidence
+
+Expected behavior:
+search -> tools -> evidence evaluator -> satisfied => complete
+                              -> missing => retry search with precise missing + accumulated evidence

@@ -1,12 +1,12 @@
 // RecoveryController.ts
 import type { ModelConfiguration } from '@core/Configuration/Configuration';
-import type { Execution } from '@core/Execution/Execution';
+import type { Execution, ToolContextEntry } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { PromptRegistry } from '@model/Profile/PromptRegistry';
 import type { ModelRequest } from '@model/Request/ModelRequest';
-import type { StepResult } from '@model/Result/OperationResult';
+import type { StepEvidenceItem, StepResult } from '@model/Result/OperationResult';
 import type { ExecutionFact } from '@agent/Planning/ExecutionContext';
 import type { PlanStep, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
 import type { StepRegistry } from '@agent/Planning/StepRegistry';
@@ -26,6 +26,11 @@ export interface StepSatisfactionDecision {
   facts: Array<{ key: string; value: string }>;
 }
 
+export interface StepEvidenceDecision extends StepSatisfactionDecision {
+  findings: string[];
+  evidence: StepEvidenceItem[];
+}
+
 export class RecoveryController {
   public constructor(
     private readonly configuration: ModelConfiguration,
@@ -34,6 +39,140 @@ export class RecoveryController {
     private readonly stepRegistry: StepRegistry,
     private readonly logger: Logger,
   ) {}
+
+  public async assessToolEvidence(input: {
+    task: Task;
+    execution: Execution;
+    step: PlanStep;
+    toolContext: ToolContextEntry[];
+    accumulated?: StepResult;
+    knownFacts: ExecutionFact[];
+  }): Promise<StepEvidenceDecision> {
+    if (input.toolContext.length === 0) {
+      return {
+        satisfied: false,
+        reason: 'No tool evidence is available.',
+        missing: input.accumulated?.missing ?? input.step.outputs,
+        facts: [],
+        findings: input.accumulated?.findings ?? [],
+        evidence: input.accumulated?.evidence ?? [],
+      };
+    }
+
+    const compactToolContext = input.toolContext.map((entry) => ({
+      call: entry.call,
+      result: {
+        ok: entry.result.ok,
+        error: entry.result.error,
+        data: this.truncateEvidenceData(entry.result.data, 12000),
+      },
+    }));
+
+    const request: ModelRequest = {
+      model: this.configuration.model,
+      temperature: 0,
+      maxTokens: Math.min(this.configuration.maxTokens ?? 512, 512),
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are the evidence evaluator inside Nodus.',
+            'Evaluate whether the CURRENT accumulated tool evidence is sufficient for the active step goal.',
+            'Do not request tools and do not invent files, symbols, APIs, or facts.',
+            'Use accumulated findings/evidence plus the latest tool results together.',
+            'If the goal is satisfied, emit one compact fact for EVERY requested output key.',
+            'If it is not satisfied, return only the smallest concrete missing information needed for the NEXT search attempt.',
+            'Evidence paths/symbols must be directly supported by the supplied tool results or accumulated evidence.',
+            'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"findings":["..."],"evidence":[{"path":"optional","symbol":"optional","fact":"supported fact"}],"facts":[{"key":"exact output key","value":"compact reusable value"}]}',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            goal: input.step.goal,
+            outputs: input.step.outputs,
+            accumulated: input.accumulated ? {
+              findings: input.accumulated.findings,
+              evidence: input.accumulated.evidence,
+              missing: input.accumulated.missing,
+            } : undefined,
+            knownFacts: input.knownFacts.map((fact) => ({
+              key: fact.key,
+              value: fact.value,
+              evidence: fact.evidence,
+            })),
+            latestToolResults: compactToolContext,
+          }),
+        },
+      ],
+    };
+
+    try {
+      const response = await this.adapter.complete(request);
+      const parsed = JSON.parse(this.extractJson(response.content)) as {
+        satisfied?: unknown;
+        reason?: unknown;
+        missing?: unknown;
+        findings?: unknown;
+        evidence?: Array<{ path?: unknown; symbol?: unknown; fact?: unknown }>;
+        facts?: Array<{ key?: unknown; value?: unknown }>;
+      };
+      const requested = new Set(input.step.outputs);
+      const facts = (parsed.facts ?? [])
+        .filter((fact) => typeof fact.key === 'string' && requested.has(fact.key) && typeof fact.value === 'string' && fact.value.trim())
+        .map((fact) => ({ key: fact.key as string, value: (fact.value as string).trim() }));
+      const evidence = (parsed.evidence ?? [])
+        .filter((item) => typeof item.fact === 'string' && item.fact.trim())
+        .map((item) => ({
+          path: typeof item.path === 'string' && item.path.trim() ? item.path.trim() : undefined,
+          symbol: typeof item.symbol === 'string' && item.symbol.trim() ? item.symbol.trim() : undefined,
+          fact: (item.fact as string).trim(),
+        }))
+        .slice(0, 20);
+      const satisfied = parsed.satisfied === true
+        && input.step.outputs.length > 0
+        && input.step.outputs.every((key) => facts.some((fact) => fact.key === key));
+      const decision: StepEvidenceDecision = {
+        satisfied,
+        reason: typeof parsed.reason === 'string' && parsed.reason.trim()
+          ? parsed.reason.trim()
+          : satisfied ? 'Tool evidence satisfies the step.' : 'More evidence is required.',
+        missing: Array.isArray(parsed.missing) ? parsed.missing.map(String).map((value) => value.trim()).filter(Boolean).slice(0, 6) : [],
+        findings: Array.isArray(parsed.findings) ? parsed.findings.map(String).map((value) => value.trim()).filter(Boolean).slice(0, 8) : [],
+        evidence,
+        facts: satisfied ? facts : [],
+      };
+      await this.logger.info('step-evidence-assessed', {
+        stepId: input.step.id,
+        satisfied: decision.satisfied,
+        reason: decision.reason,
+        missing: decision.missing,
+        toolResults: input.toolContext.length,
+        outputs: input.step.outputs,
+      }, {
+        projectId: input.task.projectId,
+        conversationId: input.task.conversationId,
+        taskId: input.task.id,
+        executionId: input.execution.id,
+      });
+      return decision;
+    } catch (error) {
+      await this.logger.warn('step-evidence-assessment-failed', { stepId: input.step.id, error: String(error) }, {
+        projectId: input.task.projectId,
+        conversationId: input.task.conversationId,
+        taskId: input.task.id,
+        executionId: input.execution.id,
+      });
+      return {
+        satisfied: false,
+        reason: 'Evidence evaluation failed; continue with the normal step loop.',
+        missing: input.accumulated?.missing ?? [],
+        facts: [],
+        findings: input.accumulated?.findings ?? [],
+        evidence: input.accumulated?.evidence ?? [],
+      };
+    }
+  }
 
   public async assessStepSatisfaction(input: {
     task: Task;
@@ -230,6 +369,19 @@ export class RecoveryController {
   private factKeys(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
     return value.map(String).map((item) => item.trim()).filter((item) => /^[a-z0-9][a-z0-9._-]{1,79}$/i.test(item)).slice(0, 8);
+  }
+
+  private truncateEvidenceData(value: unknown, maxChars: number): unknown {
+    if (typeof value === 'string') {
+      return value.length <= maxChars ? value : `${value.slice(0, maxChars)}\n...[truncated]`;
+    }
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized.length <= maxChars) return value;
+      return `${serialized.slice(0, maxChars)}...[truncated]`;
+    } catch {
+      return String(value).slice(0, maxChars);
+    }
   }
 
   private extractJson(content: string): string {

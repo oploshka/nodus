@@ -24,7 +24,7 @@ export interface ModelExecutionInput {
   conversation: Conversation;
   operation: OperationProfile;
   activeStep?: { id: string; type: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string };
-  stepContext?: { facts: Array<{ key: string; value: string; evidence: unknown[]; producerStepId: string }>; missingInputs: string[] };
+  stepContext?: { facts: Array<{ key: string; value: string; evidence: unknown[]; producerStepId: string }>; missingInputs: string[]; activeEvidence?: { findings: string[]; evidence: unknown[]; missing: string[] } };
 }
 
 export class ModelController {
@@ -89,7 +89,7 @@ export class ModelController {
               contextStrategy: input.operation.contextStrategy,
             },
             activeStep: input.activeStep,
-            stepContext: input.stepContext ?? { facts: [], missingInputs: [] },
+            stepContext: input.stepContext ?? { facts: [], missingInputs: [], activeEvidence: { findings: [], evidence: [], missing: [] } },
             stepIsolationRule: input.activeStep
               ? `Work ONLY on the active step goal: ${input.activeStep.goal}. Do not perform goals assigned to later plan steps.`
               : undefined,
@@ -400,6 +400,6 @@ Return ONLY valid JSON with this shape:
   },
   "data": {}
 }
-For search, understand, prepare-change, review, and verify, always return stepResult. For prepare-change, put every exact relative file to be edited/deleted in stepResult.targets. The activeStep declares inputs and outputs. Use only stepContext.facts as reusable results from prior semantic steps. When you establish an activeStep output, return it in stepResult.facts using EXACTLY one of activeStep.outputs as key. Set goalSatisfied=true when the ACTIVE step goal is satisfied or all declared outputs are established. Put only concrete unresolved evidence in missing. Do not work on later plan steps. When activeStep is supplied, leave nextOperation empty because PlanExecutor owns routing. When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
+For search, understand, prepare-change, review, and verify, always return stepResult. For prepare-change, put every exact relative file to be edited/deleted in stepResult.targets. The activeStep declares inputs and outputs. Use stepContext.facts as reusable results from prior semantic steps. stepContext.activeEvidence contains accumulated findings/evidence from earlier attempts of THIS step; use it instead of restarting the search from zero. When you establish an activeStep output, return it in stepResult.facts using EXACTLY one of activeStep.outputs as key. Set goalSatisfied=true when the ACTIVE step goal is satisfied or all declared outputs are established. Put only concrete unresolved evidence in missing. Do not work on later plan steps. When activeStep is supplied, leave nextOperation empty because PlanExecutor owns routing. When toolCalls is non-empty, use status=continue and leave changes, question, finalAnswer, and nextOperation empty so Nodus can return the tool results to you. When asking a human question, use status=waiting and leave nextOperation empty so the answer can return to the same operation. Use changes for project file edits. If another intellectual step is needed, set nextOperation. If the whole Task is done, use status=completed without nextOperation and put the complete answer for the human in finalAnswer. Keep message short.`;
   }
 }

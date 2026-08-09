@@ -181,6 +181,23 @@ ${this.paint('yellow', `↻ Восстановление шага ${stepIndex + 
     this.line(this.paint('yellow', `  Причина: ${reason}`));
   }
 
+  public evidenceCheck(goal: string, latestToolResults: number, accumulatedEvidence: number): void {
+    if (this.mode === 'quiet') return;
+    this.line(this.paint('dim', `    · проверяю результаты инструментов: новых ${latestToolResults}, накоплено evidence ${accumulatedEvidence}`));
+    if (this.mode === 'verbose') this.line(this.paint('dim', `      цель: ${goal}`));
+  }
+
+  public evidenceCheckResult(satisfied: boolean, reason: string, missing: string[], durationMs: number): void {
+    if (this.mode === 'quiet') return;
+    if (satisfied) {
+      this.line(this.paint('green', `    ✓ evidence достаточно · ${(durationMs / 1000).toFixed(1)} сек`));
+      this.line(this.paint('dim', `      ${reason}`));
+      return;
+    }
+    this.line(this.paint('yellow', `    · evidence пока недостаточно · ${(durationMs / 1000).toFixed(1)} сек`));
+    if (missing.length > 0) this.line(this.paint('dim', `      не хватает: ${missing.slice(0, 3).join('; ')}`));
+  }
+
   public semanticCheck(goal: string, factKeys: string[], recoveryBranch = false): void {
     if (this.mode === 'quiet') return;
     const prefix = recoveryBranch ? '  ↻' : '    ·';
