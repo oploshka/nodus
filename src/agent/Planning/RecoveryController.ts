@@ -210,7 +210,7 @@ export class RecoveryController {
         taskId: input.task.id,
         executionId: input.execution.id,
       });
-      return guarded;
+      return decision;
     } catch (error) {
       await this.logger.warn('step-evidence-assessment-failed', { stepId: input.step.id, error: String(error) }, {
         projectId: input.task.projectId,
@@ -314,7 +314,7 @@ export class RecoveryController {
         taskId: input.task.id,
         executionId: input.execution.id,
       });
-      return guarded;
+      return decision;
     } catch (error) {
       await this.logger.warn('step-satisfaction-assessment-failed', { stepId: input.step.id, error: String(error) }, {
         projectId: input.task.projectId,
