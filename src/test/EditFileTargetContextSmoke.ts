@@ -6,6 +6,8 @@ import { Conversation } from '@core/Conversation/Conversation';
 import { Execution } from '@core/Execution/Execution';
 import { Task } from '@core/Task/Task';
 import type { ToolCallRequest } from '@model/Result/OperationResult';
+import { EditFileRawProtocol } from '@model/Protocol/EditFileRawProtocol';
+import { DEFAULT_OPERATION_PROFILES } from '@operation/Default/DefaultOperationProfile';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -67,7 +69,6 @@ const executor = new PlanExecutor(
 
 const internals = executor as unknown as {
   ensureEditFileTargetContext(state: PlanExecutionState, step: PlanStep, context: Record<string, string>): Promise<void>;
-  filterEditFileToolCalls(state: PlanExecutionState, step: PlanStep, calls: ToolCallRequest[]): ToolCallRequest[];
 };
 const logContext = { projectId: 'test-project', conversationId: 'test-conversation', taskId: task.id, executionId: execution.id };
 
@@ -80,14 +81,15 @@ await internals.ensureEditFileTargetContext(state, step, logContext);
 assert(reads === 1, 'cached target content should be restored without another filesystem read');
 assert(execution.getToolContext().length === 1, 'cached target context should survive across edit attempts');
 
-const duplicate = internals.filterEditFileToolCalls(state, step, [{
-  tool: 'file-system',
-  input: { action: 'read', path: 'src/cli/Cli.ts' },
-}]);
-assert(duplicate.length === 0, 'duplicate target read requested by model must be suppressed');
+const editProfile = DEFAULT_OPERATION_PROFILES.find((profile) => profile.id === 'edit-file');
+assert(editProfile, 'edit-file profile missing');
+assert(editProfile.prompt.rules?.some((rule) => rule.includes('Do not request tools')), 'edit-file profile must explicitly forbid tool calls');
+const rawInstructions = new EditFileRawProtocol().instructions('src/cli/Cli.ts');
+assert(!rawInstructions.includes('TOOL <tool id>'), 'edit-file RAW instructions must not advertise a tool-call branch');
+assert(rawInstructions.includes('preloads the complete authoritative target source'), 'RAW protocol must state that target source is preloaded');
 
 console.log('## Edit-file target context smoke test');
 console.log('target source preloaded before model call: OK');
 console.log('target source restored across attempts without reread: OK');
-console.log('duplicate target read suppressed: OK');
+console.log('edit-file protocol no longer advertises tools: OK');
 console.log('PASS: edit-file receives persistent target source and cannot loop on the same read.');

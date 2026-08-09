@@ -10,12 +10,22 @@ import type { Task } from '@core/Task/Task';
 import type { ContextSelector } from '@context/Selector/ContextSelector';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { ModelRequest } from '@model/Request/ModelRequest';
-import type { OperationResult, StepResult } from '@model/Result/OperationResult';
+import type { OperationResult, StepEvidenceItem, StepResult } from '@model/Result/OperationResult';
 import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import type { ToolRegistry } from '@tool/Registry/ToolRegistry';
 import { composePrompt } from '@model/Prompt/PromptComposer';
+import {
+  activeEvidenceMessage,
+  activeStepMessage,
+  factsMessage,
+  knowledgeMessage,
+  projectMessage,
+  taskMessage,
+  toolResultMessages,
+  userMessage,
+} from '@model/Prompt/ModelInputComposer';
 import { OPERATION_RESULT_RETURN_FORMAT } from '@model/Protocol/OperationResultProtocol';
 import { EditFileRawProtocol } from '@model/Protocol/EditFileRawProtocol';
 
@@ -25,7 +35,7 @@ export interface ModelExecutionInput {
   conversation: Conversation;
   operation: OperationProfile;
   activeStep?: { id: string; type: string; action?: string; subject?: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string };
-  stepContext?: { facts: Array<{ key: string; value: string; evidence: unknown[]; producerStepId: string }>; missingInputs: string[]; activeEvidence?: { findings: string[]; evidence: unknown[]; missing: string[] } };
+  stepContext?: { facts: Array<{ key: string; value: string; evidence: StepEvidenceItem[]; producerStepId: string }>; missingInputs: string[]; activeEvidence?: { findings: string[]; evidence: StepEvidenceItem[]; missing: string[] } };
 }
 
 export class ModelController {
@@ -65,50 +75,7 @@ export class ModelController {
       model: this.configuration.model,
       temperature: input.operation.model.temperature ?? this.configuration.temperature,
       maxTokens: input.operation.model.maxTokens ?? this.configuration.maxTokens,
-      messages: [
-        {
-          role: 'system',
-          content: composePrompt(prompt, { returnFormat: responseProtocol }),
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            language: {
-              response: responseLanguage,
-              internal: this.agentConfiguration.internalLanguage,
-              instruction: `Write all user-facing text in ${responseLanguage}. Do not switch language because of source files or model defaults.`,
-            },
-            task: {
-              id: input.task.id,
-              description: input.task.description,
-              context: input.task.context,
-            },
-            operation: {
-              id: input.operation.id,
-              description: input.operation.description,
-              contextStrategy: input.operation.execution.contextStrategy,
-            },
-            activeStep: input.activeStep,
-            stepContext: input.stepContext ?? { facts: [], missingInputs: [], activeEvidence: { findings: [], evidence: [], missing: [] } },
-            stepIsolationRule: input.activeStep
-              ? `Work ONLY on activeStep.action for activeStep.subject. The action/subject contract is authoritative; the human-readable goal is descriptive only.`
-              : undefined,
-            policies: context.policies,
-            knowledge: context.knowledge,
-            conversation: input.activeStep ? [] : context.conversation,
-            executionHistory: input.activeStep ? [] : context.executionHistory,
-            toolContext: context.toolContext,
-            project: context.project,
-            availableOperations: input.activeStep ? [] : this.operationRegistry.list().map(({ id, description }) => ({ id, description })),
-            availableTools: this.availableToolsFor(input.operation.id),
-            responseProtocolReminder: input.operation.id === 'edit-file'
-              ? 'Use the edit-file raw protocol from the system message. Edit exactly activeStep.targetPath. Do not return JSON for a completed file write.'
-              : input.activeStep
-                ? 'Respond with one OperationResult JSON object only. Work only on activeStep. Leave nextOperation empty because PlanExecutor owns routing.'
-                : 'Respond with one OperationResult JSON object only. The top-level object MUST contain status. Do not return an execution event, tool-result event, transcript entry, or copied context object.',
-          }, null, 2),
-        },
-      ],
+      messages: this.composeRequestMessages(input, context, responseLanguage, responseProtocol),
     };
 
     const logContext = {
@@ -185,6 +152,72 @@ export class ModelController {
     return result;
   }
 
+  private composeRequestMessages(
+    input: ModelExecutionInput,
+    context: ReturnType<ContextSelector['select']>,
+    responseLanguage: string,
+    responseProtocol: string,
+  ): ModelRequest['messages'] {
+    const messages: ModelRequest['messages'] = [
+      {
+        role: 'system',
+        content: composePrompt(input.operation.prompt, { returnFormat: responseProtocol }),
+      },
+      taskMessage(input.task.description, input.task.context),
+    ];
+
+    if (input.activeStep) {
+      messages.push(activeStepMessage(input.activeStep, responseLanguage));
+      const factBlock = factsMessage(input.stepContext?.facts ?? []);
+      if (factBlock) messages.push(factBlock);
+      const evidenceBlock = activeEvidenceMessage(input.stepContext?.activeEvidence);
+      if (evidenceBlock) messages.push(evidenceBlock);
+    } else {
+      messages.push(userMessage('Operation:', `${input.operation.id} — ${input.operation.description}
+Response language: ${responseLanguage}`));
+    }
+
+    const projectBlock = projectMessage(context.project);
+    if (projectBlock) messages.push(projectBlock);
+    const policyBlock = knowledgeMessage('Policies', context.policies);
+    if (policyBlock) messages.push(policyBlock);
+    const knowledgeBlock = knowledgeMessage('Project knowledge', context.knowledge);
+    if (knowledgeBlock) messages.push(knowledgeBlock);
+
+    if (!input.activeStep) {
+      if (context.conversation.length > 0) {
+        messages.push(userMessage('Recent conversation:', context.conversation.map((entry) => `- ${entry.description}${entry.result ? ` → ${entry.result}` : ''}`).join('\n')));
+      }
+      if (context.executionHistory.length > 0) {
+        messages.push(userMessage('Recent execution state:', context.executionHistory.slice(-8).map((event) => `- ${event.type}`).join('\n')));
+      }
+      const operations = this.operationRegistry.list().map(({ id, description }) => `- ${id}: ${description}`);
+      if (operations.length > 0) messages.push(userMessage('Available operations:', operations.join('\n')));
+    }
+
+    const tools = this.availableToolsFor(input.operation.id);
+    if (tools.length > 0) {
+      messages.push(userMessage('Available tools:', tools.map((tool) => `- ${tool.id}: ${tool.description}`).join('\n')));
+    }
+
+    // Full source text is never copied from reusable facts. It appears only as transient
+    // source context: after an explicit understand read, or as the runtime-preloaded target
+    // for edit-file.
+    messages.push(...toolResultMessages(
+      context.toolContext,
+      input.operation.id === 'edit-file' ? input.activeStep?.targetPath : undefined,
+    ));
+    messages.push(userMessage(
+      'Instruction:',
+      input.operation.id === 'edit-file' && input.activeStep
+        ? `Edit the supplied authoritative target source ${input.activeStep.targetPath ?? ''} now. Do not request tools. Return the completed edit-file RAW protocol response.`
+        : input.activeStep
+          ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. Use the output protocol from the system message.`
+          : 'Perform the requested operation now using the supplied context and the output protocol from the system message.',
+    ));
+    return messages;
+  }
+
   private resolveResponseLanguage(description: string): string {
     if (this.agentConfiguration.responseLanguage !== 'auto') {
       return this.agentConfiguration.responseLanguage;
@@ -212,10 +245,19 @@ export class ModelController {
   }
 
   private availableToolsFor(operationId: string) {
-    if (operationId === 'plan' || operationId === 'finalize') {
+    if (operationId === 'plan' || operationId === 'finalize' || operationId === 'prepare-change' || operationId === 'edit-file') {
       return [];
     }
-    return this.toolRegistry.definitions();
+    const definitions = this.toolRegistry.definitions();
+    if (operationId === 'search') {
+      return definitions.filter((tool) => tool.id === 'search' || tool.id === 'file-system');
+    }
+    if (operationId === 'understand') {
+      // Search locates candidates. Understand may read already-known files, but it must
+      // not reopen broad project discovery under a semantic step.
+      return definitions.filter((tool) => tool.id === 'file-system');
+    }
+    return definitions;
   }
 
   private async parseOrRepairOperationResult(

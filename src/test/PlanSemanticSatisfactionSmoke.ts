@@ -10,7 +10,7 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-const task = new Task({ projectId: 'test-project', conversationId: 'test-conversation', description: 'test semantic satisfaction' });
+const task = new Task({ projectId: 'test-project', conversationId: 'test-conversation', description: 'test deterministic recovery pruning' });
 const conversation = new Conversation('test-project', 'test-conversation');
 const execution = new Execution(task.id);
 execution.status = 'running';
@@ -32,10 +32,10 @@ const plan: TaskPlan = {
     {
       id: 'parent-search',
       type: 'search',
-      goal: 'Find examples or the registration pattern required to add a CLI command',
+      goal: 'Find the command example required to add a CLI command',
       status: 'pending',
       maxAttempts: 1,
-      inputs: ['cli.commandRegistrationPattern'],
+      inputs: [],
       outputs: ['cli.commandExample'],
     },
   ],
@@ -43,46 +43,38 @@ const plan: TaskPlan = {
 
 const executionContext = new ExecutionContext();
 executionContext.mergeStepResult({
-  id: 'recovery-analysis',
-  type: 'understand',
-  goal: 'Analyze Cli.ts',
+  id: 'recovery-result',
+  type: 'search',
+  goal: 'Find CLI command example',
   status: 'completed',
   maxAttempts: 1,
   inputs: [],
-  outputs: ['cli.commandRegistrationPattern'],
+  outputs: ['cli.commandExample'],
 }, {
   goalSatisfied: true,
-  findings: ['Commands are added to COMMANDS and handled by if branches in runCli.'],
-  evidence: [{ path: 'src/cli/Cli.ts', symbol: 'runCli', fact: 'Existing commands use direct if handlers.' }],
+  findings: ['Existing command example located.'],
+  evidence: [{ path: 'src/cli/Cli.ts', symbol: 'runCli', fact: 'COMMANDS item + inline handler.' }],
   missing: [],
-  facts: [{ key: 'cli.commandRegistrationPattern', value: 'Add an item to COMMANDS and an if handler in runCli.', evidence: [] }],
+  facts: [{ key: 'cli.commandExample', value: 'COMMANDS item + inline handler in runCli.', evidence: [] }],
 });
 
 let satisfactionCalls = 0;
 const reporterEvents: string[] = [];
 const executor = new PlanExecutor(
   {} as never,
-  { execute: async () => { throw new Error('normal model call must not run'); } } as never,
+  {} as never,
   {} as never,
   {} as never,
   {} as never,
   {
     assessStepSatisfaction: async () => {
       satisfactionCalls += 1;
-      return {
-        satisfied: true,
-        reason: 'Existing registration pattern already supplies the requested example.',
-        missing: [],
-        facts: [{ key: 'cli.commandExample', value: 'COMMANDS item + if branch in runCli.' }],
-      };
+      throw new Error('recovery pruning must not call semantic satisfaction');
     },
   } as never,
-  { insertBefore() {}, markPendingFrom() {} } as never,
+  {} as never,
   { info: async () => {}, error: async () => {}, warn: async () => {} } as never,
   {
-    semanticCheck() {},
-    semanticCheckResult() {},
-    factsMerged(keys: string[]) { reporterEvents.push(`facts:${keys.join(',')}`); },
     recoveryPruned(_goal: string, count: number) { reporterEvents.push(`pruned:${count}`); },
   } as never,
 );
@@ -107,14 +99,13 @@ const pruned = await (executor as unknown as {
   tryPruneRecoveryBranch(state: PlanExecutionState, parentStepId: string): Promise<boolean>;
 }).tryPruneRecoveryBranch(state, 'parent-search');
 
-assert(pruned, 'recovery branch should be pruned when known facts satisfy parent goal');
-assert(satisfactionCalls === 1, `expected one small semantic check, got ${satisfactionCalls}`);
+assert(pruned, 'recovery branch should be pruned when the exact parent output already exists');
+assert(satisfactionCalls === 0, `semantic satisfaction must not run, got ${satisfactionCalls}`);
 assert(plan.steps[0].status === 'completed', 'redundant recovery sibling should be marked completed');
-assert(executionContext.has('cli.commandExample'), 'semantic check must publish the exact parent output');
 assert(reporterEvents.includes('pruned:1'), 'recovery pruning should be reported');
 
-console.log('## Plan semantic satisfaction smoke test');
-console.log('semantic gate derives exact parent output: OK');
+console.log('## Deterministic recovery pruning smoke test');
+console.log('exact parent output detected without model call: OK');
 console.log('redundant recovery sibling pruned: OK');
-console.log('normal operation model call avoided: OK');
-console.log('PASS: recovery branches are re-evaluated against accumulated facts.');
+console.log('semantic satisfaction evaluator not used: OK');
+console.log('PASS: recovery pruning follows exact postconditions instead of semantic reinterpretation.');

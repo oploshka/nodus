@@ -6,6 +6,15 @@ import type { Task } from '@core/Task/Task';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { ModelCallProfile } from '@model/Profile/ModelCallProfile';
 import { composePrompt } from '@model/Prompt/PromptComposer';
+import {
+  activeEvidenceMessage,
+  activeStepMessage,
+  compactEvidence,
+  factsMessage,
+  taskMessage,
+  toolResultMessages,
+  userMessage,
+} from '@model/Prompt/ModelInputComposer';
 import type { ModelRequest } from '@model/Request/ModelRequest';
 import type { StepEvidenceItem, StepResult } from '@model/Result/OperationResult';
 import type { ExecutionFact } from '@agent/Planning/ExecutionContext';
@@ -14,13 +23,13 @@ import type { StepRegistry } from '@agent/Planning/StepRegistry';
 
 const STEP_EVIDENCE_PROFILE: ModelCallProfile = {
   prompt: {
-    purpose: 'Interpret accumulated evidence against the exact active step contract.',
+    purpose: 'Interpret explicitly requested evidence for the active understand contract.',
     rules: [
-      'Use contract.action + contract.subject + contract.outputs as the complete success criterion.',
-      'For search, judge only whether the requested files, symbols, definitions, usages, references, or examples were located.',
-      'A concrete located property, method, receiver chain, file, symbol, or occurrence is valid evidence when it directly answers the declared subject.',
-      'Use only supplied indexed paths, accumulated evidence, known facts, and latest tool results.',
-      'If sufficient, emit every requested output key. If insufficient, return only the smallest retrieval detail still needed for the declared action and subject.',
+      'Use action + subject + outputs as the complete success criterion.',
+      'Combine known facts, compact evidence, and the latest explicitly requested tool result.',
+      'A concrete property, method, receiver chain, file, symbol, or occurrence is valid evidence when it directly answers the declared subject.',
+      'Do not demand a special getter or API when an evidenced direct access path already answers the subject.',
+      'If sufficient, emit every requested output key. If insufficient, return only the smallest concrete missing input.',
     ],
   },
   model: { temperature: 0, maxTokens: 512 },
@@ -126,39 +135,27 @@ export class RecoveryController {
           content: composePrompt(STEP_EVIDENCE_PROFILE.prompt, {
             rules: [
               `The active operation type is ${input.step.type}.`,
-              input.step.type === 'search'
-                ? 'SEARCH is evidence-driven: require concrete located project evidence for the requested outputs.'
-                : 'UNDERSTAND is derivational: combine supplied known facts/evidence; do not demand another read merely to reconfirm them.',
-              'Use accumulated findings/evidence, reusable known facts, and the latest tool results together.',
-              input.step.type === 'search'
-                ? 'Evidence paths/symbols must be directly supported by supplied tool results or accumulated evidence.'
-                : 'For derived understanding, evidence may be inherited from supplied known facts and accumulated evidence.',
+              'UNDERSTAND is derivational: combine supplied known facts/evidence and the latest requested source; do not reopen broad search.',
+              'For derived understanding, evidence may be inherited from supplied known facts and accumulated evidence.',
             ],
             returnFormat: 'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"findings":["..."],"evidence":[{"path":"optional","symbol":"optional","fact":"supported fact"}],"facts":[{"key":"exact output key","value":"compact reusable value"}]}',
           }),
         },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            contract: {
-              type: input.step.type,
-              action: input.step.action,
-              subject: input.step.subject,
-              outputs: input.step.outputs,
-            },
-            accumulated: input.accumulated ? {
-              findings: input.accumulated.findings,
-              evidence: input.accumulated.evidence,
-              missing: input.accumulated.missing,
-            } : undefined,
-            knownFacts: input.knownFacts.map((fact) => ({
-              key: fact.key,
-              value: fact.value,
-              evidence: fact.evidence,
-            })),
-            latestToolResults: compactToolContext,
-          }),
-        },
+        taskMessage(input.task.description, input.task.context),
+        activeStepMessage({
+          id: input.step.id,
+          type: input.step.type,
+          action: input.step.action,
+          subject: input.step.subject,
+          outputs: input.step.outputs,
+        }),
+        ...this.optionalMessage(factsMessage(input.knownFacts)),
+        ...this.optionalMessage(activeEvidenceMessage(input.accumulated ? {
+          findings: input.accumulated.findings,
+          evidence: input.accumulated.evidence,
+          missing: input.accumulated.missing,
+        } : undefined)),
+        ...toolResultMessages(compactToolContext),
       ],
     };
 
@@ -258,28 +255,20 @@ export class RecoveryController {
             returnFormat: 'Return ONLY JSON: {"satisfied":true|false,"reason":"short reason","missing":["..."],"facts":[{"key":"exact output key","value":"compact derived value"}]}',
           }),
         },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            contract: {
-              type: input.step.type,
-              action: input.step.action,
-              subject: input.step.subject,
-              outputs: input.step.outputs,
-            },
-            knownFacts: input.facts.map((fact) => ({
-              key: fact.key,
-              value: fact.value,
-              evidence: fact.evidence,
-              producerStepId: fact.producerStepId,
-            })),
-            accumulatedUnderstanding: input.accumulated ? {
-              findings: input.accumulated.findings,
-              evidence: input.accumulated.evidence,
-              missing: input.accumulated.missing,
-            } : undefined,
-          }),
-        },
+        taskMessage(input.task.description, input.task.context),
+        activeStepMessage({
+          id: input.step.id,
+          type: input.step.type,
+          action: input.step.action,
+          subject: input.step.subject,
+          outputs: input.step.outputs,
+        }),
+        ...this.optionalMessage(factsMessage(input.facts)),
+        ...this.optionalMessage(activeEvidenceMessage(input.accumulated ? {
+          findings: input.accumulated.findings,
+          evidence: input.accumulated.evidence,
+          missing: input.accumulated.missing,
+        } : undefined)),
       ],
     };
 
@@ -420,7 +409,7 @@ export class RecoveryController {
     humanHint?: string;
     currentStepResult?: StepResult;
     completedStepEvidence?: unknown[];
-    executionFacts?: unknown[];
+    executionFacts?: ExecutionFact[];
     previousRecoveryGoals?: string[];
   }): Promise<RecoveryDecision> {
     const currentStep = input.plan.steps[input.stepIndex];
@@ -433,27 +422,19 @@ export class RecoveryController {
           role: 'system',
           content: composePrompt(RECOVER_PLAN_PROFILE.prompt, { returnFormat: this.protocol() }),
         },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            task: input.task.description,
-            currentStep,
-            reason: input.reason,
-            humanHint: input.humanHint,
-            currentStepResult: input.currentStepResult,
-            completedStepEvidence: input.completedStepEvidence ?? [],
-            executionFacts: input.executionFacts ?? [],
-            previousRecoveryGoals: input.previousRecoveryGoals ?? [],
-            plan: input.plan.steps.map((step, index) => ({ index, type: step.type, action: step.action, subject: step.subject, status: step.status })),
-            recentExecution: input.execution.history.slice(-12),
-            availableSteps: this.stepRegistry.listForPlanner().map((definition) => ({
-              type: definition.type,
-              description: definition.description,
-              maxAttempts: definition.maxAttempts,
-              actions: definition.actions.map((action) => ({ id: action.id, description: action.description })),
-            })),
-          }, null, 2),
-        },
+        taskMessage(input.task.description, input.task.context),
+        activeStepMessage({
+          id: currentStep?.id ?? 'unknown',
+          type: currentStep?.type ?? 'unknown',
+          action: currentStep?.action,
+          subject: currentStep?.subject,
+          outputs: currentStep?.outputs ?? [],
+        }),
+        userMessage('Recovery reason:', [input.reason, input.humanHint ? `Human hint: ${input.humanHint}` : ''].filter(Boolean).join('\n')),
+        ...this.optionalMessage(factsMessage(input.executionFacts ?? [])),
+        ...this.recoveryEvidenceMessages(input.completedStepEvidence ?? []),
+        userMessage('Current plan:', input.plan.steps.map((step, index) => `- ${index + 1}. ${step.type}/${step.action ?? ''} — ${step.subject ?? step.goal} [${step.status}]`).join('\n')),
+        userMessage('Available recovery steps:', this.stepRegistry.listForPlanner().map((definition) => `- ${definition.type}: ${definition.actions.map((action) => action.id).join(' | ')}; max ${definition.maxAttempts}`).join('\n')),
       ],
     };
 
@@ -476,6 +457,28 @@ export class RecoveryController {
       });
       return { action: 'request-human', reason: `Recovery failed: ${String(error)}`, steps: [] };
     }
+  }
+
+  private optionalMessage(message: ModelRequest['messages'][number] | undefined): ModelRequest['messages'] {
+    return message ? [message] : [];
+  }
+
+  private recoveryEvidenceMessages(values: unknown[]): ModelRequest['messages'] {
+    const lines: string[] = [];
+    for (const value of values.slice(-8)) {
+      if (!value || typeof value !== 'object') continue;
+      const entry = value as { stepId?: unknown; type?: unknown; goal?: unknown; findings?: unknown; evidence?: unknown };
+      const heading = [entry.stepId, entry.type].filter((item) => typeof item === 'string').join('/');
+      if (heading) lines.push(`- ${heading}: ${typeof entry.goal === 'string' ? entry.goal : ''}`.trim());
+      if (Array.isArray(entry.findings)) {
+        for (const finding of entry.findings.slice(0, 3)) lines.push(`  finding: ${String(finding).slice(0, 320)}`);
+      }
+      if (Array.isArray(entry.evidence)) {
+        const evidence = entry.evidence.filter((item): item is StepEvidenceItem => Boolean(item && typeof item === 'object' && typeof (item as StepEvidenceItem).fact === 'string'));
+        for (const line of compactEvidence(evidence, 5)) lines.push(`  ${line}`);
+      }
+    }
+    return lines.length > 0 ? [userMessage('Completed-step evidence:', lines.join('\n'))] : [];
   }
 
   private parse(content: string): RecoveryDecision {

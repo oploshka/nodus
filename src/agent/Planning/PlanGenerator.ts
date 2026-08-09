@@ -5,6 +5,7 @@ import type { Task } from '@core/Task/Task';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import type { ModelCallProfile } from '@model/Profile/ModelCallProfile';
 import { composePrompt } from '@model/Prompt/PromptComposer';
+import { taskMessage, userMessage } from '@model/Prompt/ModelInputComposer';
 import type { ModelRequest } from '@model/Request/ModelRequest';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import type { PlanStepAction, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
@@ -15,6 +16,7 @@ const TASK_PLAN_PROFILE: ModelCallProfile = {
     purpose: 'Create a compact executable plan by selecting only declared step types and actions.',
     rules: [
       'Plan the whole task using the smallest useful number of steps.',
+      'Combine related retrieval needs into one search step when they can reasonably be found in the same project area or tool round.',
       'For every step choose exactly one allowed action for that step type and give it one concrete subject.',
       'Treat type + action + subject as the semantic contract of the step. Do not invent a broader free-form operation.',
       'Use the supplied project index only as orientation. Do not invent files, directories, APIs, or service layers.',
@@ -57,26 +59,14 @@ export class PlanGenerator {
           role: 'system',
           content: composePrompt(TASK_PLAN_PROFILE.prompt, { returnFormat: this.protocol() }),
         },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            task: task.description,
-            taskContext: task.context,
-            project: {
-              id: this.projectSession.projectId,
-              files: this.projectSession.index?.files.map((file) => file.path) ?? [],
-            },
-            availableSteps: this.stepRegistry.listForPlanner().map((definition) => ({
-              type: definition.type,
-              description: definition.description,
-              maxAttempts: definition.maxAttempts,
-              actions: definition.actions.map((action) => ({
-                id: action.id,
-                description: action.description,
-              })),
-            })),
-          }, null, 2),
-        },
+        taskMessage(task.description, task.context),
+        userMessage('Project candidates:', [
+          `Project ID: ${this.projectSession.projectId}`,
+          ...this.plannerCandidateFiles(task.description).map((file) => `- ${file}`),
+        ].join('\n')),
+        userMessage('Attempt limits:', this.stepRegistry.listForPlanner()
+          .map((definition) => `- ${definition.type}: ${definition.maxAttempts}`)
+          .join('\n')),
       ],
     };
 
@@ -201,6 +191,35 @@ export class PlanGenerator {
       .map((item) => item.trim())
       .filter((item) => /^[a-z0-9][a-z0-9._-]{1,79}$/i.test(item))
       .slice(0, 8);
+  }
+
+  private plannerCandidateFiles(description: string): string[] {
+    const files = this.projectSession.index?.files.map((file) => file.path) ?? [];
+    if (files.length <= 16) return files;
+
+    const lower = description.toLowerCase();
+    const expanded = new Set(
+      lower.replace(/[^a-zа-яё0-9._/-]+/gi, ' ')
+        .split(/\s+/)
+        .map((token) => token.replace(/^\/+|\/+$/g, ''))
+        .filter((token) => token.length >= 3),
+    );
+    if (lower.includes('cli') || lower.includes('команд')) for (const token of ['cli', 'command']) expanded.add(token);
+    if (lower.includes('project') || lower.includes('проект')) for (const token of ['project', 'configuration', 'nodus']) expanded.add(token);
+    if (lower.includes('conversation') || lower.includes('диалог')) expanded.add('conversation');
+    if (lower.includes('index') || lower.includes('индекс')) for (const token of ['index', 'projectsession']) expanded.add(token);
+    if (lower.includes('status')) for (const token of ['cli', 'projectsession', 'conversation', 'index']) expanded.add(token);
+
+    const ranked = files.map((path) => {
+      const normalized = path.toLowerCase();
+      let score = 0;
+      for (const token of expanded) if (normalized.includes(token)) score += token.length >= 6 ? 3 : 2;
+      if (normalized.includes('/test/') || normalized.includes('benchmark') || normalized.includes('/doc/')) score -= 4;
+      return { path, score };
+    }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+
+    const selected = ranked.slice(0, 16).map((item) => item.path);
+    return selected.length > 0 ? selected : files.slice(0, 16);
   }
 
   private resolveLanguage(description: string): 'ru' | 'en' {

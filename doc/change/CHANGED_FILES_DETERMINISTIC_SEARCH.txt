@@ -1,0 +1,19 @@
+Deterministic search simplification
+
+- src/agent/Planning/PlanExecutor.ts
+  Search actions no longer call the semantic EvidenceEvaluator. A search tool round completes deterministically when it returns concrete retrieval results; empty results remain retryable. Search outputs are published directly from normalized tool evidence. Semantic satisfaction is now limited to understand steps.
+
+- src/operation/Default/DefaultOperationProfile.ts
+  Search prompt now states that search only chooses retrieval tool calls and that concrete results complete the action without semantic sufficiency checks.
+
+- src/agent/Planning/PlanGenerator.ts
+  Planner payload is reduced: sends candidate files instead of the full project file list, sends compact attempt limits instead of repeated step/action descriptions, and asks the planner to combine related retrieval needs where practical.
+
+- src/test/SearchDeterministicCompletionSmoke.ts
+  Regression test for binary search completion: concrete result => success, empty result => retry, no semantic evaluator.
+
+- src/test/StepEvidenceEvaluatorSmoke.ts
+  Evidence evaluator smoke is now scoped to understand, where semantic interpretation is still appropriate.
+
+- package.json
+  Added test:search:deterministic.

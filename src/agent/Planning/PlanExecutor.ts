@@ -5,7 +5,7 @@ import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import type { PlanUpdater } from '@agent/Planning/PlanUpdater';
 import type { RecoveryController, RecoveryDecision } from '@agent/Planning/RecoveryController';
 import type { PlanStep, TaskPlan } from '@agent/Planning/TaskPlan';
-import { ExecutionContext, type ExecutionFact } from '@agent/Planning/ExecutionContext';
+import { ExecutionContext } from '@agent/Planning/ExecutionContext';
 import { ContextComposer } from '@agent/Planning/ContextComposer';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { Conversation } from '@core/Conversation/Conversation';
@@ -31,7 +31,6 @@ export interface PlanExecutionState {
   recoveryGoals: Set<string>;
   stepProgress?: Map<string, string[]>;
   editFileToolContext?: Map<string, ToolContextEntry[]>;
-  stepToolCallSignatures?: Map<string, Set<string>>;
   resumes: number;
   startedAt: number;
   pauseReason?: string;
@@ -88,9 +87,6 @@ export class PlanExecutor {
       }
 
       const composed = this.contextComposer.compose(state.executionContext, step);
-      if (await this.trySemanticSatisfaction(state, step, composed.facts)) {
-        continue;
-      }
 
       if (composed.missingInputs.length > 0) {
         const blocked: StepResult = {
@@ -208,25 +204,37 @@ export class PlanExecutor {
       }
 
       if (result.toolCalls.length > 0) {
-        const toolCalls = step.type === 'edit-file'
-          ? this.filterEditFileToolCalls(state, step, result.toolCalls)
-          : result.toolCalls;
-
-        if (step.type === 'edit-file' && toolCalls.length === 0) {
-          state.retryReason = `целевой файл ${step.targetPath ?? ''} уже предоставлен модели; повторное чтение пропущено`;
+        if (step.type === 'edit-file') {
+          // edit-file is intentionally tool-free. The runtime already preloads the exact
+          // target source and prepare-change supplies the required logical facts. A tool
+          // request here is therefore protocol drift, not a reason to start another read loop.
+          state.retryReason = `целевой файл ${step.targetPath ?? ''} уже предоставлен модели; edit-file не выполняет инструменты`;
           continue;
         }
 
-        const summary = await this.toolExecutor.execute(toolCalls, state.execution, context);
+        const toolCalls = result.toolCalls;
+        const summary = step.type === 'understand'
+          ? await this.toolExecutor.execute(toolCalls, state.execution, context, 3)
+          : await this.toolExecutor.execute(toolCalls, state.execution, context);
         this.reporter.tools(summary.executed);
-        if (step.type === 'edit-file') this.rememberEditFileToolContext(state, step, toolCalls);
 
-        // Search/understand no longer decide completion by themselves after a tool round.
-        // A dedicated evaluator sees the accumulated evidence + the latest raw tool results
-        // and decides the step postcondition before another expensive search attempt is allowed.
-        if (step.type === 'search' || step.type === 'understand') {
-          const evaluated = await this.evaluateToolRound(state, step);
-          if (evaluated) continue;
+        // Search is retrieval, not interpretation. Its whitelisted action has a deterministic
+        // completion rule: concrete results => success, no concrete results => retry.
+        // Semantic sufficiency belongs to later understand/prepare-change steps.
+        if (step.type === 'search') {
+          const completed = this.completeSearchToolRound(state, step);
+          if (completed) continue;
+          state.retryReason = 'поиск не вернул конкретных результатов; повторяю с уточнённым запросом';
+          continue;
+        }
+
+        // Understand owns semantic interpretation itself. Tool results are preserved
+        // as compact evidence and the raw requested source is sent directly into the next
+        // understand model call. No second LLM evaluator is inserted between read -> model.
+        if (step.type === 'understand') {
+          this.recordUnderstandToolRound(state, step);
+          state.retryReason = `получены запрошенные данные (${summary.executed} инструментов)`;
+          continue;
         }
 
         const currentResult = state.stepResults.get(step.id);
@@ -478,47 +486,6 @@ export class PlanExecutor {
     this.reporter.tools(summary.executed);
     const entries = state.execution.getToolContext();
     if (entries.length > 0) cache.set(step.id, entries);
-    this.rememberToolCallSignature(state, step.id, call);
-  }
-
-  private filterEditFileToolCalls(
-    state: PlanExecutionState,
-    step: PlanStep,
-    calls: OperationResult['toolCalls'],
-  ): OperationResult['toolCalls'] {
-    const seen = state.stepToolCallSignatures ?? (state.stepToolCallSignatures = new Map());
-    const signatures = seen.get(step.id) ?? new Set<string>();
-    const fresh = calls.filter((call) => {
-      const signature = this.toolCallSignature(call);
-      if (signatures.has(signature)) return false;
-      signatures.add(signature);
-      return true;
-    });
-    seen.set(step.id, signatures);
-    return fresh;
-  }
-
-  private rememberEditFileToolContext(
-    state: PlanExecutionState,
-    step: PlanStep,
-    calls: OperationResult['toolCalls'],
-  ): void {
-    for (const call of calls) this.rememberToolCallSignature(state, step.id, call);
-    const entries = state.execution.getToolContext();
-    if (entries.length === 0) return;
-    const cache = state.editFileToolContext ?? (state.editFileToolContext = new Map());
-    const previous = cache.get(step.id) ?? [];
-    const merged = [...previous, ...entries].filter((entry, index, all) => (
-      all.findIndex((candidate) => this.toolCallSignature(candidate.call) === this.toolCallSignature(entry.call)) === index
-    ));
-    cache.set(step.id, merged.slice(0, 3));
-  }
-
-  private rememberToolCallSignature(state: PlanExecutionState, stepId: string, call: OperationResult['toolCalls'][number]): void {
-    const map = state.stepToolCallSignatures ?? (state.stepToolCallSignatures = new Map());
-    const signatures = map.get(stepId) ?? new Set<string>();
-    signatures.add(this.toolCallSignature(call));
-    map.set(stepId, signatures);
   }
 
   private toolCallSignature(call: OperationResult['toolCalls'][number]): string {
@@ -530,67 +497,93 @@ export class PlanExecutor {
     return `${call.tool}:${JSON.stringify(normalized)}`;
   }
 
-  private async evaluateToolRound(state: PlanExecutionState, step: PlanStep): Promise<boolean> {
+  private completeSearchToolRound(state: PlanExecutionState, step: PlanStep): boolean {
     const toolContext = state.execution.getToolContext();
     if (toolContext.length === 0) return false;
 
-    // Persist concrete tool evidence BEFORE asking the LLM evaluator what it means.
-    // Previously an unsatisfied evaluator response could return evidence: [], which meant
-    // the next attempt effectively forgot the successful tool round and displayed
-    // "accumulated evidence 0" forever. Raw payloads are short-lived, normalized
-    // evidence is the durable representation carried between attempts.
     const previous = state.stepResults.get(step.id);
     const normalizedEvidence = this.normalizeToolEvidence(toolContext);
+    const hasConcreteResult = this.searchActionHasConcreteResult(step, toolContext);
+    const round: StepResult = {
+      goalSatisfied: hasConcreteResult,
+      findings: hasConcreteResult
+        ? [`Search action ${step.action ?? 'search'} returned concrete project results.`]
+        : [],
+      evidence: normalizedEvidence,
+      missing: hasConcreteResult ? [] : [step.subject ?? step.goal],
+      facts: hasConcreteResult
+        ? step.outputs.map((key) => ({
+            key,
+            value: this.searchResultValue(step, normalizedEvidence),
+            evidence: normalizedEvidence,
+          }))
+        : [],
+    };
+    const merged = this.mergeStepResults(previous, round);
+    state.stepResults.set(step.id, merged);
+
+    if (!hasConcreteResult) {
+      this.recordStepProgress(state, step.id, merged);
+      return false;
+    }
+
+    const mergedKeys = state.executionContext.mergeStepResult(step, merged);
+    this.reporter.factsMerged(mergedKeys);
+    this.reporter.stepResult(merged);
+    state.execution.setToolContext([], 0);
+    this.completeStep(state, step, 'deterministic-search-result');
+    return true;
+  }
+
+  private searchActionHasConcreteResult(step: PlanStep, toolContext: ToolContextEntry[]): boolean {
+    const useful = toolContext.filter((entry) => {
+      if (!entry.result.ok) return false;
+      const data = entry.result.data;
+      if (Array.isArray(data)) return data.length > 0;
+      if (typeof data === 'string') return data.trim().length > 0;
+      if (data && typeof data === 'object') return Object.keys(data as Record<string, unknown>).length > 0;
+      return data !== undefined && data !== null;
+    });
+    if (useful.length === 0) return false;
+
+    if (step.action === 'find-files') {
+      return useful.some((entry) => {
+        if (entry.call.tool === 'file-system' && typeof entry.call.input.path === 'string' && entry.call.input.path.trim()) return true;
+        if (!Array.isArray(entry.result.data)) return false;
+        return entry.result.data.some((item) => item && typeof item === 'object' && typeof (item as Record<string, unknown>).path === 'string');
+      });
+    }
+
+    // find-symbols / definitions / usages / references / examples all return concrete retrieval
+    // artifacts. Their semantic meaning is intentionally not judged here.
+    return true;
+  }
+
+  private searchResultValue(step: PlanStep, evidence: StepResult['evidence']): string {
+    const paths = Array.from(new Set(evidence.map((item) => item.path).filter((path): path is string => Boolean(path))));
+    if (step.action === 'find-files' && paths.length > 0) return paths.slice(0, 12).join(', ');
+    const compact = evidence.slice(0, 8).map((item) => {
+      const location = [item.path, item.symbol].filter(Boolean).join('#');
+      return location ? `${location}: ${item.fact}` : item.fact;
+    });
+    return compact.join(' | ').slice(0, 1800) || `Search completed for ${step.subject ?? step.goal}`;
+  }
+
+  private recordUnderstandToolRound(state: PlanExecutionState, step: PlanStep): void {
+    const toolContext = state.execution.getToolContext();
+    if (toolContext.length === 0) return;
+
+    const previous = state.stepResults.get(step.id);
     const normalizedRound: StepResult = {
       goalSatisfied: false,
       findings: [],
-      evidence: normalizedEvidence,
-      missing: previous?.missing ?? [],
+      evidence: this.normalizeToolEvidence(toolContext),
+      // A successful requested read addresses the previous round's transient missing
+      // request. The next understand call decides whether anything else is missing.
+      missing: [],
       facts: [],
     };
-    const accumulated = this.mergeStepResults(previous, normalizedRound);
-    state.stepResults.set(step.id, accumulated);
-
-    this.reporter.evidenceCheck(step.goal, toolContext.length, accumulated.evidence.length);
-    const startedAt = Date.now();
-    const decision = await this.recoveryController.assessToolEvidence({
-      task: state.task,
-      execution: state.execution,
-      step,
-      toolContext,
-      accumulated,
-      knownFacts: state.executionContext.all(),
-    });
-    this.reporter.evidenceCheckResult(decision.satisfied, decision.reason, decision.missing, Date.now() - startedAt);
-
-    const evaluated: StepResult = {
-      goalSatisfied: decision.satisfied,
-      findings: decision.findings.length > 0
-        ? decision.findings
-        : decision.reason.startsWith('Evidence evaluation failed') ? [] : [decision.reason],
-      evidence: decision.evidence,
-      missing: decision.satisfied ? [] : decision.missing,
-      facts: decision.satisfied
-        ? decision.facts.map((fact) => ({ key: fact.key, value: fact.value, evidence: decision.evidence }))
-        : [],
-    };
-    const merged = this.mergeStepResults(accumulated, evaluated);
-    state.stepResults.set(step.id, merged);
-
-    if (decision.satisfied) {
-      const mergedKeys = state.executionContext.mergeStepResult(step, merged);
-      this.reporter.factsMerged(mergedKeys);
-      this.reporter.stepResult(merged);
-      state.execution.setToolContext([], 0);
-      this.completeStep(state, step, 'tool-evidence-satisfied');
-      return true;
-    }
-
-    this.recordStepProgress(state, step.id, merged);
-    state.retryReason = decision.missing.length > 0
-      ? `после проверки evidence не хватает: ${decision.missing.slice(0, 2).join('; ')}`
-      : 'после проверки evidence цель шага ещё не подтверждена';
-    return false;
+    state.stepResults.set(step.id, this.mergeStepResults(previous, normalizedRound));
   }
 
   private normalizeToolEvidence(toolContext: ToolContextEntry[]): StepResult['evidence'] {
@@ -644,8 +637,9 @@ export class PlanExecutor {
         const action = String(input.action ?? '');
         const path = typeof input.path === 'string' ? input.path : undefined;
         if (action === 'read') {
-          push({ path, fact: `File read succeeded. Content excerpt:
-${compact(entry.result.data, 1800)}` });
+          // Raw source is transient tool context. Durable evidence keeps only the source
+          // reference; semantic facts extracted from that source are stored separately.
+          push({ path, fact: 'File read succeeded; full source kept only in immediate tool context.' });
         } else if (action === 'list') {
           push({ path, fact: `Directory listing: ${compact(entry.result.data, 1200)}` });
         } else {
@@ -671,88 +665,17 @@ ${compact(entry.result.data, 1800)}` });
     };
   }
 
-  private async trySemanticSatisfaction(state: PlanExecutionState, step: PlanStep, facts: ExecutionFact[]): Promise<boolean> {
-    if (!this.canUseSemanticSatisfaction(step, facts)) return false;
-
-    this.reporter.semanticCheck(step.goal, facts.map((fact) => fact.key));
-    const startedAt = Date.now();
-    const decision = await this.recoveryController.assessStepSatisfaction({
-      task: state.task,
-      execution: state.execution,
-      step,
-      facts,
-      accumulated: state.stepResults.get(step.id),
-    });
-    this.reporter.semanticCheckResult(decision.satisfied, decision.reason, decision.missing, Date.now() - startedAt);
-    if (!decision.satisfied) return false;
-
-    const evidence = facts.flatMap((fact) => fact.evidence).slice(0, 20);
-    const derived: StepResult = {
-      goalSatisfied: true,
-      findings: [decision.reason],
-      evidence,
-      missing: [],
-      facts: decision.facts.map((fact) => ({ ...fact, evidence })),
-    };
-    state.stepResults.set(step.id, this.mergeStepResults(state.stepResults.get(step.id), derived));
-    const mergedKeys = state.executionContext.mergeStepResult(step, derived);
-    this.reporter.factsMerged(mergedKeys);
-    this.completeStep(state, step, 'semantic-postcondition-satisfied');
-    return true;
-  }
-
   private async tryPruneRecoveryBranch(state: PlanExecutionState, parentStepId: string): Promise<boolean> {
     const parent = state.plan.steps.find((step) => step.id === parentStepId);
     if (!parent || parent.status === 'completed') return false;
 
-    if (this.outputsAlreadySatisfied(state, parent)) {
-      const pruned = this.markRecoveryChildrenCompleted(state.plan, parentStepId);
-      if (pruned > 0) this.reporter.recoveryPruned(parent.goal, pruned, parent.outputs);
-      return pruned > 0;
-    }
+    // Recovery pruning is also deterministic now: prune only when the parent's exact
+    // output postconditions already exist. Do not ask a second LLM to reinterpret sibling facts.
+    if (!this.outputsAlreadySatisfied(state, parent)) return false;
 
-    const availableFacts = state.executionContext.select(parent.inputs);
-    if (availableFacts.length === 0 || !this.canUseSemanticSatisfaction(parent, availableFacts, true)) return false;
-
-    this.reporter.semanticCheck(parent.goal, availableFacts.map((fact) => fact.key), true);
-    const startedAt = Date.now();
-    const decision = await this.recoveryController.assessStepSatisfaction({
-      task: state.task,
-      execution: state.execution,
-      step: parent,
-      facts: availableFacts,
-      accumulated: state.stepResults.get(parent.id),
-    });
-    this.reporter.semanticCheckResult(decision.satisfied, decision.reason, decision.missing, Date.now() - startedAt, true);
-    if (!decision.satisfied) return false;
-
-    const evidence = availableFacts.flatMap((fact) => fact.evidence).slice(0, 20);
-    const derived: StepResult = {
-      goalSatisfied: true,
-      findings: [decision.reason],
-      evidence,
-      missing: [],
-      facts: decision.facts.map((fact) => ({ ...fact, evidence })),
-    };
-    state.stepResults.set(parent.id, this.mergeStepResults(state.stepResults.get(parent.id), derived));
-    const mergedKeys = state.executionContext.mergeStepResult(parent, derived);
-    this.reporter.factsMerged(mergedKeys);
     const pruned = this.markRecoveryChildrenCompleted(state.plan, parentStepId);
-    this.reporter.recoveryPruned(parent.goal, pruned, parent.outputs);
+    if (pruned > 0) this.reporter.recoveryPruned(parent.goal, pruned, parent.outputs);
     return pruned > 0;
-  }
-
-  private canUseSemanticSatisfaction(step: PlanStep, facts: ExecutionFact[], recoveryBranch = false): boolean {
-    if (step.type !== 'search' && step.type !== 'understand') return false;
-    if (step.outputs.length === 0 || facts.length === 0) return false;
-    if (step.outputs.every((key) => facts.some((fact) => fact.key === key))) return false;
-
-    // `understand` is a derivation step: when its declared inputs are already present,
-    // let the small semantic gate derive the requested outputs before asking the main
-    // operation to read the same project files again. Search remains evidence-driven.
-    if (step.type === 'understand') return step.inputs.every((key) => facts.some((fact) => fact.key === key));
-    if (recoveryBranch) return true;
-    return step.id.startsWith('recovery-') || facts.some((fact) => fact.producerStepId.startsWith('recovery-'));
   }
 
   private markRecoveryChildrenCompleted(plan: TaskPlan, parentStepId: string): number {

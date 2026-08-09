@@ -1,3 +1,4 @@
+// StepEvidenceEvaluatorSmoke.ts
 import { ExecutionContext } from '@agent/Planning/ExecutionContext';
 import { PlanExecutor, type PlanExecutionState } from '@agent/Planning/PlanExecutor';
 import type { TaskPlan } from '@agent/Planning/TaskPlan';
@@ -9,66 +10,42 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-const task = new Task({ projectId: 'test-project', conversationId: 'test-conversation', description: 'find CLI registration structure' });
+const task = new Task({ projectId: 'test-project', conversationId: 'test-conversation', description: 'understand CLI registration structure' });
 const conversation = new Conversation('test-project', 'test-conversation');
 const execution = new Execution(task.id);
 execution.status = 'running';
 execution.setToolContext([{
   call: { tool: 'file-system', input: { action: 'read', path: 'src/cli/Cli.ts' } },
-  result: {
-    ok: true,
-    data: "const COMMANDS = [{ name: '/help' }];\nexport async function runCli() { if (value === '/help') {} }",
-  },
+  result: { ok: true, data: `const COMMANDS = [{ name: '/help' }];\nexport async function runCli() {}` },
 }], 1);
 
 const plan: TaskPlan = {
   version: 1,
-  goal: 'find CLI structure',
+  goal: 'understand CLI structure',
   steps: [{
     id: 'step-1',
-    type: 'search',
-    goal: 'Find CLI structure and entry point for adding a command',
+    type: 'understand',
+    action: 'identify-pattern',
+    subject: 'CLI command registration',
+    goal: 'Identify CLI command registration',
     status: 'running',
-    maxAttempts: 3,
+    maxAttempts: 2,
     inputs: [],
     outputs: ['cli.structure'],
   }],
 };
 
-const executionContext = new ExecutionContext();
 let evaluatorCalls = 0;
-const events: string[] = [];
 const executor = new PlanExecutor(
   {} as never,
   {} as never,
   {} as never,
   {} as never,
   {} as never,
-  {
-    assessToolEvidence: async () => {
-      evaluatorCalls += 1;
-      return {
-        satisfied: true,
-        reason: 'Cli.ts shows COMMANDS and runCli handlers.',
-        missing: [],
-        findings: ['CLI commands are declared in COMMANDS and handled in runCli.'],
-        evidence: [
-          { path: 'src/cli/Cli.ts', symbol: 'COMMANDS', fact: 'Command list is declared here.' },
-          { path: 'src/cli/Cli.ts', symbol: 'runCli', fact: 'Command dispatch happens here.' },
-        ],
-        facts: [{ key: 'cli.structure', value: 'Add command to COMMANDS and handler to runCli.' }],
-      };
-    },
-  } as never,
+  { assessToolEvidence: async () => { evaluatorCalls += 1; throw new Error('must not run'); } } as never,
   {} as never,
   { info: async () => {}, error: async () => {}, warn: async () => {} } as never,
-  {
-    evidenceCheck() { events.push('check'); },
-    evidenceCheckResult(satisfied: boolean) { events.push(`result:${satisfied}`); },
-    factsMerged(keys: string[]) { events.push(`facts:${keys.join(',')}`); },
-    stepResult() {},
-    planAdvance() {},
-  } as never,
+  {} as never,
 );
 
 const state: PlanExecutionState = {
@@ -79,37 +56,34 @@ const state: PlanExecutionState = {
   planIndex: 0,
   stepAttempts: 1,
   recoveryAttempts: new Map(),
-  stepResults: new Map([
-    ['step-1', {
-      goalSatisfied: false,
-      findings: ['Cli.ts is the CLI file.'],
-      evidence: [{ path: 'src/cli/Cli.ts', fact: 'CLI file located.' }],
-      missing: ['Confirm command registration mechanism'],
-      facts: [],
-    }],
-  ]),
-  executionContext,
+  stepResults: new Map([['step-1', {
+    goalSatisfied: false,
+    findings: [],
+    evidence: [],
+    missing: ['src/cli/Cli.ts source'],
+    facts: [],
+  }]]),
+  executionContext: new ExecutionContext(),
   recoveryMissing: new Map(),
   recoveryGoals: new Set(),
   resumes: 0,
   startedAt: Date.now(),
 };
 
-const completed = await (executor as unknown as {
-  evaluateToolRound(state: PlanExecutionState, step: TaskPlan['steps'][number]): Promise<boolean>;
-}).evaluateToolRound(state, plan.steps[0]);
+(executor as unknown as {
+  recordUnderstandToolRound(state: PlanExecutionState, step: TaskPlan['steps'][number]): void;
+}).recordUnderstandToolRound(state, plan.steps[0]);
 
-assert(completed, 'tool evidence should satisfy the search step');
-assert(evaluatorCalls === 1, 'expected exactly one evidence evaluator call');
-assert(executionContext.has('cli.structure'), 'evaluator must publish exact step output');
-assert(plan.steps[0].status === 'completed', 'step should complete immediately after evidence evaluation');
-assert(state.planIndex === 1, 'executor should advance to the next plan node');
-assert(execution.getToolContext().length === 0, 'raw tool context should be discarded after successful evaluation');
-assert(events.includes('result:true'), 'successful evidence evaluation should be reported');
+const recorded = state.stepResults.get('step-1');
+assert(recorded, 'understand tool round should be recorded');
+assert(recorded.evidence.some((item) => item.path === 'src/cli/Cli.ts'), 'source path should survive as compact evidence');
+assert(recorded.missing.length === 0, 'successful requested read should clear the stale transient missing request');
+assert(evaluatorCalls === 0, 'recording a tool round must not call an evaluator model');
+assert(execution.getToolContext().length === 1, 'raw source must remain available for the immediate next understand call');
+assert(plan.steps[0].status === 'running', 'tool evidence alone must not complete understand');
 
-console.log('## Step evidence evaluator smoke test');
-console.log('accumulated evidence + latest tool results evaluated: OK');
-console.log('exact output fact produced: OK');
-console.log('search step completed without another normal search call: OK');
-console.log('raw tool context cleared after success: OK');
-console.log('PASS: tool rounds are gated by a dedicated evidence evaluator.');
+console.log('## Understand tool-round smoke test');
+console.log('requested source recorded as compact evidence: OK');
+console.log('raw source kept for immediate next model call: OK');
+console.log('no evaluator model called: OK');
+console.log('PASS: understand tool rounds are transport, not a second semantic operation.');

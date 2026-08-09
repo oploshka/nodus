@@ -36,6 +36,14 @@ const PROFILES: Record<string, ContextBudgetProfile> = {
     maxToolEntryChars: 5_000,
     maxToolContextChars: 10_000,
   },
+  'edit-file': {
+    historyEntries: 0,
+    maxHistoryChars: 0,
+    indexedFiles: 0,
+    maxToolEntries: 1,
+    maxToolEntryChars: 60_000,
+    maxToolContextChars: 64_000,
+  },
   finalize: {
     historyEntries: 10,
     maxHistoryChars: 7_000,

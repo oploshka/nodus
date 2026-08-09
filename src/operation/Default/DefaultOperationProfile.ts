@@ -14,7 +14,7 @@ const SEARCH_RETRIEVAL_RETURN_FORMAT = `Return ONLY valid JSON:
   "message": "short retrieval note",
   "toolCalls": [{ "tool": "tool id", "input": {} }]
 }
-Use status=continue when requesting tools. Search only chooses retrieval tool calls; the runtime evidence evaluator decides satisfaction, missing items, and output facts.`;
+Use status=continue when requesting tools. Search only chooses retrieval tool calls; the runtime completes the step deterministically when the declared retrieval returns concrete results.`;
 
 function execution(
   contextStrategy: string,
@@ -53,8 +53,8 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
         'Treat activeStep.action + activeStep.subject as the complete search request.',
         'Allowed search actions are find-files, find-symbols, find-definitions, find-usages, find-references, and find-examples. Execute only the declared action.',
         'Use the supplied project index and existing evidence to choose concrete search/filesystem tool calls.',
-        'On the first round, locate evidence for the declared subject. On later rounds, use stepContext.activeEvidence.missing to make the next retrieval narrower.',
-        'Return tool calls only. The evidence evaluator is the only component that decides whether the step is satisfied, which facts were established, and what is still missing.',
+        'On the first round, retrieve concrete results for the declared subject. If a retrieval returns no results, use the previous tool evidence to choose a narrower retry.',
+        'Return tool calls only. Search completion is deterministic: any concrete result completes the search action; semantic interpretation belongs to later steps.',
       ],
       returnFormat: SEARCH_RETRIEVAL_RETURN_FORMAT,
     },
@@ -70,9 +70,9 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
     id: 'understand',
     description: 'Understand existing code, responsibilities, dependencies, and project behavior.',
     prompt: jsonPrompt('Build a focused understanding required by the current plan step.', [
-      'Work only on the ACTIVE plan-step goal. First use stepContext.facts and activeEvidence; do not request a file merely to reconfirm a fact already supplied.',
-      'Read only the most important files needed for the current question.',
-      'Request at most 3 tool calls in one batch.',
+      'Work only on the ACTIVE plan-step contract. First use supplied known facts and evidence; do not request a file merely to reconfirm a fact already supplied.',
+      'Search has already located candidate files. Understand may read only those known/referenced files when source text is genuinely required; do not start a new broad project search.',
+      'Read only the most important files needed for the current question and request at most 3 reads in one batch.',
       'Separate facts visible in code from inferred intent.',
       'Write concise factual observations after every evidence round so they can survive after raw file contents are dropped.',
       'Do not broaden the active goal merely to gather more files.',
@@ -147,7 +147,8 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
       purpose: 'Perform one concrete file edit described by the prepared change plan.',
       rules: [
         'Edit exactly the activeStep.targetPath file and no other file.',
-        'The runtime preloads activeStep.targetPath into toolContext before the edit call whenever possible. If that read is present, NEVER request the same file-system read again.',
+        'The runtime preloads activeStep.targetPath before the edit call and provides it as the authoritative target source.',
+        'Do not request tools or another file read during edit-file. Missing project understanding belongs in prepare-change/understand, not in the edit loop.',
         'Use the supplied target-file content as authoritative current source. Do not re-plan the task and do not edit a second file in the same response.',
         'Prefer minimal changes and preserve unrelated content.',
         'For a write, return the complete resulting file content. For a delete, return ACTION delete.',

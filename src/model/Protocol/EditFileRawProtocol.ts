@@ -52,7 +52,7 @@ export class EditFileRawProtocol {
   }
 
   public instructions(targetPath?: string): string {
-    return `Edit-file response protocol (NOT JSON):\nFor a completed write:\nSTATUS completed\nACTION write\nPATH ${targetPath ?? '<exact relative path>'}\nCONTENT\n<complete resulting file content until EOF>\n\nFor a completed delete:\nSTATUS completed\nACTION delete\nPATH ${targetPath ?? '<exact relative path>'}\n\nIf you need one tool call first:\nSTATUS continue\nTOOL <tool id>\nINPUT <one-line JSON object>\n\nRules: edit exactly one file; PATH must equal activeStep.targetPath; the runtime normally preloads the target file in toolContext, so NEVER request the same target read again when it is present; do not wrap the whole response in markdown; CONTENT is raw file text to EOF and needs no escaping.`;
+    return `Edit-file response protocol (NOT JSON):\nFor a completed write:\nSTATUS completed\nACTION write\nPATH ${targetPath ?? '<exact relative path>'}\nCONTENT\n<complete resulting file content until EOF>\n\nFor a completed delete:\nSTATUS completed\nACTION delete\nPATH ${targetPath ?? '<exact relative path>'}\n\nRules: edit exactly one file; PATH must equal activeStep.targetPath; the runtime preloads the complete authoritative target source before this call; do not request tools or another file read; do not wrap the whole response in markdown; CONTENT is raw file text to EOF and needs no escaping.`;
   }
 
   private line(content: string, name: string): string | undefined {

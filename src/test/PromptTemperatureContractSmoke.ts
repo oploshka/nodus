@@ -15,7 +15,7 @@ if (!search) throw new Error('search operation profile missing');
 const searchRules = search.prompt.rules.join('\n');
 if (!searchRules.includes('activeStep.action + activeStep.subject')) throw new Error('search prompt is missing action/subject contract');
 if (!searchRules.includes('Return tool calls only')) throw new Error('search prompt still mixes retrieval with evidence interpretation');
-if (!search.prompt.returnFormat?.includes('evidence evaluator decides satisfaction')) throw new Error('search return format is not retrieval-only');
+if (!search.prompt.returnFormat?.includes('runtime completes the step deterministically')) throw new Error('search return format is not deterministic retrieval-only');
 if (!search.execution.contextStrategy || search.execution.policyScopes.length === 0) throw new Error('search execution settings missing');
 
 const composed = composePrompt(search.prompt);

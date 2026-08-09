@@ -26,7 +26,9 @@
     "test:scenario:status": "tsx src/test/StatusCommandScenarioSmoke.ts",
     "test:prompt:contracts": "tsx src/test/PromptTemperatureContractSmoke.ts",
     "test:operation:profiles": "tsx src/test/OperationProfileArchitectureSmoke.ts",
-    "test:plan:actions": "tsx src/test/PlanActionWhitelistSmoke.ts"
+    "test:plan:actions": "tsx src/test/PlanActionWhitelistSmoke.ts",
+    "test:search:deterministic": "tsx src/test/SearchDeterministicCompletionSmoke.ts",
+    "test:model:input-messages": "tsx src/test/ModelInputMessagesSmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
