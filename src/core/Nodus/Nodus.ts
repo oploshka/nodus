@@ -5,6 +5,7 @@ import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
 import { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import { AgentRuntime } from '@agent/Runtime/AgentRuntime';
+import { RawAgentRunner } from '@agent/Raw/RawAgentRunner';
 import { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import { PlanGenerator } from '@agent/Planning/PlanGenerator';
 import type { RequirementMap } from '@agent/Planning/RequirementMap';
@@ -47,6 +48,7 @@ export class Nodus {
   public readonly toolRegistry: ToolRegistry;
   private readonly conversations = new Map<string, Conversation>();
   private readonly runtime: AgentRuntime;
+  private readonly rawAgentRunner: RawAgentRunner;
 
   public constructor(
     public readonly configuration: NodusConfiguration,
@@ -77,6 +79,13 @@ export class Nodus {
     this.toolRegistry.register(new SearchTool());
 
     const adapter = this.createModelAdapter(configuration);
+    this.rawAgentRunner = new RawAgentRunner(
+      configuration.model,
+      adapter,
+      this.toolRegistry,
+      this.projectSession,
+      this.logger,
+    );
     const knowledgeResolver = new KnowledgeResolver(knowledgeStore);
     const contextSelector = new ContextSelector(knowledgeResolver);
     const payloadLogger = new PayloadLogger(
@@ -161,6 +170,13 @@ export class Nodus {
 
   public getConversation(id: string): Conversation | undefined {
     return this.conversations.get(id);
+  }
+
+  public async runRawAgentTask(description: string): Promise<string> {
+    const result = await this.rawAgentRunner.run(description, this.configuration.agent.maxSteps);
+    console.log(`Raw agent: ${result.modelCalls} model calls, ${result.toolCalls} tool calls`);
+    console.log(result.result);
+    return result.result;
   }
 
   public async runTask(description: string, conversationId: string, context?: Record<string, unknown>, planOverride?: TaskPlan | RequirementMap): Promise<string> {

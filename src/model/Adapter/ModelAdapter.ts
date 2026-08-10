@@ -1,5 +1,5 @@
 // ModelAdapter.ts
-import type { ModelRequest } from '@model/Request/ModelRequest';
+import type { ModelRequest, ModelToolCall } from '@model/Request/ModelRequest';
 
 export interface ModelUsage {
   prompt_tokens?: number;
@@ -9,6 +9,7 @@ export interface ModelUsage {
 
 export interface RawModelResponse {
   content: string;
+  toolCalls?: ModelToolCall[];
   usage?: ModelUsage;
 }
 
