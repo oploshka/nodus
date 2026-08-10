@@ -1,5 +1,5 @@
 // EditStageSmoke.ts
-import { runStepHarness } from '../../Support/StepHarness';
+import { runStepHarness } from '../../support/StepHarness';
 import { STATUS_CHANGE_FACT, STATUS_CLI_SOURCE } from './StatusCommandScenario';
 
 const result = await runStepHarness({

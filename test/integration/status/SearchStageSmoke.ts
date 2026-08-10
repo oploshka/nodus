@@ -1,5 +1,5 @@
 // SearchStageSmoke.ts
-import { runStepHarness } from '../../Support/StepHarness';
+import { runStepHarness } from '../../support/StepHarness';
 
 const result = await runStepHarness({
   step: {

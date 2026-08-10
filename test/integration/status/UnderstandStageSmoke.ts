@@ -1,5 +1,5 @@
 // UnderstandStageSmoke.ts
-import { runStepHarness } from '../../Support/StepHarness';
+import { runStepHarness } from '../../support/StepHarness';
 import { STATUS_SEARCH_FACTS, STATUS_CLI_SOURCE, STATUS_INTEGRATION_FACTS } from './StatusCommandScenario';
 
 const projectSessionSource = `// ProjectSession.ts\nexport class ProjectSession {\n  public index?: ProjectIndex;\n  public get projectId(): string { return this.configuration.id; }\n}\n`;

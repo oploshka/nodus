@@ -1,73 +1,44 @@
-# Testing strategy
+# Стратегия тестирования
 
-Production code lives in `src/`; maintained tests live in `test/`.
+Тесты разделены по стоимости и по тому, участвует ли реальная модель.
 
-The v0.2 suite prefers contract/stage smoke tests over replaying a slow live model task after every change.
+## Группы
 
-## Core checks
+- `test/unit/` — быстрые детерминированные контракты без модели.
+- `test/integration/` — несколько компонентов Nodus и границы workflow без реальной LLM.
+- `test/model/step/` — один конкретный шаг с реальной моделью и фиксированным входом.
+- `test/model/chain/` — реальная модель, стартующая с сохранённого состояния цепочки; позволяет проверять передачу данных между шагами без полного прогона.
+- `test/e2e/` — полный Nodus + реальная модель + проект. Самая дорогая группа.
 
-```bash
-npm run typecheck
-npm run test:core
-```
-
-`test:core` covers the current architectural contracts:
-
-- backward requirement-map compilation
-- deterministic search request compilation
-- `exact | related | missing` retrieval classification
-- related evidence not satisfying a requirement
-- child requirement resolution planning
-- parent requirement recheck after both knowledge and capability-addition child plans
-- understand RAW protocol and tool-round continuation
-- file-system canonical action contract
-- search prompt regression boundary
-- canonical `/status` stage suite
-
-## Focused commands
+## Команды
 
 ```bash
-npm run test:plan:requirements
-npm run test:search:compiler
-npm run test:retrieval
-npm run test:requirement:resolution
-npm run test:requirement:recheck
-npm run test:requirement:capability-recheck
-npm run test:status:plan
-npm run test:status:search
-npm run test:status:understand
-npm run test:status:prepare
-npm run test:status:edit
-npm run test:status:finalize
-npm run test:scenario:status
+npm test                  # unit + integration, без модели
+npm run test:unit
+npm run test:integration
+npm run test:model        # все тесты с реальной моделью
+npm run test:model:step
+npm run test:model:chain
+npm run test:e2e
+npm run test:all          # typecheck + всё остальное
 ```
 
-## `/status` scenario
+Для model-тестов по умолчанию используется `nodus.config.json`. Другой конфиг можно передать через `NODUS_TEST_CONFIG`.
 
-Each stage can be seeded from typed workflow fixtures:
+## Принцип model-step
 
-```text
-RequirementMap
-   ↓
-search evidence
-   ↓
-understand facts
-   ↓
-deterministic prepare-change
-   ↓
-edit-file
-   ↓
-deterministic finalize
-```
+Для шага фиксируются входные данные и проверяется не дословный ответ модели, а контракт: статус, требуемые facts/evidence, допустимые tool calls, отсутствие запрещённых действий и другие структурные свойства.
 
-The live scenario can still be run separately:
+## Принцип model-chain
+
+Chain fixture представляет состояние workflow на известной границе, например «retrieval завершён, начинаем understand». Это позволяет отдельно проверить, что следующий шаг получает правильный набор данных и корректно формирует следующий state.
+
+## E2E `/status`
+
+Пока канонический полный прогон остаётся ручным:
 
 ```bash
 npm run dev -- nodus.config.json --clear-cache --clear-logs --scan --scenario=status
 ```
 
-Stage smoke tests answer “does the runtime contract work?” The live run answers “does the current model produce good semantic facts?” They are intentionally separate.
-
-## Removed historical tests
-
-Old custom `NodusResponseProtocol` benchmarks and pre-production edit-protocol benchmark tests were removed. They tested abandoned protocol experiments rather than current runtime contracts and increased maintenance/context cost.
+E2E не входит в обычный `npm test`, чтобы локальная модель не запускалась при каждом изменении.
