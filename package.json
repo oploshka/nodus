@@ -1,6 +1,6 @@
 {
   "name": "nodus-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -37,7 +37,8 @@
     "test:status:finalize": "tsx test/scenario/status/FinalizeStageSmoke.ts",
     "test:plan:grounding": "tsx test/PlannerRecoveryGroundingSmoke.ts",
     "test:tool:file-system": "tsx test/FileSystemToolContractSmoke.ts",
-    "test:tool:prompt-regression": "tsx test/SearchToolPromptRegressionSmoke.ts"
+    "test:tool:prompt-regression": "tsx test/SearchToolPromptRegressionSmoke.ts",
+    "test:plan:requirements": "tsx test/RequirementMapCompilerSmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -7,6 +7,7 @@ import { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import { AgentRuntime } from '@agent/Runtime/AgentRuntime';
 import { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import { PlanGenerator } from '@agent/Planning/PlanGenerator';
+import type { RequirementMap } from '@agent/Planning/RequirementMap';
 import type { TaskPlan } from '@agent/Planning/TaskPlan';
 import { PlanExecutor } from '@agent/Planning/PlanExecutor';
 import { PlanUpdater } from '@agent/Planning/PlanUpdater';
@@ -153,7 +154,7 @@ export class Nodus {
     return this.conversations.get(id);
   }
 
-  public async runTask(description: string, conversationId: string, context?: Record<string, unknown>, planOverride?: TaskPlan): Promise<string> {
+  public async runTask(description: string, conversationId: string, context?: Record<string, unknown>, planOverride?: TaskPlan | RequirementMap): Promise<string> {
     const conversation = this.conversations.get(conversationId);
     if (!conversation) {
       throw new Error(`Conversation not found: ${conversationId}`);

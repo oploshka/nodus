@@ -2,95 +2,10 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
-import type { TaskPlan } from '@agent/Planning/TaskPlan';
+import type { RequirementMap } from '@agent/Planning/RequirementMap';
+import { STATUS_SCENARIO_REQUIREMENTS, STATUS_SCENARIO_TASK } from '@agent/Planning/Scenario/StatusScenario';
 import { ConfigurationLoader } from '@core/Configuration/ConfigurationLoader';
 import { Nodus } from '@core/Nodus/Nodus';
-
-const STATUS_SCENARIO_TASK = 'Добавь команду /status в CLI. Команда должна выводить текущий ID проекта, ID текущего conversation и количество файлов в индексе проекта, если индекс доступен. Используй существующие API и структуры проекта, не дублируй уже существующую логику получения этих данных. Не изменяй ничего, что не требуется для этой задачи.';
-
-const STATUS_SCENARIO_PLAN: TaskPlan = {
-  version: 2,
-  goal: 'add /status CLI command to display project ID, conversation ID, and index file count',
-  steps: [
-    {
-      id: 'step-1',
-      type: 'search',
-      action: 'find-definitions',
-      subject: 'project ID source in ProjectSession.ts',
-      goal: 'Найти определения: project ID source in ProjectSession.ts',
-      status: 'pending',
-      maxAttempts: 1,
-      inputs: [],
-      outputs: ['projectId.source'],
-    },
-    {
-      id: 'step-2',
-      type: 'search',
-      action: 'find-definitions',
-      subject: 'conversation ID source in Conversation.ts',
-      goal: 'Найти определения: conversation ID source in Conversation.ts',
-      status: 'pending',
-      maxAttempts: 1,
-      inputs: [],
-      outputs: ['conversationId.source'],
-    },
-    {
-      id: 'step-3',
-      type: 'search',
-      action: 'find-usages',
-      subject: 'ProjectIndex class in ProjectIndex.ts',
-      goal: 'Найти использования: ProjectIndex class in ProjectIndex.ts',
-      status: 'pending',
-      maxAttempts: 1,
-      inputs: [],
-      outputs: ['indexFileCount.source'],
-    },
-    {
-      id: 'step-4',
-      type: 'understand',
-      action: 'identify-pattern',
-      subject: 'CLI command registration pattern in Cli.ts',
-      goal: 'Определить существующий паттерн: CLI command registration pattern in Cli.ts',
-      status: 'pending',
-      maxAttempts: 1,
-      inputs: [],
-      outputs: ['cliCommandPattern'],
-    },
-    {
-      id: 'step-5',
-      type: 'prepare-change',
-      action: 'define-change',
-      subject: 'new /status command implementation',
-      goal: 'Определить точное изменение: new /status command implementation',
-      status: 'pending',
-      maxAttempts: 1,
-      inputs: ['projectId.source', 'conversationId.source', 'indexFileCount.source', 'cliCommandPattern'],
-      outputs: ['changeDefinition'],
-    },
-    {
-      id: 'step-6',
-      type: 'edit-file',
-      action: 'apply-change',
-      subject: 'Cli.ts',
-      goal: 'Применить изменение: Cli.ts',
-      status: 'pending',
-      maxAttempts: 3,
-      inputs: ['changeDefinition'],
-      outputs: ['step-6.result'],
-    },
-    {
-      id: 'step-7',
-      type: 'finalize',
-      action: 'summarize-result',
-      subject: 'added /status CLI command',
-      goal: 'Сообщить результат: added /status CLI command',
-      status: 'pending',
-      maxAttempts: 1,
-      inputs: [],
-      outputs: ['step-7.result'],
-    },
-  ],
-};
 
 // Определяем единый источник данных для команд
 const COMMANDS = [
@@ -132,8 +47,8 @@ export async function runCli(args: string[]): Promise<void> {
 
     if (startup.scenario) {
       const scenario = resolveStartupScenario(startup.scenario);
-      console.log(`Scenario: ${startup.scenario} (fixed task + fixed plan)`);
-      await nodus.runTask(scenario.task, conversation.id, undefined, scenario.plan);
+      console.log(`Scenario: ${startup.scenario} (fixed task + fixed requirement map)`);
+      await nodus.runTask(scenario.task, conversation.id, undefined, scenario.requirements);
       return;
     }
 
@@ -255,9 +170,9 @@ function parseStartupArgs(args: string[]): StartupArguments {
   return { configPath, clearCache, clearLogs, scan, scenario };
 }
 
-function resolveStartupScenario(name: string): { task: string; plan: TaskPlan } {
+function resolveStartupScenario(name: string): { task: string; requirements: RequirementMap } {
   if (name === 'status') {
-    return { task: STATUS_SCENARIO_TASK, plan: STATUS_SCENARIO_PLAN };
+    return { task: STATUS_SCENARIO_TASK, requirements: STATUS_SCENARIO_REQUIREMENTS };
   }
   throw new Error(`Unknown startup scenario: ${name}`);
 }

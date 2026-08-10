@@ -1,5 +1,6 @@
 // StepRegistry.ts
 import type { PlanStepAction, PlanStepType } from '@agent/Planning/TaskPlan';
+import { parseWorkflowDataRef, type WorkflowDataKind } from '@agent/Planning/WorkflowData';
 
 export interface StepActionDefinition {
   id: PlanStepAction;
@@ -10,11 +11,17 @@ export interface StepActionDefinition {
   };
 }
 
+export interface StepDataContract {
+  requires: WorkflowDataKind[];
+  produces: WorkflowDataKind[];
+}
+
 export interface StepDefinition {
   type: PlanStepType;
   description: string;
   maxAttempts: number;
   initialPlanAllowed: boolean;
+  dataContract: StepDataContract;
   actions: StepActionDefinition[];
 }
 
@@ -24,6 +31,7 @@ const DEFINITIONS: StepDefinition[] = [
     description: 'Locate concrete project evidence.',
     maxAttempts: 3,
     initialPlanAllowed: true,
+    dataContract: { requires: [], produces: ['evidence'] },
     actions: [
       { id: 'find-files', description: 'Find files related to the subject.', goalPrefix: { ru: 'Найти файлы', en: 'Find files' } },
       { id: 'find-symbols', description: 'Find concrete symbols related to the subject.', goalPrefix: { ru: 'Найти символы', en: 'Find symbols' } },
@@ -38,6 +46,7 @@ const DEFINITIONS: StepDefinition[] = [
     description: 'Interpret already located evidence.',
     maxAttempts: 2,
     initialPlanAllowed: true,
+    dataContract: { requires: ['evidence', 'fact'], produces: ['fact'] },
     actions: [
       { id: 'explain-relationship', description: 'Explain how located elements relate to each other.', goalPrefix: { ru: 'Объяснить связь', en: 'Explain the relationship' } },
       { id: 'trace-data-flow', description: 'Trace how data moves through located code.', goalPrefix: { ru: 'Проследить поток данных', en: 'Trace the data flow' } },
@@ -51,6 +60,7 @@ const DEFINITIONS: StepDefinition[] = [
     description: 'Turn established facts into a concrete change plan.',
     maxAttempts: 1,
     initialPlanAllowed: true,
+    dataContract: { requires: ['fact'], produces: ['change-definition'] },
     actions: [
       { id: 'define-change', description: 'Define the exact intended changes.', goalPrefix: { ru: 'Определить точное изменение', en: 'Define the exact change' } },
       { id: 'select-targets', description: 'Select the exact files that must change.', goalPrefix: { ru: 'Определить изменяемые файлы', en: 'Select target files' } },
@@ -61,6 +71,7 @@ const DEFINITIONS: StepDefinition[] = [
     description: 'Apply a prepared change to one concrete file.',
     maxAttempts: 3,
     initialPlanAllowed: true,
+    dataContract: { requires: ['change-definition'], produces: ['change-result'] },
     actions: [
       { id: 'apply-change', description: 'Apply the prepared change to the target file.', goalPrefix: { ru: 'Применить изменение', en: 'Apply the change' } },
     ],
@@ -70,6 +81,7 @@ const DEFINITIONS: StepDefinition[] = [
     description: 'Review the applied change.',
     maxAttempts: 1,
     initialPlanAllowed: true,
+    dataContract: { requires: ['change-result', 'fact'], produces: ['review-result'] },
     actions: [
       { id: 'review-change', description: 'Review correctness, scope, and consistency.', goalPrefix: { ru: 'Проверить изменение', en: 'Review the change' } },
     ],
@@ -79,6 +91,7 @@ const DEFINITIONS: StepDefinition[] = [
     description: 'Run deterministic checks.',
     maxAttempts: 1,
     initialPlanAllowed: true,
+    dataContract: { requires: ['change-result'], produces: ['verification-result'] },
     actions: [
       { id: 'run-checks', description: 'Run focused deterministic checks.', goalPrefix: { ru: 'Запустить проверки', en: 'Run checks' } },
     ],
@@ -88,6 +101,7 @@ const DEFINITIONS: StepDefinition[] = [
     description: 'Produce the user-facing result.',
     maxAttempts: 1,
     initialPlanAllowed: true,
+    dataContract: { requires: ['evidence', 'fact', 'change-definition', 'change-result', 'review-result', 'verification-result'], produces: ['final-result'] },
     actions: [
       { id: 'summarize-result', description: 'Summarize the completed task for the user.', goalPrefix: { ru: 'Сообщить результат', en: 'Summarize the result' } },
     ],
@@ -131,6 +145,25 @@ export class StepRegistry {
     // narrower and more reliable retrieval primitive.
     if (asksForValueSource || (scopedToSourceFile && asksForDefinitionShape)) return 'find-definitions';
     return requested;
+  }
+
+
+  public assertDataContract(type: PlanStepType, inputs: string[], outputs: string[]): void {
+    const contract = this.get(type).dataContract;
+    const typedInputs = inputs.map((value) => this.tryParseDataKind(value)).filter((kind): kind is WorkflowDataKind => Boolean(kind));
+    const typedOutputs = outputs.map((value) => this.tryParseDataKind(value)).filter((kind): kind is WorkflowDataKind => Boolean(kind));
+
+    for (const kind of typedInputs) {
+      if (!contract.requires.includes(kind)) throw new Error(`${type} cannot consume ${kind}`);
+    }
+    for (const kind of typedOutputs) {
+      if (!contract.produces.includes(kind)) throw new Error(`${type} cannot produce ${kind}`);
+    }
+  }
+
+  private tryParseDataKind(value: string): WorkflowDataKind | undefined {
+    if (!value.includes(':')) return undefined;
+    try { return parseWorkflowDataRef(value).kind; } catch { return undefined; }
   }
 
   public renderGoal(type: PlanStepType, actionId: PlanStepAction, subject: string, language: 'ru' | 'en'): string {

@@ -1,6 +1,8 @@
 // ExecutionReporter.ts
 import type { ConsoleMode } from '@core/Configuration/Configuration';
+import type { RequirementMap } from '@agent/Planning/RequirementMap';
 import type { TaskPlan } from '@agent/Planning/TaskPlan';
+import { formatWorkflowDataRef } from '@agent/Planning/WorkflowData';
 import type { StepResult } from '@model/Result/OperationResult';
 
 export class ExecutionReporter {
@@ -16,6 +18,25 @@ export class ExecutionReporter {
     if (this.mode === 'quiet') return;
     this.line(this.paint('cyan', '────────────────────────────────────────'));
     this.line(`${this.paint('bold', '● Получена задача')}\n  ${description}`);
+  }
+
+  public requirements(map: RequirementMap): void {
+    if (this.mode === 'quiet') return;
+    this.line(`
+${this.paint('bold', '◆ Карта требований')}`);
+    this.line(this.paint('dim', `  root: ${formatWorkflowDataRef(map.root)}`));
+    for (const entry of map.entries) {
+      const ref = formatWorkflowDataRef(entry.ref);
+      const dependencies = entry.requires.length > 0
+        ? ` <- ${entry.requires.map(formatWorkflowDataRef).join(', ')}`
+        : '';
+      this.line(`  ${ref}${this.paint('dim', dependencies)}`);
+      if (this.mode === 'verbose') {
+        this.line(this.paint('dim', `     ${entry.description}`));
+        if (entry.sourceHints?.length) this.line(this.paint('dim', `     source: ${entry.sourceHints.join(', ')}`));
+        if (entry.targetPath) this.line(this.paint('dim', `     target: ${entry.targetPath}`));
+      }
+    }
   }
 
   public plan(plan: TaskPlan): void {

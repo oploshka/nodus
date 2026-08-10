@@ -11,11 +11,11 @@ const result = await runStepHarness({
     goal: 'Применить изменение команды /status',
     status: 'pending',
     maxAttempts: 1,
-    inputs: ['status.change-plan'],
-    outputs: ['status.cli.updated'],
+    inputs: ['change-definition:status.command'],
+    outputs: ['change-result:status.command'],
     targetPath: 'src/cli/Cli.ts',
   },
-  seedFacts: [STATUS_CHANGE_FACT],
+  seedFacts: [{ ...STATUS_CHANGE_FACT, evidence: [...STATUS_CHANGE_FACT.evidence] }],
   model: (input) => {
     const source = input.execution.getToolContext();
     if (source.length !== 1 || source[0]?.call.input.path !== 'src/cli/Cli.ts') {
@@ -48,10 +48,9 @@ if (result.modelCalls !== 1) throw new Error(`edit-file should use one model cal
 if (result.toolCalls !== 1) throw new Error(`edit-file should preload target exactly once, got ${result.toolCalls}`);
 if (result.appliedChanges.length !== 1) throw new Error('Expected exactly one applied Cli.ts change');
 if (result.recoveryCalls !== 0) throw new Error('edit-file stage unexpectedly entered recovery');
-if (!result.state.executionContext.has('status.cli.updated')) throw new Error('edit-file postcondition was not stored');
+if (!result.state.executionContext.has('change-result:status.command')) throw new Error('Typed change-result postcondition was not stored');
 
 console.log('## /status edit-file stage');
+console.log('change-definition + target source are sufficient for edit: OK');
 console.log('target source preloaded once by runtime: OK');
-console.log('model edits without tool loop: OK');
-console.log('one file change applied: OK');
 console.log('PASS');

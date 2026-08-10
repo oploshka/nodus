@@ -1,6 +1,6 @@
 // UnderstandStageSmoke.ts
 import { runStepHarness } from '../../Support/StepHarness';
-import { STATUS_SEARCH_FACTS, STATUS_CLI_SOURCE } from './StatusCommandScenario';
+import { STATUS_SEARCH_FACTS, STATUS_CLI_SOURCE, STATUS_INTEGRATION_FACTS } from './StatusCommandScenario';
 
 const projectSessionSource = `// ProjectSession.ts\nexport class ProjectSession {\n  public index?: ProjectIndex;\n  public get projectId(): string { return this.configuration.id; }\n}\n`;
 
@@ -9,12 +9,12 @@ const result = await runStepHarness({
     id: 'status-understand-stage',
     type: 'understand',
     action: 'determine-integration',
-    subject: '/status in runCli using known project/conversation/index sources',
+    subject: 'establish /status CLI access facts from located evidence and Cli.ts',
     goal: 'Определить интеграцию команды /status',
     status: 'pending',
     maxAttempts: 1,
     inputs: STATUS_SEARCH_FACTS.map((fact) => fact.key),
-    outputs: ['cli.status.integration'],
+    outputs: STATUS_INTEGRATION_FACTS.map((fact) => fact.key),
   },
   seedFacts: STATUS_SEARCH_FACTS.map((fact) => ({ ...fact, evidence: [...fact.evidence] })),
   model: (input, call) => {
@@ -41,7 +41,7 @@ const result = await runStepHarness({
       input.execution.consumeToolContext();
       return {
         status: 'continue',
-        message: 'Need ProjectSession.ts source to confirm exposed accessors.',
+        message: 'Need ProjectSession.ts source to confirm CLI project/index access.',
         toolCalls: [{ tool: 'file-system', input: { action: 'read', path: 'src/project/ProjectSession/ProjectSession.ts' } }],
         changes: [],
         observations: [],
@@ -62,23 +62,16 @@ const result = await runStepHarness({
     input.execution.consumeToolContext();
     return {
       status: 'completed',
-      message: 'Integration understood.',
+      message: 'Integration facts established.',
       toolCalls: [],
       changes: [],
       observations: [],
       stepResult: {
         goalSatisfied: true,
-        findings: ['Add /status to COMMANDS and one inline runCli branch using existing access paths.'],
-        evidence: [
-          { path: 'src/cli/Cli.ts', symbol: 'runCli', fact: 'Commands use COMMANDS + inline handlers.' },
-          { path: 'src/project/ProjectSession/ProjectSession.ts', symbol: 'projectId', fact: 'ProjectSession exposes projectId and optional index.' },
-        ],
+        findings: ['All four /status integration facts are established.'],
+        evidence: STATUS_INTEGRATION_FACTS.flatMap((fact) => fact.evidence.map((item) => ({ ...item }))),
         missing: [],
-        facts: [{
-          key: 'cli.status.integration',
-          value: 'COMMANDS entry + inline runCli handler; read projectSession.projectId, conversation.id, projectSession.index?.files.length.',
-          evidence: [],
-        }],
+        facts: STATUS_INTEGRATION_FACTS.map((fact) => ({ ...fact, evidence: [...fact.evidence] })),
       },
     };
   },
@@ -95,11 +88,13 @@ const result = await runStepHarness({
 if (result.modelCalls !== 3) throw new Error(`Expected understand -> read -> understand -> read -> understand, got ${result.modelCalls} model calls`);
 if (result.toolCalls !== 2) throw new Error(`Expected exactly two source reads, got ${result.toolCalls}`);
 if (result.recoveryCalls !== 0) throw new Error('Tool continuations inside one understand attempt must not trigger recovery');
-if (!result.state.executionContext.has('cli.status.integration')) throw new Error('Understand output was not stored');
+for (const fact of STATUS_INTEGRATION_FACTS) {
+  if (!result.state.executionContext.has(fact.key)) throw new Error(`Understand did not produce ${fact.key}`);
+}
 if (result.state.plan.steps[0]?.status !== 'completed') throw new Error('Understand step did not complete');
 
 console.log('## /status understand stage');
-console.log('maxAttempts=1 still allows internal read continuations: OK');
-console.log('two source reads happen once inside one semantic attempt: OK');
-console.log('transient source cache survives until understand completes: OK');
+console.log('evidence is transformed into scoped semantic facts: OK');
+console.log('multiple reads stay inside one semantic attempt: OK');
+console.log('fact provenance survives the transform: OK');
 console.log('PASS');

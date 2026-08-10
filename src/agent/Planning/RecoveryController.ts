@@ -626,7 +626,7 @@ export class RecoveryController {
 
   private factKeys(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
-    return value.map(String).map((item) => item.trim()).filter((item) => /^[a-z0-9][a-z0-9._-]{1,79}$/i.test(item)).slice(0, 8);
+    return value.map(String).map((item) => item.trim()).filter((item) => /^[a-z0-9][a-z0-9:._@-]{1,127}$/i.test(item)).slice(0, 8);
   }
 
   private truncateEvidenceData(value: unknown, maxChars: number): unknown {

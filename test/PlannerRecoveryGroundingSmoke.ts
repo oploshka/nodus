@@ -31,42 +31,53 @@ const planner = new PlanGenerator(
     complete: async () => ({
       content: JSON.stringify({
         goal: 'Добавить /status',
-        steps: [
+        root: 'change-definition:status.command',
+        entries: [
           {
-            id: 'step-1',
-            type: 'search',
-            action: 'find-usages',
-            subject: 'project ID retrieval logic in src/project/ProjectSession/ProjectSession.ts',
-            maxAttempts: 1,
-            inputs: [],
-            outputs: ['project.id.source'],
+            ref: 'evidence:project.id.definition',
+            description: 'project ID source',
+            requires: [],
+            evidenceKind: 'definition',
+            sourceHints: ['ProjectSession.ts'],
           },
           {
-            id: 'step-2',
-            type: 'search',
-            action: 'find-usages',
-            subject: 'conversation ID retrieval logic in src/core/Conversation/Conversation.ts',
-            maxAttempts: 1,
-            inputs: ['project.id.source'],
-            outputs: ['conversation.id.source'],
+            ref: 'evidence:conversation.id.definition',
+            description: 'conversation ID source',
+            requires: [],
+            evidenceKind: 'definition',
+            sourceHints: ['Conversation.ts'],
           },
           {
-            id: 'step-3',
-            type: 'search',
-            action: 'find-usages',
-            subject: 'index file count logic in src/project/Index/ProjectIndex.ts',
-            maxAttempts: 1,
-            inputs: ['conversation.id.source'],
-            outputs: ['index.files.count.source'],
+            ref: 'evidence:project.index.files',
+            description: 'project index files definition',
+            requires: [],
+            evidenceKind: 'definition',
+            sourceHints: ['ProjectIndex.ts'],
           },
           {
-            id: 'step-4',
-            type: 'finalize',
-            action: 'summarize-result',
-            subject: 'результат',
-            maxAttempts: 1,
-            inputs: ['index.files.count.source'],
-            outputs: ['task.final-result'],
+            ref: 'fact:project.id.access@cli',
+            description: 'how CLI accesses current project ID',
+            requires: ['evidence:project.id.definition'],
+          },
+          {
+            ref: 'fact:conversation.id.access@cli',
+            description: 'how CLI accesses current conversation ID',
+            requires: ['evidence:conversation.id.definition'],
+          },
+          {
+            ref: 'fact:project.index.fileCount.access@cli',
+            description: 'how CLI accesses project index file count',
+            requires: ['evidence:project.index.files'],
+          },
+          {
+            ref: 'change-definition:status.command',
+            description: 'minimal /status change',
+            requires: [
+              'fact:project.id.access@cli',
+              'fact:conversation.id.access@cli',
+              'fact:project.index.fileCount.access@cli',
+            ],
+            targetPath: 'Cli.ts',
           },
         ],
       }),
@@ -76,6 +87,7 @@ const planner = new PlanGenerator(
     projectId: 'test-project',
     index: {
       files: [
+        { path: 'src/cli/Cli.ts' },
         { path: 'src/project/ProjectSession/ProjectSession.ts' },
         { path: 'src/core/Conversation/Conversation.ts' },
         { path: 'src/project/Index/ProjectIndex.ts' },
@@ -87,10 +99,12 @@ const planner = new PlanGenerator(
 );
 
 const plan = await planner.generate(task, 'planner-grounding-smoke');
-for (const id of ['step-1', 'step-2', 'step-3']) {
-  const step = plan.steps.find((candidate) => candidate.id === id);
-  assert(step?.action === 'find-definitions', `${id} should normalize source/retrieval lookup to find-definitions, got ${step?.action}`);
-}
+const searches = plan.steps.filter((step) => step.type === 'search');
+assert(searches.length === 3, `requirement compiler should create 3 evidence searches, got ${searches.length}`);
+assert(searches.every((step) => step.action === 'find-definitions'), 'definition evidence must compile to find-definitions');
+assert(searches.some((step) => step.subject?.includes('src/project/ProjectSession/ProjectSession.ts')), 'unique short ProjectSession.ts hint must resolve to the grounded project path');
+assert(searches.some((step) => step.subject?.includes('src/core/Conversation/Conversation.ts')), 'unique short Conversation.ts hint must resolve to the grounded project path');
+assert(plan.steps.find((step) => step.type === 'edit-file')?.targetPath === 'src/cli/Cli.ts', 'short Cli.ts target must resolve to the grounded project path');
 
 const currentPlan: TaskPlan = {
   version: 2,
@@ -181,7 +195,8 @@ const retryDecision = await retryRecovery.recover({
 assert(retryDecision.action === 'request-human', 'semantic budget exhaustion without new evidence must not retry-current');
 
 console.log('## Planner + recovery grounding smoke');
-console.log('value-source searches normalize to find-definitions: OK');
+console.log('semantic evidence kinds compile to deterministic search actions: OK');
+console.log('short source hints resolve only to grounded project paths: OK');
 console.log('recovery cannot invent conversationId from conversation ID: OK');
 console.log('semantic exhaustion cannot retry-current without new evidence: OK');
 console.log('PASS');

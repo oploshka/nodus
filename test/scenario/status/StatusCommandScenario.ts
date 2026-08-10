@@ -1,111 +1,55 @@
 // StatusCommandScenario.ts
-import type { TaskPlan } from '@agent/Planning/TaskPlan';
+import { PlanCompiler } from '@agent/Planning/PlanCompiler';
+import { STATUS_SCENARIO_REQUIREMENTS } from '@agent/Planning/Scenario/StatusScenario';
+import { StepRegistry } from '@agent/Planning/StepRegistry';
 
-export const STATUS_COMMAND_CANONICAL_PLAN: TaskPlan = {
-  version: 2,
-  goal: 'Добавить команду /status в CLI с использованием существующих источников данных.',
-  steps: [
-    {
-      id: 'step-1',
-      type: 'search',
-      action: 'find-examples',
-      subject: 'обработка существующих CLI-команд',
-      goal: 'Найти существующий пример: обработка существующих CLI-команд',
-      status: 'pending',
-      maxAttempts: 3,
-      inputs: [],
-      outputs: ['cli.command.example'],
-    },
-    {
-      id: 'step-2',
-      type: 'search',
-      action: 'find-usages',
-      subject: 'ProjectSession, ProjectIndex, projectId и conversationId',
-      goal: 'Найти использования: ProjectSession, ProjectIndex, projectId и conversationId',
-      status: 'pending',
-      maxAttempts: 3,
-      inputs: ['cli.command.example'],
-      outputs: ['project.id.source', 'conversation.id.source', 'index.files.count.source'],
-    },
-    {
-      id: 'step-3',
-      type: 'understand',
-      action: 'determine-integration',
-      subject: '/status в runCli на основе найденного примера и источников данных',
-      goal: 'Определить интеграцию: /status в runCli на основе найденного примера и источников данных',
-      status: 'pending',
-      maxAttempts: 2,
-      inputs: ['cli.command.example', 'project.id.source', 'conversation.id.source', 'index.files.count.source'],
-      outputs: ['cli.status.integration'],
-    },
-    {
-      id: 'step-4',
-      type: 'prepare-change',
-      action: 'define-change',
-      subject: 'минимальное изменение src/cli/Cli.ts для команды /status',
-      goal: 'Определить точное изменение: минимальное изменение src/cli/Cli.ts для команды /status',
-      status: 'pending',
-      maxAttempts: 1,
-      inputs: ['cli.status.integration'],
-      outputs: ['status.change-plan'],
-    },
-    {
-      id: 'step-5',
-      type: 'edit-file',
-      action: 'apply-change',
-      subject: '/status в src/cli/Cli.ts',
-      goal: 'Применить изменение: /status в src/cli/Cli.ts',
-      status: 'pending',
-      maxAttempts: 3,
-      inputs: ['status.change-plan'],
-      outputs: ['status.cli.updated'],
-      targetPath: 'src/cli/Cli.ts',
-    },
-    {
-      id: 'step-6',
-      type: 'finalize',
-      action: 'summarize-result',
-      subject: 'добавление команды /status',
-      goal: 'Сообщить результат: добавление команды /status',
-      status: 'pending',
-      maxAttempts: 1,
-      inputs: ['status.cli.updated'],
-      outputs: ['task.final-result'],
-    },
-  ],
-};
+export const STATUS_COMMAND_CANONICAL_PLAN = new PlanCompiler(new StepRegistry()).compile(STATUS_SCENARIO_REQUIREMENTS, 'ru');
 
 export const STATUS_SEARCH_FACTS = [
   {
-    key: 'cli.command.example',
-    value: 'src/cli/Cli.ts: COMMANDS array + inline runCli command branches',
-    evidence: [{ path: 'src/cli/Cli.ts', symbol: 'runCli', fact: 'Existing CLI commands are listed in COMMANDS and handled inline.' }],
-  },
-  {
-    key: 'project.id.source',
-    value: 'nodus.projectSession.projectId',
+    key: 'evidence:project.id.definition',
+    value: 'src/project/ProjectSession/ProjectSession.ts#projectId: public get projectId(): string',
     evidence: [{ path: 'src/project/ProjectSession/ProjectSession.ts', symbol: 'projectId', fact: 'ProjectSession exposes projectId.' }],
   },
   {
-    key: 'conversation.id.source',
-    value: 'conversation.id',
+    key: 'evidence:conversation.id.definition',
+    value: 'src/core/Conversation/Conversation.ts#id: public readonly id: string',
     evidence: [{ path: 'src/core/Conversation/Conversation.ts', symbol: 'id', fact: 'Conversation exposes readonly id.' }],
   },
   {
-    key: 'index.files.count.source',
-    value: 'nodus.projectSession.index?.files.length',
-    evidence: [{ path: 'src/project/ProjectSession/ProjectSession.ts', symbol: 'index', fact: 'Existing code uses this.index.files.length.' }],
+    key: 'evidence:project.index.files',
+    value: 'src/project/Index/ProjectIndex.ts#files: files: ProjectFileFact[]',
+    evidence: [{ path: 'src/project/Index/ProjectIndex.ts', symbol: 'files', fact: 'ProjectIndex exposes files.' }],
   },
 ] as const;
 
-export const STATUS_INTEGRATION_FACT = {
-  key: 'cli.status.integration',
-  value: 'Add /status to COMMANDS and add one inline runCli branch that prints projectSession.projectId, conversation.id, and projectSession.index?.files.length when index exists.',
-} as const;
+export const STATUS_INTEGRATION_FACTS = [
+  {
+    key: 'fact:project.id.access@cli',
+    value: 'Use nodus.projectSession.projectId from the CLI runtime context.',
+    evidence: [{ path: 'src/project/ProjectSession/ProjectSession.ts', symbol: 'projectId', fact: 'ProjectSession exposes projectId.' }],
+  },
+  {
+    key: 'fact:conversation.id.access@cli',
+    value: 'Use conversation.id from the active CLI conversation.',
+    evidence: [{ path: 'src/core/Conversation/Conversation.ts', symbol: 'id', fact: 'Conversation exposes readonly id.' }],
+  },
+  {
+    key: 'fact:project.index.fileCount.access@cli',
+    value: 'Use nodus.projectSession.index?.files.length and handle an unavailable index.',
+    evidence: [{ path: 'src/project/Index/ProjectIndex.ts', symbol: 'files', fact: 'ProjectIndex exposes files.' }],
+  },
+  {
+    key: 'fact:cli.command.pattern@cli',
+    value: 'Add the command to COMMANDS and dispatch it with an explicit inline if branch using console.log.',
+    evidence: [{ path: 'src/cli/Cli.ts', symbol: 'runCli', fact: 'CLI uses COMMANDS plus inline command branches.' }],
+  },
+] as const;
 
 export const STATUS_CHANGE_FACT = {
-  key: 'status.change-plan',
-  value: 'Edit only src/cli/Cli.ts: add /status to COMMANDS and one inline handler using nodus.projectSession.projectId, conversation.id, and nodus.projectSession.index?.files.length.',
+  key: 'change-definition:status.command',
+  value: 'Edit only src/cli/Cli.ts: add /status to COMMANDS and one inline handler using the established CLI access facts.',
+  evidence: [{ path: 'src/cli/Cli.ts', fact: 'Target selected by the requirement map.' }],
 } as const;
 
 export const STATUS_CLI_SOURCE = `// Cli.ts\nconst COMMANDS = [\n  { name: '/help', description: 'Show help.' },\n];\n\nexport async function runCli(): Promise<void> {\n  const value = '/help';\n  if (value === '/help') console.log('help');\n}\n`;

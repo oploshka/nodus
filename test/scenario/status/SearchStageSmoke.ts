@@ -11,7 +11,7 @@ const result = await runStepHarness({
     status: 'pending',
     maxAttempts: 1,
     inputs: [],
-    outputs: ['project.id.source'],
+    outputs: ['evidence:project.id.definition'],
   },
   model: () => ({
     status: 'continue',
@@ -35,10 +35,10 @@ const result = await runStepHarness({
 if (result.modelCalls !== 1) throw new Error(`Search stage should need one model call, got ${result.modelCalls}`);
 if (result.toolCalls !== 1) throw new Error(`Search stage should execute one retrieval, got ${result.toolCalls}`);
 if (result.recoveryCalls !== 0) throw new Error('Search stage must not enter recovery for a concrete result');
-if (!result.state.executionContext.has('project.id.source')) throw new Error('Search output fact was not stored');
+if (!result.state.executionContext.has('evidence:project.id.definition')) throw new Error('Typed evidence output was not stored');
 if (result.state.plan.steps[0]?.status !== 'completed') throw new Error('Search step did not complete deterministically');
 
 console.log('## /status search stage');
-console.log('one representative retrieval call: OK');
+console.log('search produces typed evidence: OK');
 console.log('concrete result completes search without evaluator: OK');
 console.log('PASS');

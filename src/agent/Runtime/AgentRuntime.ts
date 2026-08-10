@@ -6,6 +6,7 @@ import type { Conversation } from '@core/Conversation/Conversation';
 import { Execution } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
+import type { RequirementMap } from '@agent/Planning/RequirementMap';
 import type { TaskPlan } from '@agent/Planning/TaskPlan';
 
 export class AgentRuntime {
@@ -32,13 +33,16 @@ export class AgentRuntime {
     return true;
   }
 
-  public async execute(task: Task, conversation: Conversation, planOverride?: TaskPlan): Promise<Execution> {
+  public async execute(task: Task, conversation: Conversation, planOverride?: TaskPlan | RequirementMap): Promise<Execution> {
     const execution = new Execution(task.id);
     execution.status = 'running';
     execution.addEvent('task', { description: task.description });
     this.reporter.task(task.description);
 
-    const plan = planOverride ? this.freshPlan(planOverride) : await this.planGenerator.generate(task, execution.id);
+    if (planOverride && this.isRequirementMap(planOverride)) this.reporter.requirements(planOverride);
+    const plan = planOverride
+      ? this.freshPlan(this.isRequirementMap(planOverride) ? this.planGenerator.compile(planOverride, task.description) : planOverride)
+      : await this.planGenerator.generate(task, execution.id);
     execution.addEvent('task-plan', plan);
     this.reporter.plan(plan);
     execution.currentOperation = plan.steps[0]?.type;
@@ -90,6 +94,11 @@ export class AgentRuntime {
     this.pausedByConversation.delete(conversationId);
     if (canContinue && state.execution.status === 'running') await this.planExecutor.run(state);
     return this.finishOrPause(state);
+  }
+
+
+  private isRequirementMap(value: TaskPlan | RequirementMap): value is RequirementMap {
+    return value.version === 1 && 'root' in value && Array.isArray((value as RequirementMap).entries);
   }
 
   private freshPlan(plan: TaskPlan): TaskPlan {
