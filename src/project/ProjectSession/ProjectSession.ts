@@ -9,7 +9,7 @@ import type { ProjectScanner } from '@project/Scanner/ProjectScanner';
 import type { ProjectSnapshot } from '@project/Snapshot/ProjectSnapshot';
 
 export class ProjectSession {
-  public currentIndexMy?: ProjectIndex;
+  public index?: ProjectIndex;
 
   public constructor(
     public readonly configuration: ProjectConfiguration,
@@ -33,7 +33,7 @@ export class ProjectSession {
 
     await this.logger.info('project-opened', {
       root: this.root,
-      hasIndex: Boolean(this.currentIndexMy),
+      hasIndex: Boolean(this.index),
       knowledgeEntries: this.knowledge.all().length,
       scanMode: this.configuration.scanMode,
     }, { projectId: this.projectId });
@@ -45,7 +45,7 @@ export class ProjectSession {
 
 
   public async clearCache(): Promise<void> {
-    this.currentIndexMy = undefined;
+    this.index = undefined;
     const cachePath = this.resolveOptionalPath(this.configuration.cachePath);
     if (!cachePath) return;
     await rm(cachePath, { force: true });
@@ -54,10 +54,10 @@ export class ProjectSession {
 
   public async scan(): Promise<ProjectIndex> {
     await this.logger.info('project-scan-started', undefined, { projectId: this.projectId });
-    this.currentIndexMy = await this.scanner.scan(this.configuration);
+    this.index = await this.scanner.scan(this.configuration);
     await this.saveSnapshot();
-    await this.logger.info('project-scan-completed', { files: this.currentIndexMy.files.length }, { projectId: this.projectId });
-    return this.currentIndexMy;
+    await this.logger.info('project-scan-completed', { files: this.index.files.length }, { projectId: this.projectId });
+    return this.index;
   }
 
   public async refresh(): Promise<ProjectIndex> {
@@ -75,7 +75,7 @@ export class ProjectSession {
       projectId: this.projectId,
       root: this.root,
       savedAt: new Date().toISOString(),
-      index: this.currentIndexMy,
+      index: this.index,
     };
 
     await mkdir(dirname(cachePath), { recursive: true });
@@ -92,7 +92,7 @@ export class ProjectSession {
       const raw = await readFile(cachePath, 'utf8');
       const snapshot = JSON.parse(raw) as ProjectSnapshot;
       if (snapshot.schemaVersion === 1 && snapshot.projectId === this.projectId) {
-        this.currentIndexMy = snapshot.index;
+        this.index = snapshot.index;
       }
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;

@@ -245,7 +245,7 @@ export class RequirementResolutionPlanner {
   }
 
   private projectCandidateFiles(): string[] {
-    return (this.projectSession.currentIndexMy?.files.map((file) => file.path) ?? [])
+    return (this.projectSession.index?.files.map((file) => file.path) ?? [])
       .filter((path) => !path.startsWith('test/') && !path.startsWith('doc/') && !path.includes('/test/') && !path.includes('/doc/') && !path.toLowerCase().includes('benchmark'))
       .slice(0, 32);
   }
@@ -253,7 +253,7 @@ export class RequirementResolutionPlanner {
   private resolveProjectPath(value: string): string | undefined {
     const requested = value.trim().replace(/\\/g, '/').replace(/^\.\//, '');
     if (!requested) return undefined;
-    const files = this.projectSession.currentIndexMy?.files.map((file) => file.path.replace(/\\/g, '/')) ?? [];
+    const files = this.projectSession.index?.files.map((file) => file.path.replace(/\\/g, '/')) ?? [];
     if (files.includes(requested)) return requested;
     const lower = requested.toLowerCase();
     const suffix = files.filter((path) => path.toLowerCase().endsWith(`/${lower}`));

@@ -7,6 +7,8 @@ Current architecture documentation for Nodus v0.2.0:
 - [Model response formats](./ModelResponseFormats.md) — the three wire formats (`json | raw | text`), parsers, and schema validation.
 - [Testing](./TESTING.md) — maintained smoke tests, `/status` stage suite, and development loop.
 - [Architecture summary](./ARCHITECTURE.md) — compact entry point to the current runtime.
+- [Design principles](./DESIGN_PRINCIPLES.md) — working principles, observed properties, and hypotheses that still require benchmarks.
+- [Benchmarks and experiments](./benchmarks/README.md) — behavioral comparison cases, including the raw-agent `/status` experiment.
 - [MVP specification](./MvpSpecification.md) — historical v0.1 scope; useful as background, not the current execution contract.
 - [Scenario: `/status`](./scenarios/status-command.md) — canonical integration scenario.
 

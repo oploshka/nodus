@@ -34,13 +34,13 @@ export class ContextSelector {
         projectId: projectSession.projectId,
         root: projectSession.root,
         indexedFiles,
-        hasIndex: Boolean(projectSession.currentIndexMy),
+        hasIndex: Boolean(projectSession.index),
       },
     };
   }
 
   private selectIndexedFiles(description: string, projectSession: ProjectSession, limit: number): string[] {
-    const files = projectSession.currentIndexMy?.files ?? [];
+    const files = projectSession.index?.files ?? [];
     if (files.length <= limit) {
       return files.map((file) => file.path);
     }
