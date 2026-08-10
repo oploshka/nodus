@@ -70,17 +70,23 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
   {
     id: 'understand',
     description: 'Understand existing code, responsibilities, dependencies, and project behavior.',
-    prompt: jsonPrompt('Build a focused understanding required by the current plan step.', [
-      'Work only on the ACTIVE plan-step contract. First use supplied known facts and evidence; do not request a file merely to reconfirm a fact already supplied.',
-      'Search has already located candidate files. Understand may read only those known/referenced files when source text is genuinely required; do not start a new broad project search.',
-      'Read only the most important files needed for the current question and request at most 3 reads in one batch.',
-      'Separate facts visible in code from inferred intent.',
-      'Write concise factual observations after every evidence round so they can survive after raw file contents are dropped.',
-      'Do not broaden the active goal merely to gather more files.',
-      'After each evidence round, summarize what is known in stepResult and publish reusable results under the exact activeStep.outputs keys in stepResult.facts.',
-      'Preserve concrete receiver chains and source scope from supplied evidence; do not replace configuration.project.id with state.task.projectId, nodus.projectSession with this.index, or otherwise substitute a different access path without direct evidence.',
-      'If the supplied facts/evidence are sufficient for the active goal, derive the requested outputs and set stepResult.goalSatisfied=true instead of requesting more files.',
-    ]),
+    prompt: {
+      purpose: 'Build a focused understanding required by the current plan step.',
+      rules: [
+        'Work only on the ACTIVE plan-step contract. First use supplied known facts and evidence; do not request a file merely to reconfirm a fact already supplied.',
+        'Search has already located candidate files. Understand may read only those known/referenced files when source text is genuinely required; do not start a new broad project search.',
+        'Read only the most important files needed for the current question and request at most 3 reads in one batch.',
+        'Separate facts visible in code from inferred intent.',
+        'Write concise factual observations after every evidence round so they can survive after raw file contents are dropped.',
+        'Do not broaden the active goal merely to gather more files.',
+        'After each evidence round, summarize what is known and publish reusable results under the exact activeStep.outputs keys.',
+        'Preserve concrete receiver chains and source scope from supplied evidence; do not replace configuration.project.id with state.task.projectId, nodus.projectSession with this.index, or otherwise substitute a different access path without direct evidence.',
+        'Treat requirement constraints as part of the fact contract, not as advice. A candidate that violates read-only, existing-state, no-side-effects, nullable, must-not-scan-or-refresh, or another supplied constraint cannot satisfy that output.',
+        'Do not replace read access to existing state with an operation that creates, refreshes, scans, mutates, or otherwise changes that state. If no compliant access path is supported by evidence, return the exact output key in MISSING instead of inventing a workaround.',
+        'If the supplied facts/evidence are sufficient for the active goal, derive the requested outputs and mark the goal satisfied instead of requesting more files.',
+        'Use the supplied RAW response protocol. Do not serialize understand results or source-read requests as JSON.',
+      ],
+    },
     model: { temperature: 0 },
     execution: execution('understanding', ['architecture', 'project'], {
       costWeight: 2,
@@ -127,11 +133,11 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
     description: 'Prepare a concrete per-file change plan from gathered evidence without editing files.',
     prompt: jsonPrompt('Prepare the exact file-level change before editing.', [
       'Work only on the ACTIVE plan-step goal.',
-      'Use completedStepEvidence to identify the minimum files and edits required.',
+      'Use the established active-step facts, their provenance, and supplied requirement constraints to identify the minimum files and edits required.',
       'Do not emit file changes and do not search broadly in this operation.',
       'Return stepResult.goalSatisfied=true only when the target files and exact intended modifications are concrete. Put every exact relative target file path in stepResult.targets and publish the compact change plan under the exact activeStep.outputs key.',
       'Use exact access paths already established by facts/evidence. Do not upgrade a direct property access into a hypothetical getter/service or substitute a different receiver.',
-      'If evidence is missing, return goalSatisfied=false and list the exact missing facts in stepResult.missing; let Recovery decide how to gather them.',
+      'If required knowledge is missing, return goalSatisfied=false and list the exact typed fact/evidence refs in stepResult.missing; requirement resolution handles those contracts before generic recovery.',
     ]),
     model: { temperature: 0 },
     execution: execution('implementation', ['code', 'architecture', 'project'], {
@@ -218,7 +224,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
     prompt: jsonPrompt('Extract reusable project knowledge candidates.', [
       'Do not present assumptions about WHY as confirmed decisions.',
       'Prefer concrete patterns and understandings supported by project evidence.',
-      'This operation does not automatically persist knowledge in v0.1.',
+      'This operation does not automatically persist knowledge in the current runtime.',
     ]),
     model: { temperature: 0.1 },
     execution: execution('knowledge-extraction', ['project', 'architecture'], {

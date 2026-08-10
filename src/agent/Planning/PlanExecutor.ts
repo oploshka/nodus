@@ -4,8 +4,14 @@ import type { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import type { PlanUpdater } from '@agent/Planning/PlanUpdater';
 import type { RecoveryController, RecoveryDecision } from '@agent/Planning/RecoveryController';
-import type { PlanStep, TaskPlan } from '@agent/Planning/TaskPlan';
+import type { PlanStep, StepRequirementContract, TaskPlan } from '@agent/Planning/TaskPlan';
 import { SearchRequestCompiler } from '@agent/Planning/SearchRequestCompiler';
+import { RetrievalResultClassifier } from '@agent/Planning/RetrievalResult';
+import { ChangeDefinitionCompiler } from '@agent/Planning/ChangeDefinitionCompiler';
+import { FinalResultCompiler } from '@agent/Planning/FinalResultCompiler';
+import { RequirementConstraintValidator } from '@agent/Planning/RequirementConstraintValidator';
+import type { RequirementResolutionPlanner } from '@agent/Planning/RequirementResolutionPlanner';
+import { parseWorkflowDataRef } from '@agent/Planning/WorkflowData';
 import { ExecutionContext } from '@agent/Planning/ExecutionContext';
 import { ContextComposer } from '@agent/Planning/ContextComposer';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
@@ -38,6 +44,8 @@ export interface PlanExecutionState {
   startedAt: number;
   pauseReason?: string;
   retryReason?: string;
+  requirementResolutionAttempts?: Map<string, number>;
+  requirementRechecks?: Set<string>;
 }
 
 export type PlanRunResult = 'finished' | 'paused';
@@ -46,6 +54,10 @@ export class PlanExecutor {
   public static readonly MAX_RESUMES = 3;
   private readonly contextComposer = new ContextComposer();
   private readonly searchRequestCompiler = new SearchRequestCompiler();
+  private readonly retrievalClassifier = new RetrievalResultClassifier();
+  private readonly changeDefinitionCompiler = new ChangeDefinitionCompiler();
+  private readonly finalResultCompiler = new FinalResultCompiler();
+  private readonly requirementConstraintValidator = new RequirementConstraintValidator();
   private static readonly SAFETY_NODE_EXECUTIONS = 50;
   private static readonly MAX_UNDERSTAND_TOOL_ROUNDS = 3;
 
@@ -59,6 +71,7 @@ export class PlanExecutor {
     private readonly planUpdater: PlanUpdater,
     private readonly logger: Logger,
     private readonly reporter: ExecutionReporter,
+    private readonly requirementResolutionPlanner?: RequirementResolutionPlanner,
   ) {}
 
   public async run(state: PlanExecutionState): Promise<PlanRunResult> {
@@ -86,8 +99,10 @@ export class PlanExecutor {
       // Step outputs are postconditions. If recovery or an earlier equivalent step has already
       // established every output, there is nothing left for the model to do here.
       if (this.outputsAlreadySatisfied(state, step)) {
+        const rechecked = this.consumeRequirementRecheck(state, step);
+        if (rechecked.length > 0) this.reporter.requirementRechecked(rechecked, true);
         this.reporter.stepAlreadySatisfiedAt(state.planIndex, state.plan.steps.length, step.goal, step.type, step.outputs);
-        this.completeStep(state, step, 'outputs-already-satisfied');
+        this.completeStep(state, step, rechecked.length > 0 ? 'requirement-rechecked' : 'outputs-already-satisfied');
         continue;
       }
 
@@ -98,10 +113,12 @@ export class PlanExecutor {
           goalSatisfied: false,
           findings: [],
           evidence: [],
-          missing: composed.missingInputs.map((key) => `required input fact: ${key}`),
+          missing: composed.missingInputs,
           facts: [],
         };
         state.stepResults.set(step.id, this.mergeStepResults(state.stepResults.get(step.id), blocked));
+        const missingRequirement = composed.missingInputs.find((key) => this.isWorkflowDataRef(key));
+        if (missingRequirement && await this.resolveRequirement(state, step, missingRequirement, blocked)) continue;
         const recovered = await this.recover(state, `missing-inputs:${composed.missingInputs.join(',')}`);
         if (!recovered) return state.pauseReason ? 'paused' : 'finished';
         continue;
@@ -117,15 +134,19 @@ export class PlanExecutor {
       const displayedAttempt = understandContinuation
         ? Math.max(state.stepAttempts, 1)
         : state.stepAttempts + 1;
-      this.reporter.planStep(
-        state.planIndex,
-        state.plan.steps.length,
-        step.goal,
-        step.type,
-        displayedAttempt,
-        step.maxAttempts,
-        state.retryReason,
-      );
+      if (understandContinuation) {
+        this.reporter.stepContinuation(state.planIndex, step.type, state.understandContinuation?.toolRounds ?? 0);
+      } else {
+        this.reporter.planStep(
+          state.planIndex,
+          state.plan.steps.length,
+          step.goal,
+          step.type,
+          displayedAttempt,
+          step.maxAttempts,
+          state.retryReason,
+        );
+      }
       state.retryReason = undefined;
       this.reporter.contextCompose(step.inputs, composed.facts.map((fact) => fact.key), composed.missingInputs);
 
@@ -159,12 +180,54 @@ export class PlanExecutor {
         continue;
       }
 
-      // Search owns deterministic retrieval execution. When the requirement map already
-      // provides enough structure (typed output + source hints), Nodus compiles and runs
-      // the retrieval directly without spending a model call on low-level tool syntax.
-      if (step.type === 'search' && (step.sourceHints?.length ?? 0) > 0) {
-        const completed = await this.executeCompiledSearch(state, step, context);
-        if (completed) continue;
+      // Typed evidence requirements use deterministic retrieval first. The model is only a
+      // fallback for legacy/untyped search steps where Nodus cannot compile a useful query.
+      if (step.type === 'search' && this.searchRequestCompiler.supportsDeterministicRequirement(step)) {
+        const searchOutcome = await this.executeCompiledSearch(state, step, context);
+        if (searchOutcome === 'completed') continue;
+        if (searchOutcome === 'unresolved') {
+          const unresolved = state.stepResults.get(step.id);
+          const requirement = step.outputs.find((output) => this.isWorkflowDataRef(output));
+          if (requirement && await this.resolveRequirement(state, step, requirement, unresolved)) continue;
+          const recovered = await this.recover(state, unresolved?.retrieval?.match === 'related' ? 'search-related-only' : 'search-missing');
+          if (!recovered) return state.pauseReason ? 'paused' : 'finished';
+          continue;
+        }
+      }
+
+      // Fast path: a change-definition with a known target and complete semantic facts is a
+      // deterministic compilation task, not another reasoning call.
+      if (step.type === 'prepare-change') {
+        const compiled = this.changeDefinitionCompiler.compile(step, composed.facts);
+        if (compiled) {
+          const merged = this.mergeStepResults(state.stepResults.get(step.id), compiled);
+          state.stepResults.set(step.id, merged);
+          const mergedKeys = state.executionContext.mergeStepResult(step, merged);
+          this.reporter.factsMerged(mergedKeys);
+          this.reporter.stepResult(merged);
+          this.reporter.deterministicStep(step.type, 'change-definition compiled from established facts');
+          this.expandEditFileSteps(state, merged.targets ?? []);
+          this.completeStep(state, step, 'deterministic-change-definition');
+          continue;
+        }
+      }
+
+      // Fast path: after a concrete change/review/verification result, finalization can be
+      // assembled from execution state without paying for another model response.
+      if (step.type === 'finalize') {
+        const compiled = this.finalResultCompiler.compile(step, state.task, state.execution, state.executionContext);
+        if (compiled) {
+          const merged = this.mergeStepResults(state.stepResults.get(step.id), compiled.stepResult);
+          state.stepResults.set(step.id, merged);
+          const mergedKeys = state.executionContext.mergeStepResult(step, merged);
+          this.reporter.factsMerged(mergedKeys);
+          this.reporter.deterministicStep(step.type, 'final result compiled from execution state');
+          state.execution.status = 'completed';
+          state.execution.result = compiled.answer;
+          step.status = 'completed';
+          state.execution.addEvent('plan-step-completed', { stepId: step.id, type: step.type, reason: 'deterministic-finalize' });
+          return 'finished';
+        }
       }
 
       if (step.type === 'edit-file') {
@@ -181,7 +244,7 @@ export class PlanExecutor {
           execution: state.execution,
           conversation: state.conversation,
           operation,
-          activeStep: { id: step.id, type: step.type, action: step.action, subject: step.subject, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath, sourceHints: step.sourceHints },
+          activeStep: { id: step.id, type: step.type, action: step.action, subject: step.subject, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath, sourceHints: step.sourceHints, requirements: step.requirements?.map(({ ref, description, constraints }) => ({ ref, description, constraints })) },
           stepContext: {
             ...composed,
             activeEvidence: this.activeEvidence(state.stepResults.get(step.id)),
@@ -206,7 +269,9 @@ export class PlanExecutor {
       });
 
       if (result.stepResult) {
-        const merged = this.mergeStepResults(state.stepResults.get(step.id), result.stepResult);
+        const validated = this.requirementConstraintValidator.validate(step, result.stepResult);
+        result = { ...result, stepResult: validated };
+        const merged = this.mergeStepResults(state.stepResults.get(step.id), validated);
         state.stepResults.set(step.id, merged);
         const mergedKeys = state.executionContext.mergeStepResult(step, merged);
         this.reporter.factsMerged(mergedKeys);
@@ -219,8 +284,13 @@ export class PlanExecutor {
           ...this.searchRequestCompiler.queriesFromLegacyToolCalls(result.toolCalls),
         ];
         if (result.status !== 'failed' && modelQueries.length > 0) {
-          const completed = await this.executeCompiledSearch(state, step, context, modelQueries);
-          if (completed) continue;
+          const searchOutcome = await this.executeCompiledSearch(state, step, context, modelQueries);
+          if (searchOutcome === 'completed') continue;
+          if (searchOutcome === 'unresolved') {
+            const unresolved = state.stepResults.get(step.id);
+            const requirement = step.outputs.find((output) => this.isWorkflowDataRef(output));
+            if (requirement && await this.resolveRequirement(state, step, requirement, unresolved)) continue;
+          }
         }
 
         // Never execute raw model-generated search tool calls. The model may suggest only
@@ -362,6 +432,10 @@ export class PlanExecutor {
             this.expandEditFileSteps(state, targets);
           }
           this.completeStep(state, step, outputsReady ? 'outputs-ready' : 'goal-satisfied');
+          continue;
+        }
+        const missingRequirement = this.missingRequirementRef(step, mergedResult);
+        if (missingRequirement && await this.resolveRequirement(state, step, missingRequirement, mergedResult)) {
           continue;
         }
         if (state.stepAttempts < step.maxAttempts) {
@@ -576,13 +650,31 @@ export class PlanExecutor {
     step: PlanStep,
     context: LogContext,
     preferredQueries: string[] = [],
-  ): Promise<boolean> {
-    const calls = this.searchRequestCompiler.compile(step, preferredQueries);
-    if (calls.length === 0) return false;
+  ): Promise<'completed' | 'unresolved' | 'not-run'> {
+    const request = this.searchRequestCompiler.compile(step, preferredQueries);
+    if (request.exact.length === 0 && request.related.length === 0) return 'not-run';
 
-    const summary = await this.toolExecutor.execute(calls, state.execution, context, 5);
-    this.reporter.tools(summary.executed);
-    return this.completeSearchToolRound(state, step);
+    let exactEntries: ToolContextEntry[] = [];
+    let relatedEntries: ToolContextEntry[] = [];
+
+    if (request.exact.length > 0) {
+      const summary = await this.toolExecutor.execute(request.exact, state.execution, context, 5);
+      this.reporter.tools(summary.executed);
+      exactEntries = [...state.execution.getToolContext()];
+    }
+
+    let assessment = this.retrievalClassifier.classify(exactEntries, []);
+    if (assessment.match !== 'exact' && request.related.length > 0) {
+      const summary = await this.toolExecutor.execute(request.related, state.execution, context, 5);
+      this.reporter.tools(summary.executed);
+      relatedEntries = [...state.execution.getToolContext()];
+      assessment = this.retrievalClassifier.classify(exactEntries, relatedEntries);
+    }
+
+    const allEntries = [...exactEntries, ...relatedEntries];
+    return this.completeSearchToolRound(state, step, assessment.match, assessment.reason, allEntries)
+      ? 'completed'
+      : 'unresolved';
   }
 
   private toolCallSignature(call: OperationResult['toolCalls'][number]): string {
@@ -594,73 +686,53 @@ export class PlanExecutor {
     return `${call.tool}:${JSON.stringify(normalized)}`;
   }
 
-  private completeSearchToolRound(state: PlanExecutionState, step: PlanStep): boolean {
-    const toolContext = state.execution.getToolContext();
-    if (toolContext.length === 0) return false;
-
+  private completeSearchToolRound(
+    state: PlanExecutionState,
+    step: PlanStep,
+    match: 'exact' | 'related' | 'missing',
+    reason: string,
+    toolContext: ToolContextEntry[],
+  ): boolean {
     const previous = state.stepResults.get(step.id);
     const normalizedEvidence = this.normalizeToolEvidence(toolContext);
-    const hasConcreteResult = this.searchActionHasConcreteResult(step, toolContext);
+    const requirement = step.outputs[0];
+    const exact = match === 'exact';
     const round: StepResult = {
-      goalSatisfied: hasConcreteResult,
-      findings: hasConcreteResult
-        ? [`Search action ${step.action ?? 'search'} returned concrete project results.`]
-        : [],
+      goalSatisfied: exact,
+      findings: [
+        match === 'exact'
+          ? `Exact retrieval satisfied ${requirement ?? step.subject ?? step.goal}.`
+          : match === 'related'
+            ? `Related project evidence was found, but it does not satisfy ${requirement ?? step.subject ?? step.goal}.`
+            : `No project evidence satisfied ${requirement ?? step.subject ?? step.goal}.`,
+      ],
       evidence: normalizedEvidence,
-      missing: hasConcreteResult ? [] : [step.subject ?? step.goal],
-      facts: hasConcreteResult
+      missing: exact ? [] : step.outputs.length > 0 ? [...step.outputs] : [step.subject ?? step.goal],
+      facts: exact
         ? step.outputs.map((key) => ({
             key,
             value: this.searchResultValue(step, normalizedEvidence),
             evidence: normalizedEvidence,
           }))
         : [],
+      retrieval: { match, requirement, reason },
     };
     const merged = this.mergeStepResults(previous, round);
     state.stepResults.set(step.id, merged);
+    this.reporter.retrieval(match, requirement ?? step.subject ?? step.goal, reason);
+    this.reporter.stepResult(merged);
+    state.execution.setToolContext([], 0);
 
-    if (!hasConcreteResult) {
+    if (!exact) {
       this.recordStepProgress(state, step.id, merged);
       return false;
     }
 
     const mergedKeys = state.executionContext.mergeStepResult(step, merged);
     this.reporter.factsMerged(mergedKeys);
-    this.reporter.stepResult(merged);
-    state.execution.setToolContext([], 0);
-    this.completeStep(state, step, 'deterministic-search-result');
-    return true;
-  }
-
-  private searchActionHasConcreteResult(step: PlanStep, toolContext: ToolContextEntry[]): boolean {
-    const useful = toolContext.filter((entry) => {
-      if (!entry.result.ok) return false;
-      const data = entry.result.data;
-      if (Array.isArray(data)) return data.length > 0;
-      if (typeof data === 'string') return data.trim().length > 0;
-      if (data && typeof data === 'object') return Object.keys(data as Record<string, unknown>).length > 0;
-      return data !== undefined && data !== null;
-    });
-    if (useful.length === 0) return false;
-
-    if (step.action === 'find-files') {
-      return useful.some((entry) => {
-        if (entry.call.tool === 'file-system') {
-          const data = entry.result.data;
-          return Boolean(
-            String(entry.call.input.action ?? '') === 'exists'
-            && data
-            && typeof data === 'object'
-            && (data as Record<string, unknown>).exists === true,
-          );
-        }
-        if (!Array.isArray(entry.result.data)) return false;
-        return entry.result.data.some((item) => item && typeof item === 'object' && typeof (item as Record<string, unknown>).path === 'string');
-      });
-    }
-
-    // find-symbols / definitions / usages / references / examples all return concrete retrieval
-    // artifacts. Their semantic meaning is intentionally not judged here.
+    const rechecked = this.consumeRequirementRecheck(state, step);
+    if (rechecked.length > 0) this.reporter.requirementRechecked(rechecked, true);
+    this.completeStep(state, step, rechecked.length > 0 ? 'requirement-rechecked' : 'deterministic-search-exact');
     return true;
   }
 
@@ -793,6 +865,110 @@ export class PlanExecutor {
     return pruned;
   }
 
+  private async resolveRequirement(
+    state: PlanExecutionState,
+    parentStep: PlanStep,
+    requirementRef: string,
+    currentResult?: StepResult,
+  ): Promise<boolean> {
+    if (!this.requirementResolutionPlanner || !this.isWorkflowDataRef(requirementRef)) return false;
+
+    const depth = parentStep.resolutionDepth ?? 0;
+    if (depth >= 2) return false;
+
+    const attempts = state.requirementResolutionAttempts ?? (state.requirementResolutionAttempts = new Map());
+    const count = attempts.get(requirementRef) ?? 0;
+    if (count >= 2) return false;
+
+    const requirement = this.requirementContract(state.plan, parentStep, requirementRef);
+    if (!requirement) return false;
+
+    attempts.set(requirementRef, count + 1);
+    const planned = await this.requirementResolutionPlanner.plan({
+      task: state.task,
+      executionId: state.execution.id,
+      parentStep,
+      requirement,
+      evidence: currentResult?.evidence ?? [],
+      facts: state.executionContext.all(),
+      depth: depth + 1,
+    });
+    if (!planned || planned.plan.steps.length === 0) return false;
+
+    const childSteps = planned.plan.steps.map((step) => ({
+      ...step,
+      status: 'pending' as const,
+      inputs: [...step.inputs],
+      outputs: [...step.outputs],
+      requirements: step.requirements?.map((item) => ({
+        ...item,
+        constraints: item.constraints ? [...item.constraints] : undefined,
+        sourceHints: item.sourceHints ? [...item.sourceHints] : undefined,
+      })),
+      resolutionForStepId: parentStep.id,
+      resolutionForRequirement: requirementRef,
+      resolutionDepth: depth + 1,
+    }));
+    this.ensureUniqueStepIds(state.plan, childSteps);
+
+    const rechecks = state.requirementRechecks ?? (state.requirementRechecks = new Set());
+    rechecks.add(`${parentStep.id}|${requirementRef}`);
+    parentStep.status = 'pending';
+    this.planUpdater.insertBefore(state.plan, state.planIndex, childSteps);
+    this.planUpdater.markPendingFrom(state.plan, state.planIndex);
+    state.stepAttempts = 0;
+    state.retryReason = undefined;
+    state.understandContinuation = undefined;
+    state.understandToolContext?.delete(parentStep.id);
+    this.reporter.requirementResolution(requirementRef, planned.reason, childSteps.length, depth + 1, planned.mode);
+    this.reporter.planUpdated(state.plan, state.planIndex, childSteps.length);
+    return true;
+  }
+
+  private requirementContract(plan: TaskPlan, step: PlanStep, ref: string): StepRequirementContract | undefined {
+    const direct = step.requirements?.find((item) => item.ref === ref);
+    if (direct) return direct;
+    for (const candidate of plan.steps) {
+      const contract = candidate.requirements?.find((item) => item.ref === ref);
+      if (contract) return contract;
+    }
+    if (!this.isWorkflowDataRef(ref)) return undefined;
+    return {
+      ref,
+      description: `Resolve missing workflow requirement ${ref}`,
+      sourceHints: step.sourceHints ? [...step.sourceHints] : undefined,
+    };
+  }
+
+  private missingRequirementRef(step: PlanStep, result?: StepResult): string | undefined {
+    const explicit = result?.missing.find((item) => this.isWorkflowDataRef(item));
+    if (explicit) return explicit;
+    return step.outputs.find((output) => this.isWorkflowDataRef(output) && !result?.facts.some((fact) => fact.key === output));
+  }
+
+  private isWorkflowDataRef(value: string): boolean {
+    try {
+      parseWorkflowDataRef(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private consumeRequirementRecheck(state: PlanExecutionState, step: PlanStep): string[] {
+    const rechecks = state.requirementRechecks;
+    if (!rechecks || rechecks.size === 0) return [];
+    const satisfied: string[] = [];
+    for (const output of step.outputs) {
+      const key = `${step.id}|${output}`;
+      if (!rechecks.has(key)) continue;
+      if (!state.executionContext.has(output)) continue;
+      rechecks.delete(key);
+      satisfied.push(output);
+    }
+    return satisfied;
+  }
+
   private humanRecoveryReason(reason: string, result?: StepResult): string {
     if (reason === 'step-attempt-budget') {
       const missing = result?.missing ?? [];
@@ -867,6 +1043,7 @@ export class PlanExecutor {
       evidence,
       missing: current.missing,
       facts,
+      retrieval: current.retrieval ?? previous.retrieval,
     };
   }
 

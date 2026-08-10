@@ -60,6 +60,8 @@ export class AgentRuntime {
       recoveryMissing: new Map(),
       recoveryGoals: new Set(),
       stepProgress: new Map(),
+      requirementResolutionAttempts: new Map(),
+      requirementRechecks: new Set(),
       resumes: 0,
       startedAt: Date.now(),
     };
@@ -109,6 +111,12 @@ export class AgentRuntime {
         status: 'pending',
         inputs: [...step.inputs],
         outputs: [...step.outputs],
+        sourceHints: step.sourceHints ? [...step.sourceHints] : undefined,
+        requirements: step.requirements?.map((item) => ({
+          ...item,
+          constraints: item.constraints ? [...item.constraints] : undefined,
+          sourceHints: item.sourceHints ? [...item.sourceHints] : undefined,
+        })),
       })),
     };
   }

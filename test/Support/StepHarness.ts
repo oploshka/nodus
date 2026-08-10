@@ -112,7 +112,7 @@ export async function runStepHarness(options: StepHarnessOptions): Promise<StepH
     {
       planStep() {}, contextCompose() {}, note() {}, factsMerged() {}, stepResult() {}, tools() {}, changes() {},
       planAdvance() {}, recovery() {}, recoveryDecision() {}, paused() {}, planUpdated() {}, recoveryPruned() {},
-      stepAlreadySatisfiedAt() {},
+      stepAlreadySatisfiedAt() {}, deterministicStep() {}, retrieval() {}, requirementResolution() {}, requirementRechecked() {}, stepContinuation() {},
     } as never,
   );
 

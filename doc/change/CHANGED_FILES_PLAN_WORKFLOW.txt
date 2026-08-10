@@ -1,7 +1,0 @@
-src/agent/Planning/TaskPlan.ts
-src/agent/Planning/PlanGenerator.ts
-src/agent/Runtime/AgentRuntime.ts
-src/agent/Reporting/ExecutionReporter.ts
-src/core/Nodus/Nodus.ts
-src/model/Prompt/DefaultPromptDefinitions.ts
-src/operation/Default/DefaultOperationProfile.ts

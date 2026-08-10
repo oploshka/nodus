@@ -41,7 +41,7 @@ export async function runCli(args: string[]): Promise<void> {
     await nodus.initialize();
 
     let conversation = nodus.createConversation();
-    console.log(`Nodus v0.1 ready. Project: ${configuration.project.id}`);
+    console.log(`Nodus v0.2.0 ready. Project: ${configuration.project.id}`);
     console.log(`Conversation: ${conversation.id}`);
     console.log('Commands: ' + COMMANDS.map(cmd => cmd.name).join(' '));
 

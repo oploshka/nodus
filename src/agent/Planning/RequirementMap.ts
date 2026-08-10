@@ -10,6 +10,7 @@ export interface RequirementEntry {
   evidenceKind?: EvidenceKind;
   sourceHints?: string[];
   targetPath?: string;
+  constraints?: string[];
 }
 
 export interface RequirementMap {

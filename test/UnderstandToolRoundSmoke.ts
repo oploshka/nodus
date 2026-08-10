@@ -1,4 +1,4 @@
-// StepEvidenceEvaluatorSmoke.ts
+// UnderstandToolRoundSmoke.ts
 import { ExecutionContext } from '@agent/Planning/ExecutionContext';
 import { PlanExecutor, type PlanExecutionState } from '@agent/Planning/PlanExecutor';
 import type { TaskPlan } from '@agent/Planning/TaskPlan';

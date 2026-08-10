@@ -12,6 +12,7 @@ import type { TaskPlan } from '@agent/Planning/TaskPlan';
 import { PlanExecutor } from '@agent/Planning/PlanExecutor';
 import { PlanUpdater } from '@agent/Planning/PlanUpdater';
 import { RecoveryController } from '@agent/Planning/RecoveryController';
+import { RequirementResolutionPlanner } from '@agent/Planning/RequirementResolutionPlanner';
 import { StepRegistry } from '@agent/Planning/StepRegistry';
 import type { NodusConfiguration } from '@core/Configuration/Configuration';
 import { Conversation } from '@core/Conversation/Conversation';
@@ -101,6 +102,13 @@ export class Nodus {
       this.logger,
     );
     const planUpdater = new PlanUpdater();
+    const requirementResolutionPlanner = new RequirementResolutionPlanner(
+      configuration.model,
+      adapter,
+      this.projectSession,
+      stepRegistry,
+      this.logger,
+    );
 
     const modelController = new ModelController(
       configuration.model,
@@ -129,6 +137,7 @@ export class Nodus {
       planUpdater,
       this.logger,
       reporter,
+      requirementResolutionPlanner,
     );
 
     this.runtime = new AgentRuntime(

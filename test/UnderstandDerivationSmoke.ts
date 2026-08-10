@@ -115,7 +115,7 @@ const executor = new PlanExecutor(
   {} as never,
   { info: async () => {}, error: async () => {}, warn: async () => {} } as never,
   {
-    planStep() {}, contextCompose() {}, note() {}, factsMerged() {}, stepResult() {}, tools() {}, planAdvance() {},
+    planStep() {}, stepContinuation() {}, contextCompose() {}, note() {}, factsMerged() {}, stepResult() {}, tools() {}, planAdvance() {},
   } as never,
 );
 

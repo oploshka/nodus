@@ -1,3 +1,0 @@
-Protocol model benchmark additions:
-- src/test/NodusProtocolModelBenchmark.ts
-- package.json

@@ -3,6 +3,7 @@ import type { FileChange } from '@core/Change/ChangeSet';
 
 export type OperationStatus = 'continue' | 'waiting' | 'completed' | 'failed';
 export type TaskIntent = 'read' | 'write';
+export type RetrievalMatch = 'exact' | 'related' | 'missing';
 
 export interface ToolCallRequest {
   tool: string;
@@ -21,6 +22,12 @@ export interface StepFact {
   evidence: StepEvidenceItem[];
 }
 
+export interface RetrievalAssessment {
+  match: RetrievalMatch;
+  requirement?: string;
+  reason: string;
+}
+
 export interface StepResult {
   goalSatisfied: boolean;
   targets?: string[];
@@ -28,6 +35,7 @@ export interface StepResult {
   evidence: StepEvidenceItem[];
   missing: string[];
   facts: StepFact[];
+  retrieval?: RetrievalAssessment;
 }
 
 export interface OperationResult {

@@ -1,16 +1,46 @@
 # Canonical `/status` scenario
 
-This is a regression contract for orchestration, not a hard-coded production plan.
+`/status` is the primary end-to-end regression scenario for the v0.2 requirement-driven workflow.
 
-The plan uses a small whitelist of concrete actions. `search` locates evidence; `understand` interprets it.
+Task contract:
 
-1. **search / find-examples** — subject: existing CLI command handling. Expected evidence: `src/cli/Cli.ts`, `COMMANDS`, `runCli`, and at least one existing command example.
-2. **search / find-usages** — subject: `ProjectSession`, `ProjectIndex`, `projectId`, and `conversationId`. Expected result: directly usable existing source/access facts.
-3. **understand / determine-integration** — connect the located CLI example and data sources to `/status` in `runCli`.
-4. **prepare-change / define-change** — produce one minimal change plan targeting `src/cli/Cli.ts`.
-5. **edit-file / apply-change** — one guarded file edit using preloaded target source.
-6. **finalize / summarize-result** — report the result.
+- display current project ID;
+- display current conversation ID;
+- display the number of files in the **already available** project index when an index exists;
+- reuse existing project APIs/structures;
+- do not scan/refresh merely to answer `/status`;
+- make no unrelated changes.
 
-The semantic source of truth for a step is `type + action + subject + inputs + outputs`. The human-readable goal is derived from that contract.
+## Requirement graph
 
-Expected healthy behavior: search chooses retrieval tool calls only; the evidence evaluator decides satisfaction and missing evidence. No recovery is expected on the happy path.
+```text
+evidence:project.id.definition
+evidence:conversation.id.definition
+evidence:project.index.files
+evidence:project.index.currentAccess  [read-only, existing-state, no-side-effects]
+        ↓
+understand
+        ↓
+fact:project.id.access@cli
+fact:conversation.id.access@cli
+fact:project.index.fileCount.access@cli [must-not-scan-or-refresh, nullable]
+fact:cli.command.pattern@cli
+        ↓
+change-definition:status.command
+        ↓
+change-result:status.command
+        ↓
+final-result:status.command
+```
+
+The compiled normal plan is four deterministic evidence searches, one semantic `understand`, deterministic `prepare-change` when all facts/target are available, one `edit-file`, and deterministic `finalize` after a concrete change result.
+
+If exact evidence is missing, `related` evidence does not satisfy the requirement. Nodus may build a bounded child requirement plan for the missing data and then recheck the original parent requirement.
+
+## Fast development mode
+
+```bash
+npm run dev -- nodus.config.json --clear-cache --clear-logs --scan --scenario=status
+```
+
+This bypasses manual task entry and initial requirement-planner latency by using the fixed scenario task and fixed `RequirementMap`, while still exercising the real `PlanCompiler` and execution runtime.

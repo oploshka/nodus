@@ -23,7 +23,7 @@ const searches = plan.steps.filter((step) => step.type === 'search');
 const understands = plan.steps.filter((step) => step.type === 'understand');
 const prepares = plan.steps.filter((step) => step.type === 'prepare-change');
 const edits = plan.steps.filter((step) => step.type === 'edit-file');
-if (searches.length !== 3) throw new Error(`Expected 3 evidence searches, got ${searches.length}`);
+if (searches.length !== 4) throw new Error(`Expected 4 evidence searches, got ${searches.length}`);
 if (understands.length !== 1) throw new Error(`Expected one fact-producing understand step, got ${understands.length}`);
 if (prepares.length !== 1) throw new Error(`Expected one prepare-change step, got ${prepares.length}`);
 if (edits.length !== 1 || edits[0]?.targetPath !== 'src/cli/Cli.ts') throw new Error('Expected exactly one guarded Cli.ts edit');
@@ -33,6 +33,7 @@ for (const key of [
   'evidence:project.id.definition',
   'evidence:conversation.id.definition',
   'evidence:project.index.files',
+  'evidence:project.index.currentAccess',
   'fact:project.id.access@cli',
   'fact:conversation.id.access@cli',
   'fact:project.index.fileCount.access@cli',

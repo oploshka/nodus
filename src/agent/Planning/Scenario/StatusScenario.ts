@@ -5,7 +5,7 @@ export const STATUS_SCENARIO_TASK = 'Добавь команду /status в CLI.
 
 export const STATUS_SCENARIO_REQUIREMENTS: RequirementMap = {
   version: 1,
-  goal: 'add /status CLI command to display project ID, conversation ID, and index file count',
+  goal: 'add /status CLI command to display project ID, conversation ID, and current index file count',
   root: { kind: 'change-definition', key: 'status.command' },
   entries: [
     {
@@ -24,10 +24,18 @@ export const STATUS_SCENARIO_REQUIREMENTS: RequirementMap = {
     },
     {
       ref: { kind: 'evidence', key: 'project.index.files' },
-      description: 'project index files collection used for file count',
+      description: 'ProjectIndex files collection used for file count',
       requires: [],
       evidenceKind: 'definition',
       sourceHints: ['src/project/Index/ProjectIndex.ts'],
+    },
+    {
+      ref: { kind: 'evidence', key: 'project.index.currentAccess' },
+      description: 'read-only access to the already available current ProjectIndex from ProjectSession',
+      requires: [],
+      evidenceKind: 'definition',
+      sourceHints: ['src/project/ProjectSession/ProjectSession.ts'],
+      constraints: ['read-only', 'existing-state', 'no-side-effects', 'must-not-scan-or-refresh'],
     },
     {
       ref: { kind: 'fact', key: 'project.id.access', scope: 'cli' },
@@ -41,8 +49,12 @@ export const STATUS_SCENARIO_REQUIREMENTS: RequirementMap = {
     },
     {
       ref: { kind: 'fact', key: 'project.index.fileCount.access', scope: 'cli' },
-      description: 'how the CLI obtains the project index file count while handling an unavailable index',
-      requires: [{ kind: 'evidence', key: 'project.index.files' }],
+      description: 'how the CLI reads the current project index file count without creating, scanning, or refreshing the index and handles an unavailable index',
+      requires: [
+        { kind: 'evidence', key: 'project.index.files' },
+        { kind: 'evidence', key: 'project.index.currentAccess' },
+      ],
+      constraints: ['read-only', 'existing-state', 'no-side-effects', 'must-not-scan-or-refresh', 'nullable'],
     },
     {
       ref: { kind: 'fact', key: 'cli.command.pattern', scope: 'cli' },
@@ -60,6 +72,7 @@ export const STATUS_SCENARIO_REQUIREMENTS: RequirementMap = {
         { kind: 'fact', key: 'cli.command.pattern', scope: 'cli' },
       ],
       targetPath: 'src/cli/Cli.ts',
+      constraints: ['minimal-change', 'reuse-existing-api', 'no-unrelated-changes', 'no-side-effects-for-status-read'],
     },
   ],
 };

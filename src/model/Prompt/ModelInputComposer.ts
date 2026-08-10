@@ -24,6 +24,7 @@ export interface ActiveStepView {
   outputs?: string[];
   targetPath?: string;
   sourceHints?: string[];
+  requirements?: Array<{ ref: string; description: string; constraints?: string[] }>;
 }
 
 export interface ActiveEvidenceView {
@@ -62,6 +63,7 @@ export function activeStepMessage(step: ActiveStepView, responseLanguage?: strin
     step.sourceHints?.length ? `Source hints: ${step.sourceHints.join(', ')}` : '',
     step.inputs?.length ? `Inputs: ${step.inputs.join(', ')}` : '',
     step.outputs?.length ? `Outputs: ${step.outputs.join(', ')}` : '',
+    step.requirements?.length ? `Requirements:\n${step.requirements.map((item) => `- ${item.ref}: ${item.description}${item.constraints?.length ? ` [constraints=${item.constraints.join(', ')}]` : ''}`).join('\n')}` : '',
     step.attempt !== undefined && step.maxAttempts !== undefined ? `Attempt: ${step.attempt}/${step.maxAttempts}` : '',
     responseLanguage ? `Response language: ${responseLanguage}` : '',
   ].filter(Boolean);

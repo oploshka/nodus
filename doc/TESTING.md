@@ -1,44 +1,38 @@
 # Testing strategy
 
-Nodus tests live outside production source code:
+Production code lives in `src/`; maintained tests live in `test/`.
 
-```text
-src/   production code
-test/  tests, fixtures, scenario harnesses
-```
+The v0.2 suite prefers contract/stage smoke tests over replaying a slow live model task after every change.
 
-## Development loop
-
-Prefer stage-level scenario tests over replaying a full model-driven task after every change.
-
-For a known scenario, outputs of completed stages are represented as fixtures. A later stage test starts from those fixtures instead of rerunning planner/search/understand again.
-
-Example for `/status`:
-
-```text
-plan fixture
-   ↓
-search stage test
-   ↓ fixture facts
-understand stage test
-   ↓ fixture fact
-prepare-change stage test
-   ↓ fixture fact
-edit-file stage test
-   ↓ fixture result
-finalize stage test
-```
-
-This separates two questions:
-
-1. Does this workflow stage behave correctly?
-2. Can the complete live model workflow solve the task end-to-end?
-
-Use the first question during normal development. Run the full live workflow at checkpoints or when cross-stage behavior changed.
-
-## /status scenario commands
+## Core checks
 
 ```bash
+npm run typecheck
+npm run test:core
+```
+
+`test:core` covers the current architectural contracts:
+
+- backward requirement-map compilation
+- deterministic search request compilation
+- `exact | related | missing` retrieval classification
+- related evidence not satisfying a requirement
+- child requirement resolution planning
+- parent requirement recheck after both knowledge and capability-addition child plans
+- understand RAW protocol and tool-round continuation
+- file-system canonical action contract
+- search prompt regression boundary
+- canonical `/status` stage suite
+
+## Focused commands
+
+```bash
+npm run test:plan:requirements
+npm run test:search:compiler
+npm run test:retrieval
+npm run test:requirement:resolution
+npm run test:requirement:recheck
+npm run test:requirement:capability-recheck
 npm run test:status:plan
 npm run test:status:search
 npm run test:status:understand
@@ -48,4 +42,32 @@ npm run test:status:finalize
 npm run test:scenario:status
 ```
 
-`test:scenario:status` executes the independent stage suite. It does not require the earlier stages to be replayed to test a later stage.
+## `/status` scenario
+
+Each stage can be seeded from typed workflow fixtures:
+
+```text
+RequirementMap
+   ↓
+search evidence
+   ↓
+understand facts
+   ↓
+deterministic prepare-change
+   ↓
+edit-file
+   ↓
+deterministic finalize
+```
+
+The live scenario can still be run separately:
+
+```bash
+npm run dev -- nodus.config.json --clear-cache --clear-logs --scan --scenario=status
+```
+
+Stage smoke tests answer “does the runtime contract work?” The live run answers “does the current model produce good semantic facts?” They are intentionally separate.
+
+## Removed historical tests
+
+Old custom `NodusResponseProtocol` benchmarks and pre-production edit-protocol benchmark tests were removed. They tested abandoned protocol experiments rather than current runtime contracts and increased maintenance/context cost.

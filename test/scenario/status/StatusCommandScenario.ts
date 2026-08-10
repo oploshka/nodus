@@ -21,6 +21,11 @@ export const STATUS_SEARCH_FACTS = [
     value: 'src/project/Index/ProjectIndex.ts#files: files: ProjectFileFact[]',
     evidence: [{ path: 'src/project/Index/ProjectIndex.ts', symbol: 'files', fact: 'ProjectIndex exposes files.' }],
   },
+  {
+    key: 'evidence:project.index.currentAccess',
+    value: 'src/project/ProjectSession/ProjectSession.ts#index: public index?: ProjectIndex',
+    evidence: [{ path: 'src/project/ProjectSession/ProjectSession.ts', symbol: 'index', fact: 'ProjectSession exposes the current index as optional existing state.' }],
+  },
 ] as const;
 
 export const STATUS_INTEGRATION_FACTS = [

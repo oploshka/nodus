@@ -22,6 +22,15 @@ export type PlanStepAction =
   | 'run-checks'
   | 'summarize-result';
 
+export interface StepRequirementContract {
+  ref: string;
+  description: string;
+  constraints?: string[];
+  evidenceKind?: string;
+  sourceHints?: string[];
+  targetPath?: string;
+}
+
 export interface PlanStep {
   id: string;
   type: PlanStepType;
@@ -34,7 +43,11 @@ export interface PlanStep {
   outputs: FactKey[];
   targetPath?: string;
   sourceHints?: string[];
+  requirements?: StepRequirementContract[];
   recoveryForStepId?: string;
+  resolutionForStepId?: string;
+  resolutionForRequirement?: string;
+  resolutionDepth?: number;
 }
 
 export interface TaskPlan {

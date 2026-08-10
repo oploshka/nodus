@@ -24,25 +24,26 @@ import {
   knowledgeMessage,
   projectMessage,
   taskMessage,
-  toolDefinitionsMessage,
   toolDescriptionsMessage,
   toolResultMessages,
   userMessage,
 } from '@model/Prompt/ModelInputComposer';
 import { OPERATION_RESULT_RETURN_FORMAT } from '@model/Protocol/OperationResultProtocol';
 import { EditFileRawProtocol } from '@model/Protocol/EditFileRawProtocol';
+import { UnderstandRawProtocol } from '@model/Protocol/UnderstandRawProtocol';
 
 export interface ModelExecutionInput {
   task: Task;
   execution: Execution;
   conversation: Conversation;
   operation: OperationProfile;
-  activeStep?: { id: string; type: string; action?: string; subject?: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string; sourceHints?: string[] };
+  activeStep?: { id: string; type: string; action?: string; subject?: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string; sourceHints?: string[]; requirements?: Array<{ ref: string; description: string; constraints?: string[] }> };
   stepContext?: { facts: Array<{ key: string; value: string; evidence: StepEvidenceItem[]; producerStepId: string }>; missingInputs: string[]; activeEvidence?: { findings: string[]; evidence: StepEvidenceItem[]; missing: string[] } };
 }
 
 export class ModelController {
   private readonly editFileProtocol = new EditFileRawProtocol();
+  private readonly understandRawProtocol = new UnderstandRawProtocol();
 
   public constructor(
     private readonly configuration: ModelConfiguration,
@@ -73,7 +74,9 @@ export class ModelController {
 
     const responseProtocol = input.operation.id === 'edit-file'
       ? this.editFileProtocol.instructions(input.activeStep?.targetPath)
-      : prompt.returnFormat ?? OPERATION_RESULT_RETURN_FORMAT;
+      : input.operation.id === 'understand'
+        ? this.understandRawProtocol.instructions()
+        : prompt.returnFormat ?? OPERATION_RESULT_RETURN_FORMAT;
     const request: ModelRequest = {
       model: this.configuration.model,
       temperature: input.operation.model.temperature ?? this.configuration.temperature,
@@ -123,13 +126,15 @@ export class ModelController {
 
     const result = input.operation.id === 'edit-file'
       ? this.editFileProtocol.parse(response.content, input.activeStep?.targetPath)
-      : await this.parseOrRepairOperationResult(
-          response.content,
-          request,
-          input,
-          logContext,
-          response.usage?.completion_tokens,
-        );
+      : input.operation.id === 'understand'
+        ? this.understandRawProtocol.parse(response.content, input.activeStep?.outputs ?? [])
+        : await this.parseOrRepairOperationResult(
+            response.content,
+            request,
+            input,
+            logContext,
+            response.usage?.completion_tokens,
+          );
     input.execution.addEvent('model-usage', { operation: input.operation.id, usage: response.usage });
     input.execution.consumeToolContext();
     this.reporter.modelResponse(
@@ -199,12 +204,9 @@ Response language: ${responseLanguage}`));
     }
 
     const tools = this.availableToolsFor(input.operation.id);
-    // Keep the historically stable compact tool block for normal operations.
-    // Understand is the one operation that needs the exact file-system input
-    // contract because it performs explicit source reads.
-    const toolsBlock = input.operation.id === 'understand'
-      ? toolDefinitionsMessage(tools)
-      : toolDescriptionsMessage(tools);
+    // Keep tool exposure compact. Understand emits STATUS/ACTION/PATH raw protocol;
+    // Nodus compiles those paths into canonical file-system reads internally.
+    const toolsBlock = toolDescriptionsMessage(tools);
     if (toolsBlock) messages.push(toolsBlock);
 
     // Full source text is never copied from reusable facts. It appears only as transient

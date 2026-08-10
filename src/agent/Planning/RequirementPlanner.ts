@@ -20,6 +20,7 @@ const REQUIREMENT_PLAN_PROFILE: ModelCallProfile = {
       'Return data requirements, not Nodus step types or tool calls.',
       'Use evidence for concrete project artifacts that must be located, fact for semantic knowledge derived from evidence, and change-definition for a code change that depends on facts.',
       'A fact describes what must be known by a consumer. Use scope when the access path is context-specific, for example scope=cli.',
+      'Use constraints for semantic requirements that must remain true, for example read-only, existing-state, no-side-effects, nullable, or no-duplication.',
       'Evidence may declare only its semantic evidenceKind: file, symbol, definition, usage, reference, or example. Do not choose search/understand operations.',
       'A fact may require only evidence refs. A change-definition may require only fact refs.',
       'Use sourceHints only for paths present in Project candidates. Never invent a path, API, symbol, or identifier.',
@@ -39,6 +40,7 @@ interface RawRequirementEntry {
   evidenceKind?: unknown;
   sourceHints?: unknown;
   targetPath?: unknown;
+  constraints?: unknown;
 }
 
 interface RawRequirementMap {
@@ -87,6 +89,7 @@ export class RequirementPlanner {
         evidenceKind: entry.evidenceKind,
         sourceHints: entry.sourceHints,
         targetPath: entry.targetPath,
+        constraints: entry.constraints,
       })),
     }, {
       projectId: task.projectId,
@@ -142,6 +145,9 @@ export class RequirementPlanner {
       ? raw.sourceHints.map(String).map((path) => this.resolveProjectPath(path)).filter((path): path is string => Boolean(path)).slice(0, 4)
       : [];
     const targetPath = typeof raw.targetPath === 'string' ? this.resolveProjectPath(raw.targetPath) : undefined;
+    const constraints = Array.isArray(raw.constraints)
+      ? raw.constraints.map(String).map((value) => value.trim()).filter(Boolean).slice(0, 8)
+      : [];
 
     return {
       ref,
@@ -150,6 +156,7 @@ export class RequirementPlanner {
       evidenceKind,
       sourceHints,
       targetPath,
+      constraints,
     };
   }
 
@@ -238,6 +245,6 @@ export class RequirementPlanner {
   }
 
   private protocol(): string {
-    return `Return ONLY JSON:\n{\n  "goal": "short goal",\n  "root": "evidence:stable.key | fact:stable.key@optional-scope | change-definition:stable.key",\n  "entries": [\n    {\n      "ref": "evidence:stable.key",\n      "description": "what concrete project evidence must be located",\n      "requires": [],\n      "evidenceKind": "file | symbol | definition | usage | reference | example",\n      "sourceHints": ["optional/existing/file.ts"]\n    },\n    {\n      "ref": "fact:stable.key@optional-scope",\n      "description": "what semantic knowledge must be established",\n      "requires": ["evidence:stable.key"],\n      "sourceHints": ["optional/existing/file.ts"]\n    },\n    {\n      "ref": "change-definition:stable.key",\n      "description": "the intended code change",\n      "requires": ["fact:stable.key@optional-scope"],\n      "targetPath": "optional/existing/target.ts"\n    }\n  ]\n}\nDo not return step ids, step types, actions, tools, inputs, outputs, or execution order.`;
+    return `Return ONLY JSON:\n{\n  "goal": "short goal",\n  "root": "evidence:stable.key | fact:stable.key@optional-scope | change-definition:stable.key",\n  "entries": [\n    {\n      "ref": "evidence:stable.key",\n      "description": "what concrete project evidence must be located",\n      "requires": [],\n      "evidenceKind": "file | symbol | definition | usage | reference | example",\n      "sourceHints": ["optional/existing/file.ts"],\n      "constraints": ["optional semantic constraint"]\n    },\n    {\n      "ref": "fact:stable.key@optional-scope",\n      "description": "what semantic knowledge must be established",\n      "requires": ["evidence:stable.key"],\n      "sourceHints": ["optional/existing/file.ts"],\n      "constraints": ["read-only | existing-state | no-side-effects | nullable | other task constraint"]\n    },\n    {\n      "ref": "change-definition:stable.key",\n      "description": "the intended code change",\n      "requires": ["fact:stable.key@optional-scope"],\n      "targetPath": "optional/existing/target.ts",\n      "constraints": ["minimal-change | reuse-existing-api | no-unrelated-changes | other task constraint"]\n    }\n  ]\n}\nOmit constraints when none are needed. Do not return step ids, step types, actions, tools, inputs, outputs, or execution order.`;
   }
 }

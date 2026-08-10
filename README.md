@@ -1,35 +1,25 @@
-# Nodus Agent v0.1
+# Nodus Agent v0.2.0
 
-Nodus is a small, model-agnostic developer agent built around a persistent project session, explicit project knowledge, operation-specific prompts, tools, and a simple execution loop.
+Nodus is a developer-agent runtime built around explicit project state, typed workflow knowledge, deterministic execution where possible, and operation-scoped language-model reasoning.
 
 Core principle: **Understand before you generate.**
 
-## MVP architecture
-
 ```text
-Conversation
-    ↓
 Task
-    ↓
-AgentRuntime
-    ├── ProjectSession
-    ├── Knowledge
-    ├── OperationRegistry
-    ├── Tools
-    └── Logger
-    ↓
-ModelController
-    ↓
-Local Model
-    ↓
-OperationResult
-    ↓
-AgentRuntime
-    ↓
-Result
+ ↓
+RequirementPlanner → RequirementMap
+ ↓
+PlanCompiler → TaskPlan
+ ↓
+PlanExecutor
+ ├─ deterministic retrieval
+ ├─ semantic understand/model calls where needed
+ ├─ deterministic prepare/finalize fast paths
+ ├─ tools / ChangeExecutor
+ └─ bounded child requirement resolution / minimal capability-addition
 ```
 
-The implementation deliberately keeps verification, context selection, knowledge generation, and planning simple. They are extension points, not separate heavy subsystems in v0.1.
+Nodus/runtime is the agent. The model is an intellectual function inside controlled workflow algorithms.
 
 ## Quick start
 
@@ -39,108 +29,49 @@ cp nodus.config.example.json nodus.config.json
 npm run dev -- nodus.config.json
 ```
 
-On Windows PowerShell, copy the config with:
+On PowerShell:
 
 ```powershell
 Copy-Item nodus.config.example.json nodus.config.json
 ```
 
-The example config uses the `mock` model provider, so the CLI starts without a running LLM. To use a local OpenAI-compatible endpoint, set:
+For an OpenAI-compatible local endpoint, configure `model.provider`, `model.endpoint`, and `model.model` in `nodus.config.json`.
 
-```json
-{
-  "model": {
-    "provider": "openai-compatible",
-    "endpoint": "http://127.0.0.1:11434/v1",
-    "model": "your-local-model"
-  }
-}
-```
-
-The adapter calls `<endpoint>/chat/completions`. This works with local servers that expose an OpenAI-compatible Chat Completions API.
-
-Startup overrides can be passed after the config path:
+Useful startup overrides:
 
 ```bash
 npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
 ```
 
-- `--clear-cache` / `--keep-cache` override `project.clearCacheOnStart`.
-- `--clear-logs` / `--keep-logs` override `logging.clearOnStart`.
-- `--scan` forces a project scan on open for that run.
+The canonical fast `/status` scenario skips manual task entry and requirement-planner latency:
 
-## CLI commands
-
-- `/scan` — manually scan the project and save the index cache.
-- `/refresh` — rescan the project.
-- `/conversation` — show the active conversation id.
-- `/new` — start a new conversation.
-- `/exit` — exit.
-
-Any other input becomes a Task in the active conversation.
-
-## Knowledge
-
-Knowledge is loaded from the configured JSON file and supports four entry types:
-
-- `understanding`
-- `pattern`
-- `decision`
-- `policy`
-
-Each entry may define scope, applicability tags, source, confidence, priority, related entries, and related files. v0.1 primarily expects knowledge to be human-authored or pre-generated.
-
-## Operations
-
-Built-in operations:
-
-- `search`
-- `understand`
-- `plan`
-- `implement`
-- `review`
-- `verify`
-- `resolve-failure`
-- `extract-knowledge`
-
-The model receives only currently registered operations. If it requests an unknown operation, Nodus logs `missing-operation` and falls back to `understand` when possible.
-
-## Model response protocol
-
-Nodus asks the model to return one JSON object. The important fields are:
-
-```json
-{
-  "status": "continue",
-  "message": "What I am doing",
-  "nextOperation": "understand",
-  "toolCalls": [],
-  "changes": [],
-  "question": null,
-  "observations": []
-}
+```bash
+npm run dev -- nodus.config.json --clear-cache --clear-logs --scan --scenario=status
 ```
 
-A model may request tools, propose file changes, ask the user a question, move to another operation, complete the task, or fail.
+## Workflow data
 
-## Project scanning
+The current runtime separates:
 
-Scanning is intentionally optional. With `scanMode: "manual"`, opening a project only loads available knowledge and an existing cached project index. `/scan` or `/refresh` performs a deterministic scan later. Set `project.clearCacheOnStart` or pass `--clear-cache` to remove the cached index before opening. `--scan` can be combined with it to force a clean rescan.
+```text
+Evidence → Fact → ChangeDefinition → ChangeResult → FinalResult
+```
 
-The scanner records file metadata and simple import/export facts for common JS/TS/Vue files. It is not intended to be a full AST-based understanding system.
+Raw source is transient operation input rather than durable workflow history. Typed refs such as `evidence:project.id.definition` and `fact:project.id.access@cli` make step dependencies explicit.
 
-## Logging
+## Model response formats
 
-Console logging is enabled by default. File logging writes JSONL and is optional. Full model payload logging is separately controlled by `logging.modelPayload` because prompts and responses can be large and may contain project code. Set `logging.clearOnStart` or pass `--clear-logs` to remove previous main/execution/payload logs before a new run.
+Nodus uses three response wire formats: `json | raw | text`. The parser converts the wire response into validated internal objects. Large escaping-heavy operations such as `understand` and `edit-file` use the existing flat RAW `FIELD value` style; compact stable planners may continue to use JSON.
 
-## Build
+## Development
 
 ```bash
 npm run typecheck
-npm run build
-npm start -- nodus.config.json
+npm run test:core
 ```
 
-`tsc-alias` rewrites TypeScript path aliases in the compiled output.
+Focused `/status` stage tests are available under `test/scenario/status`.
 
-See `docs/MvpSpecification.md` for the frozen v0.1 scope.
+## Documentation
+
+Start with [`doc/README.md`](doc/README.md). The active work list is [`ROADMAP.md`](ROADMAP.md).

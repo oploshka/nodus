@@ -1,3 +1,0 @@
-src/agent/Planning/PlanExecutor.ts
-src/test/ToolEvidenceAccumulationSmoke.ts
-package.json

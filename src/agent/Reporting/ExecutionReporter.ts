@@ -35,6 +35,7 @@ ${this.paint('bold', '◆ Карта требований')}`);
         this.line(this.paint('dim', `     ${entry.description}`));
         if (entry.sourceHints?.length) this.line(this.paint('dim', `     source: ${entry.sourceHints.join(', ')}`));
         if (entry.targetPath) this.line(this.paint('dim', `     target: ${entry.targetPath}`));
+        if (entry.constraints?.length) this.line(this.paint('dim', `     constraints: ${entry.constraints.join(', ')}`));
       }
     }
   }
@@ -70,6 +71,12 @@ ${this.paint('yellow', `↻ ${index + 1}.${attempt} Повтор ${this.operatio
     if (retryReason?.trim()) this.line(this.paint('dim', `  Причина: ${retryReason.trim()}`));
   }
 
+  public stepContinuation(index: number, type: string, toolRound: number): void {
+    this.activePlanStep = String(index + 1);
+    if (this.mode === 'quiet') return;
+    this.line(this.paint('dim', `    ↳ продолжение ${this.operationName(type)} после чтения · tool round ${toolRound}`));
+  }
+
   public stepAlreadySatisfiedAt(index: number, total: number, goal: string, type: string, outputs: string[]): void {
     this.activePlanStep = String(index + 1);
     this.activeAttempt = 0;
@@ -87,10 +94,6 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}`)
     this.line(this.paint('dim', `  ↳ следующий узел ${index + 1}/${total}: ${this.operationName(type)} — ${goal}`));
   }
 
-  public step(step: number, operation: string): void {
-    if (this.mode === 'quiet') return;
-    this.line(`\n${this.paint('cyan', `→ Шаг ${step}: ${this.operationName(operation)}`)}`);
-  }
 
   public note(operation: string, message?: string): void {
     if (this.mode === 'quiet' || !message?.trim()) return;
@@ -98,17 +101,6 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}`)
     this.line(`${this.paint(operation === 'plan' ? 'bold' : 'dim', prefix)} ${message.trim()}`);
   }
 
-  public transition(from: string | undefined, to: string, reason: string): void {
-    const correctionReasons = new Set(['invalid-model-transition', 'understand-no-progress', 'model-error', 'operation-failed']);
-    if (this.mode === 'quiet') return;
-    if (correctionReasons.has(reason)) {
-      this.line(this.paint('yellow', `◆ План скорректирован: ${from ?? '?'} → ${to}`));
-      return;
-    }
-    if (this.mode === 'verbose') {
-      this.line(this.paint('dim', `  ↳ ${from ?? '?'} → ${to} (${reason})`));
-    }
-  }
 
   public modelRequest(operation: string): void {
     if (this.mode === 'quiet') return;
@@ -134,16 +126,43 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}`)
     }
   }
 
-  public stepAlreadySatisfied(outputs: string[]): void {
-    if (this.mode === 'quiet') return;
-    const suffix = outputs.length > 0 ? `: ${outputs.join(', ')}` : '';
-    this.line(this.paint('green', `  ✓ Результат уже известен${suffix}`));
-    this.line(this.paint('dim', '    Пропускаю вызов модели: postcondition шага уже выполнен.'));
-  }
 
   public factsMerged(keys: string[]): void {
     if (this.mode === 'quiet' || keys.length === 0) return;
     this.line(this.paint('dim', `    · факты объединены: ${keys.join(', ')}`));
+  }
+
+  public deterministicStep(operation: string, reason: string): void {
+    if (this.mode === 'quiet') return;
+    this.line(this.paint('dim', `    ✓ ${this.operationName(operation)} без вызова модели · ${reason}`));
+  }
+
+  public retrieval(match: 'exact' | 'related' | 'missing', requirement: string, reason: string): void {
+    if (this.mode === 'quiet') return;
+    if (match === 'exact') {
+      this.line(this.paint('green', `    ✓ найдено точное evidence: ${requirement}`));
+      return;
+    }
+    if (match === 'related') {
+      this.line(this.paint('yellow', `    · найдено только похожее evidence: ${requirement}`));
+      if (this.mode === 'verbose') this.line(this.paint('dim', `      ${reason}`));
+      return;
+    }
+    this.line(this.paint('yellow', `    · evidence не найдено: ${requirement}`));
+    if (this.mode === 'verbose') this.line(this.paint('dim', `      ${reason}`));
+  }
+
+  public requirementResolution(requirement: string, reason: string, steps: number, depth: number, mode?: 'knowledge' | 'capability-addition'): void {
+    if (this.mode === 'quiet') return;
+    const modeLabel = mode === 'capability-addition' ? ' · добавление capability' : mode === 'knowledge' ? ' · сбор знания' : '';
+    this.line(this.paint('yellow', `    ↳ подплан для ${requirement}${modeLabel} · шагов ${steps} · глубина ${depth}`));
+    if (reason.trim()) this.line(this.paint('dim', `      ${reason.trim()}`));
+  }
+
+  public requirementRechecked(requirements: string[], satisfied: boolean): void {
+    if (this.mode === 'quiet' || requirements.length === 0) return;
+    const prefix = satisfied ? this.paint('green', '✓') : this.paint('yellow', '·');
+    this.line(`    ${prefix} исходный requirement проверен повторно: ${requirements.join(', ')}`);
   }
 
   public protocolRetry(operation: string, truncated: boolean): void {
@@ -187,10 +206,6 @@ ${this.paint('cyan', `→ ${index + 1}/${total} ${this.operationName(type)}`)}`)
     }
   }
 
-  public warning(message: string): void {
-    if (this.mode === 'quiet') return;
-    this.line(this.paint('yellow', `! ${message}`));
-  }
 
 
   public recovery(stepIndex: number, stepGoal: string, reason: string): void {
@@ -202,41 +217,9 @@ ${this.paint('yellow', `↻ Восстановление шага ${stepIndex + 
     this.line(this.paint('yellow', `  Причина: ${reason}`));
   }
 
-  public evidenceCheck(goal: string, latestToolResults: number, accumulatedEvidence: number): void {
-    if (this.mode === 'quiet') return;
-    this.line(this.paint('dim', `    · проверяю результаты инструментов: новых ${latestToolResults}, накоплено evidence ${accumulatedEvidence}`));
-    if (this.mode === 'verbose') this.line(this.paint('dim', `      цель: ${goal}`));
-  }
 
-  public evidenceCheckResult(satisfied: boolean, reason: string, missing: string[], durationMs: number): void {
-    if (this.mode === 'quiet') return;
-    if (satisfied) {
-      this.line(this.paint('green', `    ✓ evidence достаточно · ${(durationMs / 1000).toFixed(1)} сек`));
-      this.line(this.paint('dim', `      ${reason}`));
-      return;
-    }
-    this.line(this.paint('yellow', `    · evidence пока недостаточно · ${(durationMs / 1000).toFixed(1)} сек`));
-    if (missing.length > 0) this.line(this.paint('dim', `      не хватает: ${missing.slice(0, 3).join('; ')}`));
-  }
 
-  public semanticCheck(goal: string, factKeys: string[], recoveryBranch = false): void {
-    if (this.mode === 'quiet') return;
-    const prefix = recoveryBranch ? '  ↻' : '    ·';
-    this.line(this.paint('dim', `${prefix} проверяю, достаточно ли уже найденных данных (${factKeys.join(', ')})`));
-    if (this.mode === 'verbose') this.line(this.paint('dim', `      цель: ${goal}`));
-  }
 
-  public semanticCheckResult(satisfied: boolean, reason: string, missing: string[], durationMs: number, recoveryBranch = false): void {
-    if (this.mode === 'quiet') return;
-    if (satisfied) {
-      this.line(this.paint('green', `    ✓ известных данных достаточно · ${(durationMs / 1000).toFixed(1)} сек`));
-      this.line(this.paint('dim', `      ${reason}`));
-      return;
-    }
-    const detail = missing.length > 0 ? ` · не хватает: ${missing.slice(0, 2).join('; ')}` : '';
-    const prefix = recoveryBranch ? '  ·' : '    ·';
-    this.line(this.paint('dim', `${prefix} нужны дополнительные данные · ${(durationMs / 1000).toFixed(1)} сек${detail}`));
-  }
 
   public recoveryPruned(parentGoal: string, count: number, outputs: string[]): void {
     if (this.mode === 'quiet' || count <= 0) return;
@@ -293,9 +276,6 @@ ${this.paint('yellow', `↻ Восстановление шага ${stepIndex + 
     return names[operation] ?? operation;
   }
 
-  private substep(suffix: string): string {
-    return this.activePlanStep ? `${this.activePlanStep}.${suffix}` : suffix;
-  }
 
   private line(value: string): void { console.log(value); }
 

@@ -1,13 +1,30 @@
 // PlanCompiler.ts
 import type { RequirementEntry, RequirementMap } from '@agent/Planning/RequirementMap';
 import { formatWorkflowDataRef, type WorkflowDataRef } from '@agent/Planning/WorkflowData';
-import type { PlanStep, PlanStepAction, PlanStepType, TaskPlan } from '@agent/Planning/TaskPlan';
+import type { PlanStep, PlanStepAction, PlanStepType, StepRequirementContract, TaskPlan } from '@agent/Planning/TaskPlan';
 import type { StepRegistry } from '@agent/Planning/StepRegistry';
+
+interface CompileOptions {
+  includeFinalize: boolean;
+  applyChange: boolean;
+}
 
 export class PlanCompiler {
   public constructor(private readonly stepRegistry: StepRegistry) {}
 
   public compile(map: RequirementMap, language: 'ru' | 'en'): TaskPlan {
+    return this.compileInternal(map, language, { includeFinalize: true, applyChange: true });
+  }
+
+  public compileResolution(map: RequirementMap, language: 'ru' | 'en'): TaskPlan {
+    return this.compileInternal(map, language, { includeFinalize: false, applyChange: false });
+  }
+
+  public compileCapabilityResolution(map: RequirementMap, language: 'ru' | 'en'): TaskPlan {
+    return this.compileInternal(map, language, { includeFinalize: false, applyChange: true });
+  }
+
+  private compileInternal(map: RequirementMap, language: 'ru' | 'en', options: CompileOptions): TaskPlan {
     const entries = new Map(map.entries.map((entry) => [formatWorkflowDataRef(entry.ref), entry]));
     const reachable = this.collectReachable(map.root, entries);
     const steps: PlanStep[] = [];
@@ -18,6 +35,7 @@ export class PlanCompiler {
       const action = this.evidenceAction(entry);
       const searchStep = this.step(sequence++, 'search', action, this.evidenceSubject(entry), language, [], [formatWorkflowDataRef(entry.ref)]);
       if (entry.sourceHints?.length) searchStep.sourceHints = [...entry.sourceHints];
+      searchStep.requirements = [this.contract(entry)];
       steps.push(searchStep);
     }
 
@@ -32,7 +50,10 @@ export class PlanCompiler {
       const action: PlanStepAction = facts.length === 1 && /pattern/i.test(facts[0].ref.key)
         ? 'identify-pattern'
         : 'determine-integration';
-      steps.push(this.step(sequence++, 'understand', action, subject, language, inputKeys, outputKeys));
+      const understand = this.step(sequence++, 'understand', action, subject, language, inputKeys, outputKeys);
+      understand.requirements = facts.map((entry) => this.contract(entry));
+      understand.sourceHints = Array.from(new Set(sourceHints)).filter(Boolean);
+      steps.push(understand);
     }
 
     const rootEntry = entries.get(formatWorkflowDataRef(map.root));
@@ -41,31 +62,38 @@ export class PlanCompiler {
     let finalInput = formatWorkflowDataRef(map.root);
     if (map.root.kind === 'change-definition') {
       const requires = rootEntry.requires.map(formatWorkflowDataRef);
-      steps.push(this.step(sequence++, 'prepare-change', 'define-change', rootEntry.description, language, requires, [finalInput]));
+      const prepare = this.step(sequence++, 'prepare-change', 'define-change', rootEntry.description, language, requires, [finalInput]);
+      prepare.requirements = [this.contract(rootEntry)];
+      if (rootEntry.targetPath) prepare.targetPath = rootEntry.targetPath;
+      steps.push(prepare);
 
-      const changeResult: WorkflowDataRef = { kind: 'change-result', key: map.root.key, scope: map.root.scope };
-      const changeResultKey = formatWorkflowDataRef(changeResult);
-      const edit = this.step(sequence++, 'edit-file', 'apply-change', rootEntry.description, language, [finalInput], [changeResultKey]);
-      if (rootEntry.targetPath) edit.targetPath = rootEntry.targetPath;
-      steps.push(edit);
-      finalInput = changeResultKey;
+      if (options.applyChange) {
+        const changeResult: WorkflowDataRef = { kind: 'change-result', key: map.root.key, scope: map.root.scope };
+        const changeResultKey = formatWorkflowDataRef(changeResult);
+        const edit = this.step(sequence++, 'edit-file', 'apply-change', rootEntry.description, language, [finalInput], [changeResultKey]);
+        if (rootEntry.targetPath) edit.targetPath = rootEntry.targetPath;
+        steps.push(edit);
+        finalInput = changeResultKey;
+      }
     } else if (map.root.kind !== 'fact' && map.root.kind !== 'evidence') {
       throw new Error(`Unsupported requirement root for compiler v1: ${map.root.kind}`);
     }
 
-    const finalRef: WorkflowDataRef = { kind: 'final-result', key: map.root.key, scope: map.root.scope };
-    steps.push(this.step(
-      sequence++,
-      'finalize',
-      'summarize-result',
-      map.goal,
-      language,
-      [finalInput],
-      [formatWorkflowDataRef(finalRef)],
-    ));
+    if (options.includeFinalize) {
+      const finalRef: WorkflowDataRef = { kind: 'final-result', key: map.root.key, scope: map.root.scope };
+      steps.push(this.step(
+        sequence++,
+        'finalize',
+        'summarize-result',
+        map.goal,
+        language,
+        [finalInput],
+        [formatWorkflowDataRef(finalRef)],
+      ));
+    }
 
     return {
-      version: 3,
+      version: 4,
       goal: map.goal,
       steps,
     };
@@ -93,6 +121,17 @@ export class PlanCompiler {
     return ordered;
   }
 
+  private contract(entry: RequirementEntry): StepRequirementContract {
+    return {
+      ref: formatWorkflowDataRef(entry.ref),
+      description: entry.description,
+      constraints: entry.constraints ? [...entry.constraints] : undefined,
+      evidenceKind: entry.evidenceKind,
+      sourceHints: entry.sourceHints ? [...entry.sourceHints] : undefined,
+      targetPath: entry.targetPath,
+    };
+  }
+
   private evidenceAction(entry: RequirementEntry): PlanStepAction {
     switch (entry.evidenceKind) {
       case 'file': return 'find-files';
@@ -107,15 +146,18 @@ export class PlanCompiler {
 
   private evidenceSubject(entry: RequirementEntry): string {
     const hints = entry.sourceHints ?? [];
-    if (hints.length === 0) return entry.description;
+    const constraints = entry.constraints?.length ? ` Constraints: ${entry.constraints.join('; ')}.` : '';
+    if (hints.length === 0) return `${entry.description}${constraints}`;
     const suffix = hints.length === 1 ? ` in ${hints[0]}` : ` in ${hints.join(', ')}`;
-    return entry.description.toLowerCase().includes(hints[0].toLowerCase()) ? entry.description : `${entry.description}${suffix}`;
+    const subject = entry.description.toLowerCase().includes(hints[0].toLowerCase()) ? entry.description : `${entry.description}${suffix}`;
+    return `${subject}${constraints}`;
   }
 
   private factSubject(entries: RequirementEntry[], sourceHints: string[]): string {
     const knowledge = entries.map((entry) => {
       const scoped = entry.ref.scope ? ` [scope=${entry.ref.scope}]` : '';
-      return `${formatWorkflowDataRef(entry.ref)}${scoped}: ${entry.description}`;
+      const constraints = entry.constraints?.length ? ` [constraints=${entry.constraints.join(', ')}]` : '';
+      return `${formatWorkflowDataRef(entry.ref)}${scoped}${constraints}: ${entry.description}`;
     });
     const sources = Array.from(new Set(sourceHints)).filter(Boolean);
     return [
