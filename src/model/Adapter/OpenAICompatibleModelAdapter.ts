@@ -3,7 +3,7 @@ import type { ModelAdapter, ModelUsage, RawModelResponse } from '@model/Adapter/
 import type { ModelRequest } from '@model/Request/ModelRequest';
 
 interface OpenAICompatibleResponse {
-  choices?: Array<{ message?: { content?: string | null; tool_calls?: import('@model/Request/ModelRequest').ModelToolCall[] } }>;
+  choices?: Array<{ message?: { content?: string } }>;
   usage?: ModelUsage;
   error?: { message?: string };
 }
@@ -51,8 +51,6 @@ export class OpenAICompatibleModelAdapter implements ModelAdapter {
           messages: request.messages,
           temperature: request.temperature,
           max_tokens: request.maxTokens,
-          ...(request.tools ? { tools: request.tools } : {}),
-          ...(request.toolChoice ? { tool_choice: request.toolChoice } : {}),
         }),
       });
     } catch (error) {
@@ -66,16 +64,13 @@ export class OpenAICompatibleModelAdapter implements ModelAdapter {
       throw new Error(payload.error?.message ?? `Model request failed with HTTP ${response.status}`);
     }
 
-    const message = payload.choices?.[0]?.message;
-    const content = message?.content ?? '';
-    const toolCalls = message?.tool_calls ?? [];
-    if (!content && toolCalls.length === 0) {
+    const content = payload.choices?.[0]?.message?.content;
+    if (!content) {
       throw new Error('Model returned an empty response');
     }
 
     return {
       content,
-      ...(toolCalls.length > 0 ? { toolCalls } : {}),
       usage: payload.usage,
     };
   }

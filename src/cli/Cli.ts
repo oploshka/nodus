@@ -47,13 +47,8 @@ export async function runCli(args: string[]): Promise<void> {
 
     if (startup.scenario) {
       const scenario = resolveStartupScenario(startup.scenario);
-      if (startup.agent === 'raw') {
-        console.log(`Scenario: ${startup.scenario} (raw agent baseline)`);
-        await nodus.runRawAgentTask(scenario.task);
-      } else {
-        console.log(`Scenario: ${startup.scenario} (fixed task + fixed requirement map)`);
-        await nodus.runTask(scenario.task, conversation.id, undefined, scenario.requirements);
-      }
+      console.log(`Scenario: ${startup.scenario} (fixed task + fixed requirement map)`);
+      await nodus.runTask(scenario.task, conversation.id, undefined, scenario.requirements);
       return;
     }
 
@@ -106,11 +101,7 @@ export async function runCli(args: string[]): Promise<void> {
       }
 
       try {
-        if (startup.agent === 'raw') {
-          await nodus.runRawAgentTask(value);
-        } else {
-          await nodus.runTask(value, conversation.id);
-        }
+        await nodus.runTask(value, conversation.id);
       } catch (error) {
         console.error(`Task failed: ${String(error)}`);
       }
@@ -133,7 +124,6 @@ interface StartupArguments {
   clearLogs?: boolean;
   scan: boolean;
   scenario?: string;
-  agent: 'nodus' | 'raw';
 }
 
 function parseStartupArgs(args: string[]): StartupArguments {
@@ -142,7 +132,6 @@ function parseStartupArgs(args: string[]): StartupArguments {
   let clearLogs: boolean | undefined;
   let scan = false;
   let scenario: string | undefined;
-  let agent: 'nodus' | 'raw' = 'nodus';
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -166,21 +155,6 @@ function parseStartupArgs(args: string[]): StartupArguments {
       scan = true;
       continue;
     }
-    if (arg === '--agent=raw') {
-      agent = 'raw';
-      continue;
-    }
-    if (arg === '--agent=nodus') {
-      agent = 'nodus';
-      continue;
-    }
-    if (arg === '--agent') {
-      const value = args[index + 1];
-      if (value !== 'raw' && value !== 'nodus') throw new Error(`Unknown agent mode: ${value}`);
-      agent = value;
-      index += 1;
-      continue;
-    }
     if (arg === '--scenario') {
       scenario = args[index + 1];
       index += 1;
@@ -193,7 +167,7 @@ function parseStartupArgs(args: string[]): StartupArguments {
     if (!arg.startsWith('--')) configPath = arg;
   }
 
-  return { configPath, clearCache, clearLogs, scan, scenario, agent };
+  return { configPath, clearCache, clearLogs, scan, scenario };
 }
 
 function resolveStartupScenario(name: string): { task: string; requirements: RequirementMap } {

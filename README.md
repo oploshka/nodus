@@ -49,14 +49,6 @@ The canonical fast `/status` scenario skips manual task entry and requirement-pl
 npm run dev -- nodus.config.json --clear-cache --clear-logs --scan --scenario=status
 ```
 
-For a direct baseline with the same model and project tools but without the Nodus requirement/planning pipeline, run the raw agent mode:
-
-```bash
-npm run dev -- nodus.config.json --clear-cache --clear-logs --scan --scenario=status --agent=raw
-```
-
-`--agent=raw` reuses the same configured OpenAI-compatible endpoint and model process. It runs a minimal native tool-calling loop with `file-system`, `search`, and `terminal`; the default mode remains the normal Nodus pipeline. The raw baseline prints the resolved project root and the canonical native tool calls it actually executed; textual tool-call transcripts emitted by the model are not treated as successful tool execution.
-
 ## Workflow data
 
 The current runtime separates:
