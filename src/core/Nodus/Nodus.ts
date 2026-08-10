@@ -174,7 +174,12 @@ export class Nodus {
 
   public async runRawAgentTask(description: string): Promise<string> {
     const result = await this.rawAgentRunner.run(description, this.configuration.agent.maxSteps);
+    console.log(`Raw agent project root: ${result.projectRoot}`);
     console.log(`Raw agent: ${result.modelCalls} model calls, ${result.toolCalls} tool calls`);
+    for (const [index, entry] of result.trace.entries()) {
+      const status = entry.ok === undefined ? '' : entry.ok ? ' ok' : ' failed';
+      console.log(`  tool ${index + 1}: ${entry.tool}${status} ${JSON.stringify(entry.input)}`);
+    }
     console.log(result.result);
     return result.result;
   }

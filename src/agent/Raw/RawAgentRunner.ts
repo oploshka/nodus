@@ -13,10 +13,18 @@ Use file-system write to actually apply changes; do not merely describe them.
 Use terminal only when useful for verification.
 Finish with a concise summary only after the task is complete. If blocked, explain the concrete blocker.`;
 
+export interface RawAgentTraceEntry {
+  tool: string;
+  input: Record<string, unknown>;
+  ok?: boolean;
+}
+
 export interface RawAgentRunResult {
   result: string;
   modelCalls: number;
   toolCalls: number;
+  projectRoot: string;
+  trace: RawAgentTraceEntry[];
 }
 
 export class RawAgentRunner {
@@ -38,6 +46,7 @@ export class RawAgentRunner {
     const tools = this.createToolDefinitions();
     let modelCalls = 0;
     let toolCalls = 0;
+    const trace: RawAgentTraceEntry[] = [];
 
     for (let step = 1; step <= maxSteps; step += 1) {
       await this.logger.info('raw-agent-model-called', { step }, { projectId: this.projectSession.configuration.id });
@@ -53,24 +62,39 @@ export class RawAgentRunner {
 
       const calls = response.toolCalls ?? [];
       if (calls.length === 0) {
-        const result = response.content.trim() || 'Raw agent completed without a final message.';
+        const candidate = response.content.trim();
+        if (this.looksLikeToolTranscript(candidate)) {
+          messages.push({ role: 'assistant', content: candidate });
+          messages.push({
+            role: 'user',
+            content: 'Do not print or replay tool-call protocol or tool results. If more work is needed, use the native tools. If the task is complete, return only a concise final summary.',
+          });
+          continue;
+        }
+
+        const result = candidate || 'Raw agent completed without a final message.';
         await this.logger.info('raw-agent-completed', { step, modelCalls, toolCalls }, { projectId: this.projectSession.configuration.id });
-        return { result, modelCalls, toolCalls };
+        return { result, modelCalls, toolCalls, projectRoot: this.projectSession.root, trace };
       }
 
+      // KoboldCpp/Jinja may mirror a textual representation of the tool call in
+      // message.content while also returning a native tool_calls array. Keep only
+      // the canonical native representation in history to avoid feeding the same
+      // tool call back to the model twice.
       messages.push({
         role: 'assistant',
-        content: response.content || null,
+        content: null,
         tool_calls: calls,
       });
 
       for (const call of calls) {
-        const result = await this.executeToolCall(call);
+        const execution = await this.executeToolCall(call);
         toolCalls += 1;
+        trace.push({ tool: call.function.name, input: execution.input, ok: this.toolResultOk(execution.result) });
         messages.push({
           role: 'tool',
           tool_call_id: call.id,
-          content: this.serializeToolResult(result),
+          content: this.serializeToolResult(execution.result),
         });
       }
     }
@@ -78,10 +102,10 @@ export class RawAgentRunner {
     throw new Error(`Raw agent exceeded maxSteps=${maxSteps}`);
   }
 
-  private async executeToolCall(call: ModelToolCall): Promise<unknown> {
+  private async executeToolCall(call: ModelToolCall): Promise<{ input: Record<string, unknown>; result: unknown }> {
     const tool = this.toolRegistry.get(call.function.name);
     if (!tool) {
-      return { ok: false, error: `Unknown tool: ${call.function.name}` };
+      return { input: {}, result: { ok: false, error: `Unknown tool: ${call.function.name}` } };
     }
 
     let input: Record<string, unknown>;
@@ -91,14 +115,27 @@ export class RawAgentRunner {
         ? parsed as Record<string, unknown>
         : {};
     } catch (error) {
-      return { ok: false, error: `Invalid tool arguments: ${String(error)}` };
+      return { input: {}, result: { ok: false, error: `Invalid tool arguments: ${String(error)}` } };
     }
 
     await this.logger.info('raw-agent-tool-called', { tool: call.function.name, input }, { projectId: this.projectSession.configuration.id });
-    return tool.execute(input, {
+    const result = await tool.execute(input, {
       projectRoot: this.projectSession.root,
       exclude: this.projectSession.configuration.exclude ?? [],
     });
+    return { input, result };
+  }
+
+  private toolResultOk(value: unknown): boolean | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const ok = (value as { ok?: unknown }).ok;
+    return typeof ok === 'boolean' ? ok : undefined;
+  }
+
+  private looksLikeToolTranscript(content: string): boolean {
+    if (!content) return false;
+    if (/\[TOOL_CALLS?\]/i.test(content)) return true;
+    return /^\s*(?:search|file-system|terminal)\s*\{/i.test(content);
   }
 
   private serializeToolResult(value: unknown): string {

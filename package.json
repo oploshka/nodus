@@ -41,7 +41,8 @@
     "test:requirement:constraints": "tsx test/RequirementConstraintValidatorSmoke.ts",
     "test:recovery:pruning": "tsx test/RecoveryPruningSmoke.ts",
     "test:requirement:capability-recheck": "tsx test/RequirementCapabilityRecheckSmoke.ts",
-    "test:raw-agent": "tsx test/RawAgentRunnerSmoke.ts"
+    "test:raw-agent": "tsx test/RawAgentRunnerSmoke.ts",
+    "test:raw-agent:transcript": "tsx test/RawAgentTranscriptRecoverySmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

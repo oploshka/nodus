@@ -16,7 +16,7 @@ class ScriptedAdapter implements ModelAdapter {
     this.call += 1;
     if (this.call === 1) {
       return {
-        content: '',
+        content: 'file-system{\"action\":\"write\"}',
         toolCalls: [{
           id: 'call-1',
           type: 'function',
@@ -52,6 +52,9 @@ try {
   if (content !== 'ok') throw new Error(`Unexpected file content: ${content}`);
   if (result.modelCalls !== 2 || result.toolCalls !== 1 || result.result !== 'done') {
     throw new Error(`Unexpected raw-agent result: ${JSON.stringify(result)}`);
+  }
+  if (result.projectRoot !== root || result.trace.length !== 1 || result.trace[0]?.tool !== 'file-system' || result.trace[0]?.ok !== true) {
+    throw new Error(`Unexpected raw-agent trace: ${JSON.stringify(result)}`);
   }
   console.log('RawAgentRunnerSmoke passed');
 } finally {
