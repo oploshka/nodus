@@ -8,7 +8,9 @@ interface OpenAICompatibleResponse {
   error?: { message?: string };
 }
 
-class ModelTransportError extends Error {}
+export class ModelTransportError extends Error {
+  public override readonly name = 'ModelTransportError';
+}
 
 export class OpenAICompatibleModelAdapter implements ModelAdapter {
   public constructor(
@@ -116,6 +118,14 @@ export class OpenAICompatibleModelAdapter implements ModelAdapter {
   }
 
   private describeError(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
+    if (!(error instanceof Error)) return String(error);
+
+    const cause = error.cause;
+    if (cause instanceof Error && cause.message && cause.message !== error.message) {
+      const code = 'code' in cause && typeof cause.code === 'string' ? ` (${cause.code})` : '';
+      return `${error.message}: ${cause.message}${code}`;
+    }
+
+    return error.message;
   }
 }

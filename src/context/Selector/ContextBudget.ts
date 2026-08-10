@@ -34,7 +34,10 @@ const PROFILES: Record<string, ContextBudgetProfile> = {
     indexedFiles: 50,
     maxToolEntries: 3,
     maxToolEntryChars: 5_000,
-    maxToolContextChars: 10_000,
+    // Understand permits up to three focused reads in one semantic attempt. Keep all
+    // three clipped sources available together; otherwise a source can be recorded as
+    // read while being absent from the next model request, causing duplicate-read loops.
+    maxToolContextChars: 16_000,
   },
   'edit-file': {
     historyEntries: 0,

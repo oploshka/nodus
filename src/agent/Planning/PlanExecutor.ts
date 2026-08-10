@@ -21,6 +21,7 @@ import type { LogContext } from '@core/Logging/Log';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
 import type { ModelController } from '@model/Controller/ModelController';
+import { ModelTransportError } from '@model/Adapter/OpenAICompatibleModelAdapter';
 import type { OperationResult, StepResult } from '@model/Result/OperationResult';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 
@@ -253,6 +254,14 @@ export class PlanExecutor {
       } catch (error) {
         await this.logger.error('model-error', { operation: step.type, error: String(error) }, context);
         state.execution.addEvent('model-error', { operation: step.type, error: String(error) });
+        if (error instanceof ModelTransportError) {
+          this.pause(
+            state,
+            `step:${step.id}:model-transport-error`,
+            `Модель недоступна: ${error.message}. Проверьте model.endpoint и запустите model-server, затем продолжите выполнение.`,
+          );
+          return 'paused';
+        }
         const recovered = await this.recover(state, `model-error:${String(error)}`);
         if (!recovered) return state.pauseReason ? 'paused' : 'finished';
         continue;
@@ -328,11 +337,29 @@ export class PlanExecutor {
           continue;
         }
 
-        const toolCalls = result.toolCalls;
+        let toolCalls = result.toolCalls;
         if (step.type === 'understand') {
           const currentToolRounds = state.understandContinuation?.stepId === step.id
             ? state.understandContinuation.toolRounds
             : 0;
+          const supplied = new Set((state.understandToolContext?.get(step.id) ?? [])
+            .map((entry) => this.toolCallSignature(entry.call)));
+          toolCalls = toolCalls.filter((call) => !supplied.has(this.toolCallSignature(call)));
+          const declaredSourcesComplete = (step.sourceHints?.length ?? 0) > 0
+            && step.sourceHints?.every((path) => supplied.has(this.toolCallSignature({
+              tool: 'file-system',
+              input: { action: 'read', path },
+            })));
+          if (declaredSourcesComplete) toolCalls = [];
+          if (toolCalls.length === 0) {
+            state.retryReason = declaredSourcesComplete
+              ? 'все заявленные исходники уже предоставлены; требуется сформировать результат анализа'
+              : 'модель повторно запросила уже предоставленный исходный файл';
+            state.understandContinuation = currentToolRounds >= PlanExecutor.MAX_UNDERSTAND_TOOL_ROUNDS
+              ? undefined
+              : { stepId: step.id, toolRounds: currentToolRounds + 1 };
+            continue;
+          }
           if (currentToolRounds >= PlanExecutor.MAX_UNDERSTAND_TOOL_ROUNDS) {
             state.understandContinuation = undefined;
             state.retryReason = `исчерпан лимит внутренних чтений (${PlanExecutor.MAX_UNDERSTAND_TOOL_ROUNDS}) в одной попытке анализа`;

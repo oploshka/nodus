@@ -216,10 +216,25 @@ Response language: ${responseLanguage}`));
       context.toolContext,
       input.operation.id === 'edit-file' ? input.activeStep?.targetPath : undefined,
     ));
+    const suppliedUnderstandPaths = input.operation.id === 'understand'
+      ? context.toolContext
+        .filter((entry) => entry.call.tool === 'file-system' && entry.call.input.action === 'read')
+        .map((entry) => String(entry.call.input.path ?? ''))
+        .filter((path, index, paths) => Boolean(path) && paths.indexOf(path) === index)
+      : [];
+    const requiredUnderstandPaths = input.operation.id === 'understand'
+      ? (input.activeStep?.sourceHints ?? []).filter(Boolean)
+      : [];
+    const understandSourcesComplete = requiredUnderstandPaths.length > 0
+      && requiredUnderstandPaths.every((path) => suppliedUnderstandPaths.includes(path));
     messages.push(userMessage(
       'Instruction:',
       input.operation.id === 'edit-file' && input.activeStep
         ? `Edit the supplied authoritative target source ${input.activeStep.targetPath ?? ''} now. Do not request tools. Return the completed edit-file RAW protocol response.`
+        : input.operation.id === 'understand' && input.activeStep && understandSourcesComplete
+          ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. Every declared source hint (${requiredUnderstandPaths.join(', ')}) is already included above. The evidence-gathering phase is complete: do not request any PATH. Return STATUS completed now and publish every derivable fact under the exact activeStep.outputs keys; use MISSING only for an output that the supplied source and known facts genuinely cannot establish. Use the output protocol from the system message.`
+        : input.operation.id === 'understand' && input.activeStep && suppliedUnderstandPaths.length > 0
+          ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. The source for ${suppliedUnderstandPaths.join(', ')} is already included above: do not request those paths again. Derive and publish the exact activeStep.outputs facts now, or request only an unread declared source hint. Use the output protocol from the system message.`
         : input.activeStep
           ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. Use the output protocol from the system message.`
           : 'Perform the requested operation now using the supplied context and the output protocol from the system message.',
