@@ -11,7 +11,8 @@
       "@agent/*": ["src/agent/*"],
       "@model/*": ["src/model/*"],
       "@tool/*": ["src/tool/*"],
-      "@cli/*": ["src/cli/*"]
+      "@cli/*": ["src/cli/*"],
+      "@test/*": ["test/*"]
     }
   }
 }

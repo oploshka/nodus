@@ -1,5 +1,5 @@
 // PrepareChangeStageSmoke.ts
-import { runStepHarness } from '../../support/StepHarness';
+import { runStepHarness } from '@test/support/StepHarness';
 import { STATUS_INTEGRATION_FACTS } from './StatusCommandScenario';
 
 const inputs = STATUS_INTEGRATION_FACTS.map((fact) => fact.key);

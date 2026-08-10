@@ -1,5 +1,5 @@
 // FinalizeStageSmoke.ts
-import { runStepHarness } from '../../support/StepHarness';
+import { runStepHarness } from '@test/support/StepHarness';
 
 const result = await runStepHarness({
   step: {
