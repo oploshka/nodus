@@ -12,9 +12,9 @@ const SEARCH_RETRIEVAL_RETURN_FORMAT = `Return ONLY valid JSON:
 {
   "status": "continue | failed",
   "message": "short retrieval note",
-  "toolCalls": [{ "tool": "tool id", "input": {} }]
+  "data": { "queries": ["one to four literal search terms"] }
 }
-Use status=continue when requesting tools. Search only chooses retrieval tool calls; the runtime completes the step deterministically when the declared retrieval returns concrete results.`;
+Use status=continue when proposing query terms. Do not return toolCalls. Nodus compiles the queries into retrieval tool calls and completes the step deterministically when concrete results exist.`;
 
 function execution(
   contextStrategy: string,
@@ -48,13 +48,14 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
     id: 'search',
     description: 'Locate concrete project files, symbols, definitions, usages, references, or examples.',
     prompt: {
-      purpose: 'Choose retrieval tool calls for the active search action and subject.',
+      purpose: 'Choose literal retrieval query terms for the active search action and subject.',
       rules: [
         'Treat activeStep.action + activeStep.subject as the complete search request.',
-        'Allowed search actions are find-files, find-symbols, find-definitions, find-usages, find-references, and find-examples. Execute only the declared action.',
-        'Use the supplied project index and existing evidence to choose concrete search/filesystem tool calls.',
-        'On the first round, retrieve concrete results for the declared subject. If a retrieval returns no results, use the previous tool evidence to choose a narrower retry.',
-        'Return tool calls only. Search completion is deterministic: any concrete result completes the search action; semantic interpretation belongs to later steps.',
+        'Allowed search actions are find-files, find-symbols, find-definitions, find-usages, find-references, and find-examples. Work only on the declared action.',
+        'Nodus owns tool selection and exact tool input schemas. Never return raw tool calls or choose file-system/search parameters.',
+        'Use source hints, project context, and previous empty retrieval evidence to propose one to four short literal query terms likely to occur in the target source.',
+        'Prefer concrete identifiers already supported by the request or supplied project context. Do not invent APIs or paths.',
+        'Search completion is deterministic: concrete retrieval results complete the step; semantic interpretation belongs to later understand steps.',
       ],
       returnFormat: SEARCH_RETRIEVAL_RETURN_FORMAT,
     },

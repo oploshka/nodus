@@ -29,7 +29,7 @@ const DEFINITIONS: StepDefinition[] = [
   {
     type: 'search',
     description: 'Locate concrete project evidence.',
-    maxAttempts: 3,
+    maxAttempts: 1,
     initialPlanAllowed: true,
     dataContract: { requires: [], produces: ['evidence'] },
     actions: [

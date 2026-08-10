@@ -5,6 +5,7 @@ import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import type { PlanUpdater } from '@agent/Planning/PlanUpdater';
 import type { RecoveryController, RecoveryDecision } from '@agent/Planning/RecoveryController';
 import type { PlanStep, TaskPlan } from '@agent/Planning/TaskPlan';
+import { SearchRequestCompiler } from '@agent/Planning/SearchRequestCompiler';
 import { ExecutionContext } from '@agent/Planning/ExecutionContext';
 import { ContextComposer } from '@agent/Planning/ContextComposer';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
@@ -44,6 +45,7 @@ export type PlanRunResult = 'finished' | 'paused';
 export class PlanExecutor {
   public static readonly MAX_RESUMES = 3;
   private readonly contextComposer = new ContextComposer();
+  private readonly searchRequestCompiler = new SearchRequestCompiler();
   private static readonly SAFETY_NODE_EXECUTIONS = 50;
   private static readonly MAX_UNDERSTAND_TOOL_ROUNDS = 3;
 
@@ -157,6 +159,14 @@ export class PlanExecutor {
         continue;
       }
 
+      // Search owns deterministic retrieval execution. When the requirement map already
+      // provides enough structure (typed output + source hints), Nodus compiles and runs
+      // the retrieval directly without spending a model call on low-level tool syntax.
+      if (step.type === 'search' && (step.sourceHints?.length ?? 0) > 0) {
+        const completed = await this.executeCompiledSearch(state, step, context);
+        if (completed) continue;
+      }
+
       if (step.type === 'edit-file') {
         await this.ensureEditFileTargetContext(state, step, context);
       }
@@ -171,7 +181,7 @@ export class PlanExecutor {
           execution: state.execution,
           conversation: state.conversation,
           operation,
-          activeStep: { id: step.id, type: step.type, action: step.action, subject: step.subject, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath },
+          activeStep: { id: step.id, type: step.type, action: step.action, subject: step.subject, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath, sourceHints: step.sourceHints },
           stepContext: {
             ...composed,
             activeEvidence: this.activeEvidence(state.stepResults.get(step.id)),
@@ -201,6 +211,28 @@ export class PlanExecutor {
         const mergedKeys = state.executionContext.mergeStepResult(step, merged);
         this.reporter.factsMerged(mergedKeys);
         this.reporter.stepResult(merged);
+      }
+
+      if (step.type === 'search') {
+        const modelQueries = [
+          ...this.searchRequestCompiler.queriesFromModelData(result.data),
+          ...this.searchRequestCompiler.queriesFromLegacyToolCalls(result.toolCalls),
+        ];
+        if (result.status !== 'failed' && modelQueries.length > 0) {
+          const completed = await this.executeCompiledSearch(state, step, context, modelQueries);
+          if (completed) continue;
+        }
+
+        // Never execute raw model-generated search tool calls. The model may suggest only
+        // lexical queries; Nodus owns tool selection, field names, paths, and limits.
+        const recovered = await this.recover(
+          state,
+          result.status === 'failed'
+            ? result.message ?? 'search query generation failed'
+            : 'search-no-concrete-result',
+        );
+        if (!recovered) return state.pauseReason ? 'paused' : 'finished';
+        continue;
       }
 
       if (result.status === 'failed') {
@@ -241,16 +273,6 @@ export class PlanExecutor {
           ? await this.toolExecutor.execute(toolCalls, state.execution, context, 3)
           : await this.toolExecutor.execute(toolCalls, state.execution, context);
         this.reporter.tools(summary.executed);
-
-        // Search is retrieval, not interpretation. Its whitelisted action has a deterministic
-        // completion rule: concrete results => success, no concrete results => retry.
-        // Semantic sufficiency belongs to later understand/prepare-change steps.
-        if (step.type === 'search') {
-          const completed = this.completeSearchToolRound(state, step);
-          if (completed) continue;
-          state.retryReason = 'поиск не вернул конкретных результатов; повторяю с уточнённым запросом';
-          continue;
-        }
 
         // Understand owns semantic interpretation itself. Tool results are preserved
         // as compact evidence and the raw requested source is sent directly into the next
@@ -549,6 +571,20 @@ export class PlanExecutor {
     if (entries.length > 0) cache.set(step.id, entries);
   }
 
+  private async executeCompiledSearch(
+    state: PlanExecutionState,
+    step: PlanStep,
+    context: LogContext,
+    preferredQueries: string[] = [],
+  ): Promise<boolean> {
+    const calls = this.searchRequestCompiler.compile(step, preferredQueries);
+    if (calls.length === 0) return false;
+
+    const summary = await this.toolExecutor.execute(calls, state.execution, context, 5);
+    this.reporter.tools(summary.executed);
+    return this.completeSearchToolRound(state, step);
+  }
+
   private toolCallSignature(call: OperationResult['toolCalls'][number]): string {
     if (call.tool === 'file-system') {
       return `file-system:${String(call.input.action ?? '')}:${String(call.input.path ?? '')}`;
@@ -609,7 +645,15 @@ export class PlanExecutor {
 
     if (step.action === 'find-files') {
       return useful.some((entry) => {
-        if (entry.call.tool === 'file-system' && typeof entry.call.input.path === 'string' && entry.call.input.path.trim()) return true;
+        if (entry.call.tool === 'file-system') {
+          const data = entry.result.data;
+          return Boolean(
+            String(entry.call.input.action ?? '') === 'exists'
+            && data
+            && typeof data === 'object'
+            && (data as Record<string, unknown>).exists === true,
+          );
+        }
         if (!Array.isArray(entry.result.data)) return false;
         return entry.result.data.some((item) => item && typeof item === 'object' && typeof (item as Record<string, unknown>).path === 'string');
       });

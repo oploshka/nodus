@@ -14,8 +14,8 @@ const search = operations.get('search');
 if (!search) throw new Error('search operation profile missing');
 const searchRules = search.prompt.rules.join('\n');
 if (!searchRules.includes('activeStep.action + activeStep.subject')) throw new Error('search prompt is missing action/subject contract');
-if (!searchRules.includes('Return tool calls only')) throw new Error('search prompt still mixes retrieval with evidence interpretation');
-if (!search.prompt.returnFormat?.includes('runtime completes the step deterministically')) throw new Error('search return format is not deterministic retrieval-only');
+if (!searchRules.includes('Never return raw tool calls')) throw new Error('search prompt does not keep raw tool execution inside Nodus');
+if (!search.prompt.returnFormat?.includes('Nodus compiles the queries into retrieval tool calls')) throw new Error('search return format is not query-only with deterministic runtime execution');
 if (!search.execution.contextStrategy || search.execution.policyScopes.length === 0) throw new Error('search execution settings missing');
 
 const composed = composePrompt(search.prompt);

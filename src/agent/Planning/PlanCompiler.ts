@@ -16,7 +16,9 @@ export class PlanCompiler {
     const evidence = reachable.filter((entry) => entry.ref.kind === 'evidence');
     for (const entry of evidence) {
       const action = this.evidenceAction(entry);
-      steps.push(this.step(sequence++, 'search', action, this.evidenceSubject(entry), language, [], [formatWorkflowDataRef(entry.ref)]));
+      const searchStep = this.step(sequence++, 'search', action, this.evidenceSubject(entry), language, [], [formatWorkflowDataRef(entry.ref)]);
+      if (entry.sourceHints?.length) searchStep.sourceHints = [...entry.sourceHints];
+      steps.push(searchStep);
     }
 
     const facts = reachable.filter((entry) => entry.ref.kind === 'fact');

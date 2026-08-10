@@ -33,6 +33,7 @@ export interface PlanStep {
   inputs: FactKey[];
   outputs: FactKey[];
   targetPath?: string;
+  sourceHints?: string[];
   recoveryForStepId?: string;
 }
 
@@ -43,7 +44,7 @@ export interface TaskPlan {
 }
 
 export const PLAN_STEP_LIMITS: Record<PlanStepType, number> = {
-  search: 3,
+  search: 1,
   understand: 2,
   'prepare-change': 1,
   'edit-file': 3,

@@ -38,7 +38,8 @@
     "test:plan:grounding": "tsx test/PlannerRecoveryGroundingSmoke.ts",
     "test:tool:file-system": "tsx test/FileSystemToolContractSmoke.ts",
     "test:tool:prompt-regression": "tsx test/SearchToolPromptRegressionSmoke.ts",
-    "test:plan:requirements": "tsx test/RequirementMapCompilerSmoke.ts"
+    "test:plan:requirements": "tsx test/RequirementMapCompilerSmoke.ts",
+    "test:search:compiler": "tsx test/SearchRequestCompilerSmoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

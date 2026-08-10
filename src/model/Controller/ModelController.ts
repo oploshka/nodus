@@ -37,7 +37,7 @@ export interface ModelExecutionInput {
   execution: Execution;
   conversation: Conversation;
   operation: OperationProfile;
-  activeStep?: { id: string; type: string; action?: string; subject?: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string };
+  activeStep?: { id: string; type: string; action?: string; subject?: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string; sourceHints?: string[] };
   stepContext?: { facts: Array<{ key: string; value: string; evidence: StepEvidenceItem[]; producerStepId: string }>; missingInputs: string[]; activeEvidence?: { findings: string[]; evidence: StepEvidenceItem[]; missing: string[] } };
 }
 
@@ -252,13 +252,10 @@ Response language: ${responseLanguage}`));
   }
 
   private availableToolsFor(operationId: string) {
-    if (operationId === 'plan' || operationId === 'finalize' || operationId === 'prepare-change' || operationId === 'edit-file') {
+    if (operationId === 'plan' || operationId === 'search' || operationId === 'finalize' || operationId === 'prepare-change' || operationId === 'edit-file') {
       return [];
     }
     const definitions = this.toolRegistry.definitions();
-    if (operationId === 'search') {
-      return definitions.filter((tool) => tool.id === 'search' || tool.id === 'file-system');
-    }
     if (operationId === 'understand') {
       // Search locates candidates. Understand may read already-known files, but it must
       // not reopen broad project discovery under a semantic step.
@@ -292,6 +289,7 @@ Response language: ${responseLanguage}`));
       const likelyTruncated = completionTokens !== undefined && completionTokens >= configuredLimit;
       this.reporter.protocolRetry(input.operation.id, likelyTruncated);
 
+      const repairProtocol = input.operation.prompt.returnFormat ?? OPERATION_RESULT_RETURN_FORMAT;
       const repairRequest: ModelRequest = {
         model: originalRequest.model,
         temperature: 0,
@@ -299,7 +297,7 @@ Response language: ${responseLanguage}`));
         messages: [
           {
             role: 'system',
-            content: `You are a strict JSON protocol repairer. Return the SHORTEST valid OperationResult JSON that preserves the supplied result. Do not continue the task and do not add facts. Omit optional prose. Keep findings/facts compact. ${OPERATION_RESULT_RETURN_FORMAT}`,
+            content: `You are a strict JSON protocol repairer. Return the SHORTEST valid JSON that preserves the supplied result and follows this operation's protocol. Do not continue the task and do not add facts. Omit optional prose. ${repairProtocol}`,
           },
           {
             role: 'user',

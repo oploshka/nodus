@@ -23,6 +23,7 @@ export interface ActiveStepView {
   inputs?: string[];
   outputs?: string[];
   targetPath?: string;
+  sourceHints?: string[];
 }
 
 export interface ActiveEvidenceView {
@@ -58,6 +59,7 @@ export function activeStepMessage(step: ActiveStepView, responseLanguage?: strin
     step.action ? `Action: ${step.action}` : '',
     step.subject ? `Subject: ${step.subject}` : '',
     step.targetPath ? `Target file: ${step.targetPath}` : '',
+    step.sourceHints?.length ? `Source hints: ${step.sourceHints.join(', ')}` : '',
     step.inputs?.length ? `Inputs: ${step.inputs.join(', ')}` : '',
     step.outputs?.length ? `Outputs: ${step.outputs.join(', ')}` : '',
     step.attempt !== undefined && step.maxAttempts !== undefined ? `Attempt: ${step.attempt}/${step.maxAttempts}` : '',

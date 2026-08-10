@@ -1,0 +1,8 @@
+Search runtime compiler patch
+
+- Search steps preserve grounded sourceHints from RequirementMap.
+- Grounded search compiles canonical retrieval tool calls inside Nodus before any model call.
+- Search model fallback returns lexical query terms only; raw tool calls are never executed from search model output.
+- Search semantic attempts reduced to 1; internal retrieval calls stay inside that attempt.
+- Search protocol repair preserves the operation-specific query-only protocol.
+- Added regression coverage for request compilation, source-hint preservation, and /status search without a model call.

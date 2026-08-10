@@ -20,6 +20,11 @@ if (types.join(',') !== 'search,search,search,understand,prepare-change,edit-fil
 }
 console.log('backward requirement graph compiles to familiar workflow steps: OK');
 
+const searches = plan.steps.filter((step) => step.type === 'search');
+if (searches.some((step) => step.maxAttempts !== 1)) throw new Error('Compiled search must use one semantic attempt');
+if (searches.some((step) => !step.sourceHints?.length)) throw new Error('Grounded evidence source hints were not preserved on compiled search steps');
+console.log('search keeps grounded source hints and one semantic attempt: OK');
+
 const understand = plan.steps.find((step) => step.type === 'understand');
 if (!understand) throw new Error('Understand step is missing');
 const expectedFacts = new Set([
