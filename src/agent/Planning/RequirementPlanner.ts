@@ -191,7 +191,7 @@ export class RequirementPlanner {
   private resolveProjectPath(value: string): string | undefined {
     const requested = value.trim().replace(/\\/g, '/').replace(/^\.\//, '');
     if (!requested) return undefined;
-    const files = this.projectSession.index?.files.map((file) => file.path.replace(/\\/g, '/')) ?? [];
+    const files = this.projectSession.currentIndexMy?.files.map((file) => file.path.replace(/\\/g, '/')) ?? [];
     if (files.includes(requested)) return requested;
 
     const normalized = requested.toLowerCase();
@@ -205,7 +205,7 @@ export class RequirementPlanner {
   }
 
   private plannerCandidateFiles(description: string): string[] {
-    const files = this.projectSession.index?.files.map((file) => file.path) ?? [];
+    const files = this.projectSession.currentIndexMy?.files.map((file) => file.path) ?? [];
     if (files.length <= 18) return files;
 
     const lower = description.toLowerCase();
