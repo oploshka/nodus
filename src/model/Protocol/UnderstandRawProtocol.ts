@@ -27,6 +27,7 @@ FACT <exact activeStep.outputs key> <one-line reusable fact value>
 MISSING <one-line unresolved output or evidence>
 
 FINDING, EVIDENCE, FACT, and MISSING may repeat. FACT keys must use EXACTLY activeStep.outputs keys.
+GOAL true requires one standalone FACT line for EVERY activeStep.outputs key. EVIDENCE lines do not publish outputs: never embed FACT inside EVIDENCE. If any output cannot be published, use GOAL false and list that exact key in MISSING.
 For STATUS continue with ACTION read, PATH may repeat up to 3 times. Nodus converts PATH entries to canonical file-system reads; do not emit TOOL/INPUT JSON.
 For STATUS waiting use QUESTION <question>. For STATUS failed use MESSAGE <reason>.
 Do not wrap the response in markdown. Keep FACT/FINDING/EVIDENCE/MISSING values compact and on one line; raw code punctuation, quotes, backticks, and template expressions need no escaping.`;

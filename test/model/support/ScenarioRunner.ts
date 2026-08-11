@@ -93,7 +93,10 @@ function assertExpectation(expectation: ScenarioStepExpectation | undefined, res
   const stepResult = result.state.stepResults.get(step.id);
   const context = result.state.executionContext;
 
-  for (const key of expectation.expectedOutputs ?? []) assert.ok(context.has(key), `step ${expectation.step}: expected output is not ready: ${key}`);
+  for (const key of expectation.expectedOutputs ?? []) assert.ok(
+    context.has(key),
+    `step ${expectation.step}: expected output is not ready: ${key}; facts=${JSON.stringify(stepResult?.facts ?? [])}; missing=${JSON.stringify(stepResult?.missing ?? [])}; findings=${JSON.stringify(stepResult?.findings ?? [])}`,
+  );
   for (const key of expectation.expectedContextKeys ?? []) assert.ok(context.has(key), `step ${expectation.step}: expected context fact is missing: ${key}`);
   if (expectation.expectedRetrieval) assert.equal(stepResult?.retrieval?.match, expectation.expectedRetrieval, `step ${expectation.step}: retrieval match`);
 
