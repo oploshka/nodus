@@ -27,11 +27,8 @@ export class ChangeExecutor {
       } else if (change.type === 'patch') {
         const read = await tool.execute({ action: 'read', path: change.path }, toolContext);
         if (!read.ok || typeof read.data !== 'string') throw new Error(`Failed to read patch target ${change.path}: ${read.error ?? 'invalid file content'}`);
-        const usesCrLf = read.data.includes('\r\n');
-        const normalized = read.data.replace(/\r\n/g, '\n');
-        const patched = this.applyUnifiedDiff(normalized, change.hunks, change.path);
-        const output = usesCrLf ? patched.replace(/\n/g, '\r\n') : patched;
-        result = await tool.execute({ action: 'write', path: change.path, content: output }, toolContext);
+        const patched = this.applyUnifiedDiff(read.data, change.hunks, change.path);
+        result = await tool.execute({ action: 'write', path: change.path, content: patched }, toolContext);
       } else {
         result = await tool.execute({ action: 'delete', path: change.path }, toolContext);
       }
@@ -43,16 +40,27 @@ export class ChangeExecutor {
   }
 
   private applyUnifiedDiff(content: string, hunks: UnifiedDiffHunk[], path: string): string {
-    const hadTrailingNewline = content.endsWith('\n');
-    const source = content.split('\n');
+    const eol = content.includes('\r\n') ? '\r\n' : '\n';
+    const normalized = content.replace(/\r\n/g, '\n');
+    const hadTrailingNewline = normalized.endsWith('\n');
+    const source = normalized.split('\n');
     if (hadTrailingNewline) source.pop();
 
     const resolved = hunks.map((hunk) => ({ hunk, index: this.resolveHunkIndex(source, hunk, path) }));
     resolved.sort((a, b) => b.index - a.index);
 
+    for (let index = 1; index < resolved.length; index += 1) {
+      const lower = resolved[index - 1];
+      const upper = resolved[index];
+      const upperLength = this.oldSideLines(upper.hunk).length;
+      if (upper.index + upperLength > lower.index) {
+        throw new Error(`Patch hunks for ${path} overlap near old lines ${upper.hunk.oldStart} and ${lower.hunk.oldStart}`);
+      }
+    }
+
     let result = [...source];
     for (const { hunk, index } of resolved) {
-      const oldLines = hunk.lines.filter((line) => line.type !== 'add').map((line) => line.text);
+      const oldLines = this.oldSideLines(hunk);
       const newLines = hunk.lines.filter((line) => line.type !== 'remove').map((line) => line.text);
       const actual = result.slice(index, index + oldLines.length);
       if (!this.sameLines(actual, oldLines)) {
@@ -61,11 +69,12 @@ export class ChangeExecutor {
       result.splice(index, oldLines.length, ...newLines);
     }
 
-    return result.join('\n') + (hadTrailingNewline ? '\n' : '');
+    const output = result.join('\n') + (hadTrailingNewline ? '\n' : '');
+    return eol === '\r\n' ? output.replace(/\n/g, '\r\n') : output;
   }
 
   private resolveHunkIndex(source: string[], hunk: UnifiedDiffHunk, path: string): number {
-    const oldLines = hunk.lines.filter((line) => line.type !== 'add').map((line) => line.text);
+    const oldLines = this.oldSideLines(hunk);
     const expected = Math.max(0, hunk.oldStart - 1);
     if (this.sameLines(source.slice(expected, expected + oldLines.length), oldLines)) return expected;
 
@@ -73,13 +82,34 @@ export class ChangeExecutor {
     for (let index = 0; index <= source.length - oldLines.length; index += 1) {
       if (this.sameLines(source.slice(index, index + oldLines.length), oldLines)) candidates.push(index);
     }
-    if (candidates.length === 0) throw new Error(`Patch hunk for ${path} could not match context near old line ${hunk.oldStart}`);
+    if (candidates.length === 0) {
+      const previewStart = Math.max(0, expected - 2);
+      const previewLength = Math.max(oldLines.length + 4, 8);
+      const rejected = oldLines.slice(0, 12).map((line) => JSON.stringify(line)).join(', ');
+      const nearby = source.slice(previewStart, previewStart + previewLength)
+        .slice(0, 16)
+        .map((line, offset) => `${previewStart + offset + 1}:${JSON.stringify(line)}`)
+        .join(', ');
+      throw new Error(
+        `Patch hunk for ${path} could not match context near old line ${hunk.oldStart}. `
+        + `Rejected old-side sequence (context/removals only): [${rejected}]. `
+        + `Authoritative source near the hint: [${nearby}]`,
+      );
+    }
 
-    candidates.sort((a, b) => Math.abs(a - expected) - Math.abs(b - expected));
-    if (candidates.length > 1 && Math.abs(candidates[0] - expected) === Math.abs(candidates[1] - expected)) {
+    const ranked = candidates
+      .map((index) => ({ index, distance: Math.abs(index - expected) }))
+      .sort((a, b) => a.distance - b.distance || a.index - b.index);
+    if (ranked.length > 1 && ranked[0].distance === ranked[1].distance) {
       throw new Error(`Patch hunk for ${path} is ambiguous near old line ${hunk.oldStart}`);
     }
-    return candidates[0];
+    return ranked[0].index;
+  }
+
+  private oldSideLines(hunk: UnifiedDiffHunk): string[] {
+    return hunk.lines
+      .filter((line) => line.type === 'context' || line.type === 'remove')
+      .map((line) => line.text);
   }
 
   private sameLines(left: string[], right: string[]): boolean {

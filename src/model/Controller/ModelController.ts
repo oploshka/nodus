@@ -37,7 +37,7 @@ export interface ModelExecutionInput {
   execution: Execution;
   conversation: Conversation;
   operation: OperationProfile;
-  activeStep?: { id: string; type: string; action?: string; subject?: string; goal: string; attempt: number; maxAttempts: number; inputs: string[]; outputs: string[]; targetPath?: string; sourceHints?: string[]; requirements?: Array<{ ref: string; description: string; constraints?: string[] }> };
+  activeStep?: { id: string; type: string; action?: string; subject?: string; goal: string; attempt: number; maxAttempts: number; retryReason?: string; inputs: string[]; outputs: string[]; targetPath?: string; sourceHints?: string[]; requirements?: Array<{ ref: string; description: string; constraints?: string[] }> };
   stepContext?: { facts: Array<{ key: string; value: string; evidence: StepEvidenceItem[]; producerStepId: string }>; missingInputs: string[]; activeEvidence?: { findings: string[]; evidence: StepEvidenceItem[]; missing: string[] } };
 }
 
@@ -230,7 +230,9 @@ Response language: ${responseLanguage}`));
     messages.push(userMessage(
       'Instruction:',
       input.operation.id === 'edit-file' && input.activeStep
-        ? `Edit the supplied authoritative target source ${input.activeStep.targetPath ?? ''} now. Do not request tools. Return the completed edit-file RAW protocol response.`
+        ? input.activeStep.retryReason
+          ? `The previous edit was rejected and no change was applied. Rebuild the edit from the supplied authoritative target source ${input.activeStep.targetPath ?? ''}. For ACTION patch, copy every unchanged or removed old-side line exactly from that source: existing unchanged lines use the space prefix, removed lines use -, and only genuinely new lines use +. Do not repeat the rejected hunk. Do not request tools. Return the corrected edit-file RAW protocol response.`
+          : `Edit the supplied authoritative target source ${input.activeStep.targetPath ?? ''} now. Do not request tools. Return the completed edit-file RAW protocol response.`
         : input.operation.id === 'understand' && input.activeStep && understandSourcesComplete
           ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. Every declared source hint (${requiredUnderstandPaths.join(', ')}) is already included above. The evidence-gathering phase is complete: do not request any PATH. Compose runtime receivers from the target source with public members established by known facts; the final integration expression need not already exist in the target. Return STATUS completed now and publish every derivable fact under the exact activeStep.outputs keys; use MISSING only when that composition is genuinely unsupported. Use the output protocol from the system message.`
         : input.operation.id === 'understand' && input.activeStep && suppliedUnderstandPaths.length > 0

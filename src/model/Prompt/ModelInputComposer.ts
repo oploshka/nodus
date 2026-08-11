@@ -20,6 +20,7 @@ export interface ActiveStepView {
   goal?: string;
   attempt?: number;
   maxAttempts?: number;
+  retryReason?: string;
   inputs?: string[];
   outputs?: string[];
   targetPath?: string;
@@ -65,6 +66,7 @@ export function activeStepMessage(step: ActiveStepView, responseLanguage?: strin
     step.outputs?.length ? `Outputs: ${step.outputs.join(', ')}` : '',
     step.requirements?.length ? `Requirements:\n${step.requirements.map((item) => `- ${item.ref}: ${item.description}${item.constraints?.length ? ` [constraints=${item.constraints.join(', ')}]` : ''}`).join('\n')}` : '',
     step.attempt !== undefined && step.maxAttempts !== undefined ? `Attempt: ${step.attempt}/${step.maxAttempts}` : '',
+    step.retryReason ? `Previous attempt failed: ${step.retryReason}` : '',
     responseLanguage ? `Response language: ${responseLanguage}` : '',
   ].filter(Boolean);
   return userMessage('Active step:', lines.join('\n'));

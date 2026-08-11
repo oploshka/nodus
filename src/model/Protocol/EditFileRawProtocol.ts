@@ -81,7 +81,7 @@ export class EditFileRawProtocol {
         if (prefix === ' ') hunk.lines.push({ type: 'context', text: line.slice(1) });
         else if (prefix === '-') hunk.lines.push({ type: 'remove', text: line.slice(1) });
         else if (prefix === '+') hunk.lines.push({ type: 'add', text: line.slice(1) });
-        else if (line.length === 0) hunk.lines.push({ type: 'context', text: '' });
+        else if (line.length === 0) { index += 1; break; }
         else break;
         index += 1;
       }

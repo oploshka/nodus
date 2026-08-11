@@ -135,6 +135,7 @@ export class PlanExecutor {
       const displayedAttempt = understandContinuation
         ? Math.max(state.stepAttempts, 1)
         : state.stepAttempts + 1;
+      const retryReason = state.retryReason;
       if (understandContinuation) {
         this.reporter.stepContinuation(state.planIndex, step.type, state.understandContinuation?.toolRounds ?? 0);
       } else {
@@ -145,7 +146,7 @@ export class PlanExecutor {
           step.type,
           displayedAttempt,
           step.maxAttempts,
-          state.retryReason,
+          retryReason,
         );
       }
       state.retryReason = undefined;
@@ -245,7 +246,7 @@ export class PlanExecutor {
           execution: state.execution,
           conversation: state.conversation,
           operation,
-          activeStep: { id: step.id, type: step.type, action: step.action, subject: step.subject, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath, sourceHints: step.sourceHints, requirements: step.requirements?.map(({ ref, description, constraints }) => ({ ref, description, constraints })) },
+          activeStep: { id: step.id, type: step.type, action: step.action, subject: step.subject, goal: step.goal, attempt: state.stepAttempts, maxAttempts: step.maxAttempts, retryReason: step.type === 'edit-file' ? retryReason : undefined, inputs: step.inputs, outputs: step.outputs, targetPath: step.targetPath, sourceHints: step.sourceHints, requirements: step.requirements?.map(({ ref, description, constraints }) => ({ ref, description, constraints })) },
           stepContext: {
             ...composed,
             activeEvidence: this.activeEvidence(state.stepResults.get(step.id)),
@@ -399,7 +400,25 @@ export class PlanExecutor {
       }
 
       if (result.changes.length > 0) {
-        await this.changeExecutor.apply(result.changes, state.execution, context);
+        try {
+          await this.changeExecutor.apply(result.changes, state.execution, context);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await this.logger.error('change-apply-error', { operation: step.type, error: message }, context);
+          state.execution.addEvent('change-apply-error', {
+            stepId: step.id,
+            operation: step.type,
+            error: message,
+          });
+          if (state.stepAttempts < step.maxAttempts) {
+            step.status = 'pending';
+            state.retryReason = `change could not be applied exactly: ${message}`;
+            continue;
+          }
+          const recovered = await this.recover(state, `change-apply-error:${message}`);
+          if (!recovered) return state.pauseReason ? 'paused' : 'finished';
+          continue;
+        }
         this.reporter.changes(result.changes.map((change) => change.path));
         if (step.type === 'edit-file') {
           const synthetic: StepResult = {
