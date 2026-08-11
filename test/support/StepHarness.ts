@@ -8,6 +8,7 @@ import { Task } from '@core/Task/Task';
 import type { ModelExecutionInput } from '@model/Controller/ModelController';
 import type { OperationResult, StepEvidenceItem, ToolCallRequest } from '@model/Result/OperationResult';
 import type { FileChange } from '@core/Change/ChangeSet';
+import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 
 export interface SeedFact {
   key: string;
@@ -15,12 +16,18 @@ export interface SeedFact {
   evidence?: StepEvidenceItem[];
 }
 
-export interface StepHarnessOptions {
-  step: PlanStep;
+export interface PlanHarnessOptions {
+  plan: TaskPlan;
+  taskDescription?: string;
   seedFacts?: SeedFact[];
+  operationRegistry?: OperationRegistry;
   model: (input: ModelExecutionInput, call: number) => Promise<OperationResult> | OperationResult;
   tool?: (calls: ToolCallRequest[], execution: Execution) => Promise<number> | number;
   change?: (changes: FileChange[]) => Promise<void> | void;
+}
+
+export interface StepHarnessOptions extends Omit<PlanHarnessOptions, 'plan'> {
+  step: PlanStep;
 }
 
 export interface StepHarnessResult {
@@ -32,10 +39,21 @@ export interface StepHarnessResult {
 }
 
 export async function runStepHarness(options: StepHarnessOptions): Promise<StepHarnessResult> {
+  return runPlanHarness({
+    ...options,
+    plan: {
+      version: 1,
+      goal: options.step.goal,
+      steps: [{ ...options.step }],
+    },
+  });
+}
+
+export async function runPlanHarness(options: PlanHarnessOptions): Promise<StepHarnessResult> {
   const task = new Task({
     projectId: 'test-project',
     conversationId: 'test-conversation',
-    description: 'status command stage test',
+    description: options.taskDescription ?? 'status command stage test',
   });
   const conversation = new Conversation('test-project', 'test-conversation');
   const execution = new Execution(task.id);
@@ -62,19 +80,13 @@ export async function runStepHarness(options: StepHarnessOptions): Promise<StepH
     });
   }
 
-  const plan: TaskPlan = {
-    version: 1,
-    goal: options.step.goal,
-    steps: [{ ...options.step }],
-  };
-
   let modelCalls = 0;
   let toolCalls = 0;
   let recoveryCalls = 0;
   const appliedChanges: FileChange[] = [];
 
   const executor = new PlanExecutor(
-    { get: () => ({ id: options.step.type }) } as never,
+    options.operationRegistry ?? ({ get: (id: string) => ({ id }) } as never),
     {
       execute: async (input: ModelExecutionInput) => {
         modelCalls += 1;
@@ -104,17 +116,22 @@ export async function runStepHarness(options: StepHarnessOptions): Promise<StepH
     {
       recover: async () => {
         recoveryCalls += 1;
-        return { action: 'request-human', reason: 'unexpected recovery in step harness' };
+        return { action: 'request-human', reason: 'unexpected recovery in test harness', steps: [] };
       },
     } as never,
     { insertBefore() {}, markPendingFrom() {} } as never,
-    { info: async () => {}, error: async () => {}, warn: async () => {} } as never,
+    { info: async () => {}, error: async () => {}, warn: async () => {}, debug: async () => {} } as never,
     {
       planStep() {}, contextCompose() {}, note() {}, factsMerged() {}, stepResult() {}, tools() {}, changes() {},
       planAdvance() {}, recovery() {}, recoveryDecision() {}, paused() {}, planUpdated() {}, recoveryPruned() {},
       stepAlreadySatisfiedAt() {}, deterministicStep() {}, retrieval() {}, requirementResolution() {}, requirementRechecked() {}, stepContinuation() {},
     } as never,
   );
+
+  const plan: TaskPlan = {
+    ...options.plan,
+    steps: options.plan.steps.map((step) => ({ ...step })),
+  };
 
   const state: PlanExecutionState = {
     task,
