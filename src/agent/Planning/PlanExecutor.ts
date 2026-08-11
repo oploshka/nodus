@@ -1,5 +1,6 @@
 // PlanExecutor.ts
 import type { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
+import { ChangeProposalValidator } from '@agent/Execution/ChangeProposalValidator';
 import type { ToolExecutor } from '@agent/Execution/ToolExecutor';
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
 import type { PlanUpdater } from '@agent/Planning/PlanUpdater';
@@ -59,6 +60,7 @@ export class PlanExecutor {
   private readonly changeDefinitionCompiler = new ChangeDefinitionCompiler();
   private readonly finalResultCompiler = new FinalResultCompiler();
   private readonly requirementConstraintValidator = new RequirementConstraintValidator();
+  private readonly changeProposalValidator = new ChangeProposalValidator();
   private static readonly SAFETY_NODE_EXECUTIONS = 50;
   private static readonly MAX_UNDERSTAND_TOOL_ROUNDS = 3;
 
@@ -401,18 +403,23 @@ export class PlanExecutor {
 
       if (result.changes.length > 0) {
         try {
-          await this.changeExecutor.apply(result.changes, state.execution, context);
+          if (step.type === 'edit-file') {
+            const prepared = await this.changeExecutor.prepare(result.changes);
+            const changeDefinition = composed.facts.find((fact) => {
+              try { return parseWorkflowDataRef(fact.key).kind === 'change-definition'; } catch { return false; }
+            })?.value;
+            this.changeProposalValidator.validate(changeDefinition, result.changes, prepared);
+            await this.changeExecutor.commit(prepared, state.execution, context);
+          } else {
+            await this.changeExecutor.apply(result.changes, state.execution, context);
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           await this.logger.error('change-apply-error', { operation: step.type, error: message }, context);
-          state.execution.addEvent('change-apply-error', {
-            stepId: step.id,
-            operation: step.type,
-            error: message,
-          });
-          if (state.stepAttempts < step.maxAttempts) {
+          state.execution.addEvent('change-apply-error', { stepId: step.id, operation: step.type, error: message });
+          if (step.type === 'edit-file' && state.stepAttempts < step.maxAttempts) {
             step.status = 'pending';
-            state.retryReason = `change could not be applied exactly: ${message}`;
+            state.retryReason = `edit proposal rejected before commit: ${message}`;
             continue;
           }
           const recovered = await this.recover(state, `change-apply-error:${message}`);
@@ -423,13 +430,13 @@ export class PlanExecutor {
         if (step.type === 'edit-file') {
           const synthetic: StepResult = {
             goalSatisfied: true,
-            findings: [`Applied changes to: ${result.changes.map((change) => change.path).join(', ')}`],
-            evidence: result.changes.map((change) => ({ path: change.path, fact: 'File change applied by ChangeExecutor.' })),
+            findings: [`Validated and applied changes to: ${result.changes.map((change) => change.path).join(', ')}`],
+            evidence: result.changes.map((change) => ({ path: change.path, fact: 'File change validated against the prepared contract and committed.' })),
             missing: [],
             facts: step.outputs.map((key) => ({
               key,
-              value: `Applied requested edit to ${result.changes.map((change) => change.path).join(', ')}`,
-              evidence: result.changes.map((change) => ({ path: change.path, fact: 'File change applied by ChangeExecutor.' })),
+              value: `Validated and applied requested edit to ${result.changes.map((change) => change.path).join(', ')}`,
+              evidence: result.changes.map((change) => ({ path: change.path, fact: 'File change validated against the prepared contract and committed.' })),
             })),
           };
           const merged = this.mergeStepResults(state.stepResults.get(step.id), synthetic);

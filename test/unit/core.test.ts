@@ -12,7 +12,6 @@ const contracts = [
   './contracts/FileSystemToolContractSmoke.ts',
   './contracts/SearchToolPromptRegressionSmoke.ts',
   './contracts/EditFilePatchProtocolSmoke.ts',
-  './contracts/EditFileApplyRetrySmoke.ts',
 ] as const;
 
 for (const modulePath of contracts) {

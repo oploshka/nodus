@@ -22,7 +22,7 @@ const REQUIREMENT_PLAN_PROFILE: ModelCallProfile = {
       'A fact describes what must be known by a consumer. Use scope when the access path is context-specific, for example scope=cli.',
       'Use constraints for semantic requirements that must remain true, for example read-only, existing-state, no-side-effects, nullable, or no-duplication.',
       'Evidence may declare only its semantic evidenceKind: file, symbol, definition, usage, reference, or example. Do not choose search/understand operations.',
-      'A fact may require only evidence refs. A change-definition may require only fact refs.',
+      'A fact may require evidence refs and previously derivable fact refs. Use fact-to-fact dependencies to split complex integration reasoning into stable semantic layers. A change-definition may require only fact refs.',
       'Use sourceHints only for paths present in Project candidates. Never invent a path, API, symbol, or identifier.',
       'Use targetPath only when the exact target file is already supported by Project candidates.',
       'Keep the map minimal. Do not duplicate the same knowledge under different keys.',
@@ -169,8 +169,8 @@ export class RequirementPlanner {
     }
 
     if (entry.ref.kind === 'fact') {
-      if (entry.requires.some((dependency) => dependency.kind !== 'evidence')) {
-        throw new Error(`Fact requirement ${ref} may depend only on evidence`);
+      if (entry.requires.some((dependency) => dependency.kind !== 'evidence' && dependency.kind !== 'fact')) {
+        throw new Error(`Fact requirement ${ref} may depend only on evidence or fact`);
       }
       if (entry.requires.length === 0 && (entry.sourceHints?.length ?? 0) === 0) {
         throw new Error(`Fact requirement ${ref} must be grounded by evidence or a known source hint`);

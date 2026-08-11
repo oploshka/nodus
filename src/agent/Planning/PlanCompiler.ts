@@ -40,23 +40,23 @@ export class PlanCompiler {
     }
 
     const facts = reachable.filter((entry) => entry.ref.kind === 'fact');
-    if (facts.length > 0) {
-      const inputKeys = this.uniqueRefs(facts.flatMap((entry) => entry.requires));
-      const outputKeys = facts.map((entry) => formatWorkflowDataRef(entry.ref));
-      const sourceHints = Array.from(new Set(facts.flatMap((entry) => entry.sourceHints ?? [])));
-      const rootEntry = entries.get(formatWorkflowDataRef(map.root));
-      if (rootEntry?.targetPath) sourceHints.push(rootEntry.targetPath);
-      const subject = this.factSubject(facts, sourceHints);
-      const action: PlanStepAction = facts.length === 1 && /pattern/i.test(facts[0].ref.key)
+    const rootEntry = entries.get(formatWorkflowDataRef(map.root));
+    for (const layer of this.factLayers(facts)) {
+      const inputKeys = this.uniqueRefs(layer.flatMap((entry) => entry.requires));
+      const outputKeys = layer.map((entry) => formatWorkflowDataRef(entry.ref));
+      const sourceHints = Array.from(new Set(layer.flatMap((entry) => entry.sourceHints ?? [])));
+      const needsTargetRuntime = layer.some((entry) => entry.ref.scope && !entry.requires.some((dependency) => dependency.kind === 'fact'));
+      if (needsTargetRuntime && rootEntry?.targetPath) sourceHints.push(rootEntry.targetPath);
+      const subject = this.factSubject(layer, sourceHints);
+      const action: PlanStepAction = layer.length === 1 && /pattern/i.test(layer[0].ref.key)
         ? 'identify-pattern'
         : 'determine-integration';
       const understand = this.step(sequence++, 'understand', action, subject, language, inputKeys, outputKeys);
-      understand.requirements = facts.map((entry) => this.contract(entry));
+      understand.requirements = layer.map((entry) => this.contract(entry));
       understand.sourceHints = Array.from(new Set(sourceHints)).filter(Boolean);
       steps.push(understand);
     }
 
-    const rootEntry = entries.get(formatWorkflowDataRef(map.root));
     if (!rootEntry) throw new Error(`Requirement root is missing: ${formatWorkflowDataRef(map.root)}`);
 
     let finalInput = formatWorkflowDataRef(map.root);
@@ -93,10 +93,29 @@ export class PlanCompiler {
     }
 
     return {
-      version: 4,
+      version: 5,
       goal: map.goal,
       steps,
     };
+  }
+
+  private factLayers(facts: RequirementEntry[]): RequirementEntry[][] {
+    const remaining = new Map(facts.map((entry) => [formatWorkflowDataRef(entry.ref), entry]));
+    const produced = new Set<string>();
+    const layers: RequirementEntry[][] = [];
+    while (remaining.size > 0) {
+      const ready = Array.from(remaining.values()).filter((entry) => entry.requires
+        .filter((dependency) => dependency.kind === 'fact')
+        .every((dependency) => produced.has(formatWorkflowDataRef(dependency))));
+      if (ready.length === 0) throw new Error('Fact dependency cycle detected while compiling semantic layers');
+      layers.push(ready);
+      for (const entry of ready) {
+        const key = formatWorkflowDataRef(entry.ref);
+        remaining.delete(key);
+        produced.add(key);
+      }
+    }
+    return layers;
   }
 
   private collectReachable(root: WorkflowDataRef, entries: Map<string, RequirementEntry>): RequirementEntry[] {

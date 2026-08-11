@@ -7,6 +7,13 @@ import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import type { ToolRegistry } from '@tool/Registry/ToolRegistry';
 import type { ToolResult } from '@tool/Tool/Tool';
 
+export interface PreparedFileChange {
+  change: FileChange;
+  path: string;
+  originalContent?: string;
+  resultingContent?: string;
+}
+
 export class ChangeExecutor {
   public constructor(
     private readonly toolRegistry: ToolRegistry,
@@ -14,29 +21,49 @@ export class ChangeExecutor {
     private readonly logger: Logger,
   ) {}
 
-  public async apply(changes: FileChange[], execution: Execution, logContext: LogContext): Promise<void> {
+  public async prepare(changes: FileChange[]): Promise<PreparedFileChange[]> {
     const tool = this.toolRegistry.get('file-system');
-    if (!tool) throw new Error('file-system tool is required to apply changes');
-
+    if (!tool) throw new Error('file-system tool is required to prepare changes');
     const toolContext = { projectRoot: this.projectSession.root, exclude: this.projectSession.configuration.exclude ?? [] };
+    const prepared: PreparedFileChange[] = [];
 
     for (const change of changes) {
-      let result: ToolResult;
-      if (change.type === 'write') {
-        result = await tool.execute({ action: 'write', path: change.path, content: change.content }, toolContext);
-      } else if (change.type === 'patch') {
-        const read = await tool.execute({ action: 'read', path: change.path }, toolContext);
-        if (!read.ok || typeof read.data !== 'string') throw new Error(`Failed to read patch target ${change.path}: ${read.error ?? 'invalid file content'}`);
-        const patched = this.applyUnifiedDiff(read.data, change.hunks, change.path);
-        result = await tool.execute({ action: 'write', path: change.path, content: patched }, toolContext);
-      } else {
-        result = await tool.execute({ action: 'delete', path: change.path }, toolContext);
+      if (change.type === 'delete') {
+        prepared.push({ change, path: change.path });
+        continue;
       }
 
-      execution.addEvent('change-applied', { type: change.type, path: change.path, ok: result.ok, error: result.error });
-      await this.logger.info('change-applied', { type: change.type, path: change.path, ok: result.ok }, logContext);
-      if (!result.ok) throw new Error(`Failed to apply change ${change.path}: ${result.error ?? 'unknown error'}`);
+      let originalContent: string | undefined;
+      const read = await tool.execute({ action: 'read', path: change.path }, toolContext);
+      if (read.ok && typeof read.data === 'string') originalContent = read.data;
+      else if (change.type === 'patch') throw new Error(`Failed to read patch target ${change.path}: ${read.error ?? 'invalid file content'}`);
+
+      const resultingContent = change.type === 'write'
+        ? change.content
+        : this.applyUnifiedDiff(originalContent ?? '', change.hunks, change.path);
+      prepared.push({ change, path: change.path, originalContent, resultingContent });
     }
+    return prepared;
+  }
+
+  public async commit(prepared: PreparedFileChange[], execution: Execution, logContext: LogContext): Promise<void> {
+    const tool = this.toolRegistry.get('file-system');
+    if (!tool) throw new Error('file-system tool is required to commit changes');
+    const toolContext = { projectRoot: this.projectSession.root, exclude: this.projectSession.configuration.exclude ?? [] };
+
+    for (const item of prepared) {
+      let result: ToolResult;
+      if (item.change.type === 'delete') result = await tool.execute({ action: 'delete', path: item.path }, toolContext);
+      else result = await tool.execute({ action: 'write', path: item.path, content: item.resultingContent ?? '' }, toolContext);
+      execution.addEvent('change-applied', { type: item.change.type, path: item.path, ok: result.ok, error: result.error });
+      await this.logger.info('change-applied', { type: item.change.type, path: item.path, ok: result.ok }, logContext);
+      if (!result.ok) throw new Error(`Failed to apply change ${item.path}: ${result.error ?? 'unknown error'}`);
+    }
+  }
+
+  public async apply(changes: FileChange[], execution: Execution, logContext: LogContext): Promise<void> {
+    const prepared = await this.prepare(changes);
+    await this.commit(prepared, execution, logContext);
   }
 
   private applyUnifiedDiff(content: string, hunks: UnifiedDiffHunk[], path: string): string {
@@ -58,7 +85,7 @@ export class ChangeExecutor {
       }
     }
 
-    let result = [...source];
+    const result = [...source];
     for (const { hunk, index } of resolved) {
       const oldLines = this.oldSideLines(hunk);
       const newLines = hunk.lines.filter((line) => line.type !== 'remove').map((line) => line.text);

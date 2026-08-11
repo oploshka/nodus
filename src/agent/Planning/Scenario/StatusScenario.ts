@@ -48,11 +48,18 @@ export const STATUS_SCENARIO_REQUIREMENTS: RequirementMap = {
       requires: [{ kind: 'evidence', key: 'conversation.id.definition' }],
     },
     {
+      ref: { kind: 'fact', key: 'projectSession.access', scope: 'cli' },
+      description: 'how the current ProjectSession is accessed from the CLI runtime context',
+      requires: [],
+      sourceHints: ['src/cli/Cli.ts'],
+    },
+    {
       ref: { kind: 'fact', key: 'project.index.fileCount.access', scope: 'cli' },
       description: 'how the CLI reads the current project index file count without creating, scanning, or refreshing the index and handles an unavailable index',
       requires: [
         { kind: 'evidence', key: 'project.index.files' },
         { kind: 'evidence', key: 'project.index.currentAccess' },
+        { kind: 'fact', key: 'projectSession.access', scope: 'cli' },
       ],
       constraints: ['read-only', 'existing-state', 'no-side-effects', 'must-not-scan-or-refresh', 'nullable'],
     },

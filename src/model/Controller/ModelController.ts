@@ -185,7 +185,15 @@ export class ModelController {
 Response language: ${responseLanguage}`));
     }
 
-    const projectBlock = projectMessage(context.project);
+    const activeProjectFiles = input.activeStep
+      ? Array.from(new Set([
+          ...(input.activeStep.sourceHints ?? []),
+          ...(input.activeStep.targetPath ? [input.activeStep.targetPath] : []),
+          ...(input.stepContext?.facts ?? []).flatMap((fact) => fact.evidence.map((item) => item.path).filter((path): path is string => Boolean(path))),
+          ...(input.stepContext?.activeEvidence?.evidence ?? []).map((item) => item.path).filter((path): path is string => Boolean(path)),
+        ])).slice(0, 12)
+      : context.project.indexedFiles;
+    const projectBlock = projectMessage({ ...context.project, indexedFiles: activeProjectFiles });
     if (projectBlock) messages.push(projectBlock);
     const policyBlock = knowledgeMessage('Policies', context.policies);
     if (policyBlock) messages.push(policyBlock);
@@ -231,7 +239,7 @@ Response language: ${responseLanguage}`));
       'Instruction:',
       input.operation.id === 'edit-file' && input.activeStep
         ? input.activeStep.retryReason
-          ? `The previous edit was rejected and no change was applied. Rebuild the edit from the supplied authoritative target source ${input.activeStep.targetPath ?? ''}. For ACTION patch, copy every unchanged or removed old-side line exactly from that source: existing unchanged lines use the space prefix, removed lines use -, and only genuinely new lines use +. Do not repeat the rejected hunk. Do not request tools. Return the corrected edit-file RAW protocol response.`
+          ? `The previous edit proposal was rejected and NO part of it was committed. Produce a complete replacement proposal that still satisfies the ENTIRE prepared change contract for ${input.activeStep.targetPath ?? ''}. Do not omit the failed edit. Correct its old-side context from the authoritative target source supplied above. For ACTION patch, unchanged old-side lines must be copied exactly from that source. Do not request tools. Return the corrected complete edit-file RAW protocol response.`
           : `Edit the supplied authoritative target source ${input.activeStep.targetPath ?? ''} now. Do not request tools. Return the completed edit-file RAW protocol response.`
         : input.operation.id === 'understand' && input.activeStep && understandSourcesComplete
           ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. Every declared source hint (${requiredUnderstandPaths.join(', ')}) is already included above. The evidence-gathering phase is complete: do not request any PATH. Compose runtime receivers from the target source with public members established by known facts; the final integration expression need not already exist in the target. Return STATUS completed now and publish every derivable fact under the exact activeStep.outputs keys; use MISSING only when that composition is genuinely unsupported. Use the output protocol from the system message.`

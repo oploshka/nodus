@@ -107,6 +107,18 @@ export async function runPlanHarness(options: PlanHarnessOptions): Promise<StepH
       },
     } as never,
     {
+      prepare: async (changes: FileChange[]) => changes.map((change) => ({
+        change, path: change.path,
+        resultingContent: change.type === 'write' ? change.content : change.type === 'patch'
+          ? change.hunks.flatMap((hunk) => hunk.lines.filter((line) => line.type !== 'remove').map((line) => line.text)).join('\n')
+          : undefined,
+        originalContent: '',
+      })),
+      commit: async (prepared: Array<{ change: FileChange }>) => {
+        const changes = prepared.map((item) => item.change);
+        appliedChanges.push(...changes);
+        await options.change?.(changes);
+      },
       apply: async (changes: FileChange[]) => {
         appliedChanges.push(...changes);
         await options.change?.(changes);
