@@ -20,7 +20,7 @@ export class RequirementConstraintValidator {
 
     for (const fact of result.facts) {
       const contract = contracts.get(fact.key);
-      const violation = contract ? this.violation(contract, fact.value) : undefined;
+      const violation = this.placeholderViolation(fact.value) ?? (contract ? this.violation(contract, fact.value) : undefined);
       if (violation) rejected.push({ fact, violation });
       else accepted.push(fact);
     }
@@ -30,7 +30,7 @@ export class RequirementConstraintValidator {
     const missing = Array.from(new Set([
       ...result.missing,
       ...rejected.map(({ fact }) => fact.key),
-    ]));
+    ])).filter((key) => !accepted.some((fact) => fact.key === key));
     const findings = [
       ...result.findings,
       ...rejected.map(({ fact, violation }) => `Rejected ${fact.key}: ${violation.reason}`),
@@ -38,11 +38,16 @@ export class RequirementConstraintValidator {
 
     return {
       ...result,
-      goalSatisfied: false,
+      goalSatisfied: step.outputs.every((key) => accepted.some((fact) => fact.key === key)) && missing.length === 0,
       findings,
       missing,
       facts: accepted,
     };
+  }
+
+  private placeholderViolation(value: string): ConstraintViolation | undefined {
+    if (!/^(?:missing|unknown|unavailable|n\/a)$/i.test(value.trim())) return undefined;
+    return { constraint: 'concrete-value', reason: 'fact contains a placeholder instead of a concrete reusable value' };
   }
 
   private violation(contract: StepRequirementContract, value: string): ConstraintViolation | undefined {

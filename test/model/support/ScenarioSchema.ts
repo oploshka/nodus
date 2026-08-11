@@ -22,6 +22,7 @@ export interface ScenarioStepExpectation {
   expectedChangePaths?: string[];
   changeContentIncludes?: string[];
   changeContentForbids?: string[];
+  changeContentScope?: { start: string; end: string };
 }
 
 export interface ModelScenarioSchema {

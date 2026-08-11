@@ -40,7 +40,19 @@ const good = validator.validate(step, {
 });
 if (!good.goalSatisfied || good.facts.length !== 1) throw new Error('Compliant read-only existing-state fact should pass');
 
+const rejectedPlaceholder = validator.validate(step, {
+  goalSatisfied: true,
+  findings: [],
+  evidence: [],
+  missing: [],
+  facts: [{ key: step.outputs[0], value: 'MISSING', evidence: [] }],
+});
+if (rejectedPlaceholder.goalSatisfied) throw new Error('Placeholder model fact must not satisfy understand');
+if (rejectedPlaceholder.facts.length !== 0) throw new Error('Placeholder model fact must be removed');
+if (!rejectedPlaceholder.missing.includes(step.outputs[0])) throw new Error('Placeholder model fact must become an explicit missing output');
+
 console.log('## requirement constraint validator');
 console.log('scan()/refresh()-style fact rejected for read-only existing-state contract: OK');
 console.log('optional current-index read accepted: OK');
+console.log('placeholder fact rejected without deriving an answer from requirement text: OK');
 console.log('PASS');

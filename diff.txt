@@ -1,0 +1,256 @@
+﻿diff --git a/src/agent/Planning/PlanExecutor.ts b/src/agent/Planning/PlanExecutor.ts
+index 1d3b1f1..e388c86 100644
+--- a/src/agent/Planning/PlanExecutor.ts
++++ b/src/agent/Planning/PlanExecutor.ts
+@@ -690,16 +690,16 @@ export class PlanExecutor {
+       exactEntries = [...state.execution.getToolContext()];
+     }
+ 
+-    let assessment = this.retrievalClassifier.classify(exactEntries, []);
++    const constraints = Array.from(new Set((step.requirements ?? []).flatMap((requirement) => requirement.constraints ?? [])));
++    let assessment = this.retrievalClassifier.classify(exactEntries, [], constraints);
+     if (assessment.match !== 'exact' && request.related.length > 0) {
+       const summary = await this.toolExecutor.execute(request.related, state.execution, context, 5);
+       this.reporter.tools(summary.executed);
+       relatedEntries = [...state.execution.getToolContext()];
+-      assessment = this.retrievalClassifier.classify(exactEntries, relatedEntries);
++      assessment = this.retrievalClassifier.classify(exactEntries, relatedEntries, constraints);
+     }
+ 
+-    const allEntries = [...exactEntries, ...relatedEntries];
+-    return this.completeSearchToolRound(state, step, assessment.match, assessment.reason, allEntries)
++    return this.completeSearchToolRound(state, step, assessment.match, assessment.reason, assessment.entries)
+       ? 'completed'
+       : 'unresolved';
+   }
+diff --git a/src/agent/Planning/RequirementConstraintValidator.ts b/src/agent/Planning/RequirementConstraintValidator.ts
+index ab0e9d6..895f3f0 100644
+--- a/src/agent/Planning/RequirementConstraintValidator.ts
++++ b/src/agent/Planning/RequirementConstraintValidator.ts
+@@ -20,7 +20,7 @@ export class RequirementConstraintValidator {
+ 
+     for (const fact of result.facts) {
+       const contract = contracts.get(fact.key);
+-      const violation = contract ? this.violation(contract, fact.value) : undefined;
++      const violation = this.placeholderViolation(fact.value) ?? (contract ? this.violation(contract, fact.value) : undefined);
+       if (violation) rejected.push({ fact, violation });
+       else accepted.push(fact);
+     }
+@@ -30,7 +30,7 @@ export class RequirementConstraintValidator {
+     const missing = Array.from(new Set([
+       ...result.missing,
+       ...rejected.map(({ fact }) => fact.key),
+-    ]));
++    ])).filter((key) => !accepted.some((fact) => fact.key === key));
+     const findings = [
+       ...result.findings,
+       ...rejected.map(({ fact, violation }) => `Rejected ${fact.key}: ${violation.reason}`),
+@@ -38,13 +38,18 @@ export class RequirementConstraintValidator {
+ 
+     return {
+       ...result,
+-      goalSatisfied: false,
++      goalSatisfied: step.outputs.every((key) => accepted.some((fact) => fact.key === key)) && missing.length === 0,
+       findings,
+       missing,
+       facts: accepted,
+     };
+   }
+ 
++  private placeholderViolation(value: string): ConstraintViolation | undefined {
++    if (!/^(?:missing|unknown|unavailable|n\/a)$/i.test(value.trim())) return undefined;
++    return { constraint: 'concrete-value', reason: 'fact contains a placeholder instead of a concrete reusable value' };
++  }
++
+   private violation(contract: StepRequirementContract, value: string): ConstraintViolation | undefined {
+     const constraints = new Set((contract.constraints ?? []).map((constraint) => constraint.trim().toLowerCase()));
+     if (constraints.size === 0) return undefined;
+diff --git a/src/agent/Planning/RetrievalResult.ts b/src/agent/Planning/RetrievalResult.ts
+index f79146c..528ad2a 100644
+--- a/src/agent/Planning/RetrievalResult.ts
++++ b/src/agent/Planning/RetrievalResult.ts
+@@ -9,13 +9,13 @@ export interface RetrievalRoundAssessment {
+ }
+ 
+ export class RetrievalResultClassifier {
+-  public classify(exactEntries: ToolContextEntry[], relatedEntries: ToolContextEntry[]): RetrievalRoundAssessment {
+-    const exact = exactEntries.filter((entry) => this.useful(entry));
++  public classify(exactEntries: ToolContextEntry[], relatedEntries: ToolContextEntry[], constraints: string[] = []): RetrievalRoundAssessment {
++    const exact = this.qualify(exactEntries, constraints).filter((entry) => this.useful(entry));
+     if (exact.length > 0) {
+       return { match: 'exact', entries: exact, reason: 'Exact retrieval queries returned concrete project evidence.' };
+     }
+ 
+-    const related = relatedEntries.filter((entry) => this.useful(entry));
++    const related = this.qualify(relatedEntries, constraints).filter((entry) => this.useful(entry));
+     if (related.length > 0) {
+       return { match: 'related', entries: related, reason: 'Only broader related retrieval queries returned project evidence.' };
+     }
+@@ -34,4 +34,24 @@ export class RetrievalResultClassifier {
+     if (data && typeof data === 'object') return Object.keys(data as Record<string, unknown>).length > 0;
+     return data !== undefined && data !== null;
+   }
++
++  private qualify(entries: ToolContextEntry[], constraints: string[]): ToolContextEntry[] {
++    const constrainedRead = constraints.some((constraint) => [
++      'read-only',
++      'existing-state',
++      'no-side-effects',
++      'must-not-scan-or-refresh',
++    ].includes(constraint));
++    if (!constrainedRead) return entries;
++
++    return entries.map((entry) => {
++      if (!Array.isArray(entry.result.data)) return entry;
++      const data = entry.result.data.filter((match) => {
++        if (!match || typeof match !== 'object') return true;
++        const text = String((match as Record<string, unknown>).text ?? '');
++        return !/\b(?:scan|refresh)\s*\(/i.test(text);
++      });
++      return { ...entry, result: { ...entry.result, data } };
++    });
++  }
+ }
+diff --git a/src/model/Controller/ModelController.ts b/src/model/Controller/ModelController.ts
+index a1c3bfe..a7383d9 100644
+--- a/src/model/Controller/ModelController.ts
++++ b/src/model/Controller/ModelController.ts
+@@ -232,7 +232,7 @@ Response language: ${responseLanguage}`));
+       input.operation.id === 'edit-file' && input.activeStep
+         ? `Edit the supplied authoritative target source ${input.activeStep.targetPath ?? ''} now. Do not request tools. Return the completed edit-file RAW protocol response.`
+         : input.operation.id === 'understand' && input.activeStep && understandSourcesComplete
+-          ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. Every declared source hint (${requiredUnderstandPaths.join(', ')}) is already included above. The evidence-gathering phase is complete: do not request any PATH. Return STATUS completed now and publish every derivable fact under the exact activeStep.outputs keys; use MISSING only for an output that the supplied source and known facts genuinely cannot establish. Use the output protocol from the system message.`
++          ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. Every declared source hint (${requiredUnderstandPaths.join(', ')}) is already included above. The evidence-gathering phase is complete: do not request any PATH. Compose runtime receivers from the target source with public members established by known facts; the final integration expression need not already exist in the target. Return STATUS completed now and publish every derivable fact under the exact activeStep.outputs keys; use MISSING only when that composition is genuinely unsupported. Use the output protocol from the system message.`
+         : input.operation.id === 'understand' && input.activeStep && suppliedUnderstandPaths.length > 0
+           ? `Perform only ${input.activeStep.type}/${input.activeStep.action ?? 'step'} for ${input.activeStep.subject ?? input.activeStep.goal}. The source for ${suppliedUnderstandPaths.join(', ')} is already included above: do not request those paths again. Derive and publish the exact activeStep.outputs facts now, or request only an unread declared source hint. Use the output protocol from the system message.`
+         : input.activeStep
+diff --git a/src/model/Protocol/UnderstandRawProtocol.ts b/src/model/Protocol/UnderstandRawProtocol.ts
+index bf1408c..7398cd6 100644
+--- a/src/model/Protocol/UnderstandRawProtocol.ts
++++ b/src/model/Protocol/UnderstandRawProtocol.ts
+@@ -100,8 +100,11 @@ Do not wrap the response in markdown. Keep FACT/FINDING/EVIDENCE/MISSING values
+       throw new Error(`Invalid understand GOAL value: ${goalValue || '<empty>'}`);
+     }
+ 
++    const missingOutput = expectedOutputs.some((output) => missing.some((item) => item.includes(output)));
++    const allOutputsPublished = expectedOutputs.length === 0 || expectedOutputs.every((output) => facts.some((fact) => fact.key === output));
++
+     return {
+-      goalSatisfied: goalValue === 'true',
++      goalSatisfied: goalValue === 'true' && !missingOutput && allOutputsPublished,
+       findings,
+       evidence,
+       missing,
+diff --git a/src/operation/Default/DefaultOperationProfile.ts b/src/operation/Default/DefaultOperationProfile.ts
+index 09c750d..3be812c 100644
+--- a/src/operation/Default/DefaultOperationProfile.ts
++++ b/src/operation/Default/DefaultOperationProfile.ts
+@@ -81,6 +81,8 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
+         'Do not broaden the active goal merely to gather more files.',
+         'After each evidence round, summarize what is known and publish reusable results under the exact activeStep.outputs keys.',
+         'Preserve concrete receiver chains and source scope from supplied evidence; do not replace configuration.project.id with state.task.projectId, nodus.projectSession with this.index, or otherwise substitute a different access path without direct evidence.',
++        'An integration access path may compose a runtime receiver visible in the target source with public members established by supplied evidence. The complete expression does not need to already exist in the target file; do not report it missing merely because the requested integration has not been implemented yet.',
++        'Preserve member optionality exactly as declared by evidence. Use optional chaining only when the receiver/member is shown as nullable or optional; do not add optional chaining to a required downstream member.',
+         'Treat requirement constraints as part of the fact contract, not as advice. A candidate that violates read-only, existing-state, no-side-effects, nullable, must-not-scan-or-refresh, or another supplied constraint cannot satisfy that output.',
+         'Do not replace read access to existing state with an operation that creates, refreshes, scans, mutates, or otherwise changes that state. If no compliant access path is supported by evidence, return the exact output key in MISSING instead of inventing a workaround.',
+         'If the supplied facts/evidence are sufficient for the active goal, derive the requested outputs and mark the goal satisfied instead of requesting more files.',
+diff --git a/test/model/scenario/status.schema.ts b/test/model/scenario/status.schema.ts
+index a22579e..d79457c 100644
+--- a/test/model/scenario/status.schema.ts
++++ b/test/model/scenario/status.schema.ts
+@@ -104,7 +104,7 @@ export const statusModelScenario: ModelScenarioSchema = {
+       type: 'understand',
+       expectedOutputs: integrationFacts.map((fact) => fact.key),
+       expectedContextKeys: integrationFacts.map((fact) => fact.key),
+-      expectedValueIncludes: { 'fact:project.index.fileCount.access@cli': ['index', 'files'] },
++      expectedValueIncludes: { 'fact:project.index.fileCount.access@cli': ['nodus.projectSession.index?.files.length'] },
+       forbiddenValueIncludes: { 'fact:project.index.fileCount.access@cli': ['scan()', 'refresh()', 'getIndex()'] },
+       forbiddenMissingIncludes: ['fact:project.index.fileCount.access@cli'],
+       expectModelCalls: 'some',
+@@ -124,6 +124,7 @@ export const statusModelScenario: ModelScenarioSchema = {
+       expectedChangePaths: ['src/cli/Cli.ts'],
+       changeContentIncludes: ['/status', 'projectSession.index', 'conversation.id'],
+       changeContentForbids: ['projectSession.scan(', 'projectSession.refresh(', 'getIndex('],
++      changeContentScope: { start: "if (value === '/status')", end: 'continue;' },
+       expectModelCalls: 'some',
+     },
+     8: { step: 8, type: 'finalize', expectedOutputs: ['final-result:status.command'], expectModelCalls: 'none' },
+diff --git a/test/model/support/ScenarioRunner.ts b/test/model/support/ScenarioRunner.ts
+index 5929613..9b4f6a7 100644
+--- a/test/model/support/ScenarioRunner.ts
++++ b/test/model/support/ScenarioRunner.ts
+@@ -99,11 +99,11 @@ function assertExpectation(expectation: ScenarioStepExpectation | undefined, res
+ 
+   for (const [key, fragments] of Object.entries(expectation.expectedValueIncludes ?? {})) {
+     const value = context.select([key])[0]?.value ?? '';
+-    for (const fragment of fragments) assert.ok(value.includes(fragment), `step ${expectation.step}: ${key} must include ${fragment}`);
++    for (const fragment of fragments) assert.ok(value.includes(fragment), `step ${expectation.step}: ${key} must include ${fragment}; actual=${JSON.stringify(value)}`);
+   }
+   for (const [key, fragments] of Object.entries(expectation.forbiddenValueIncludes ?? {})) {
+     const value = context.select([key])[0]?.value ?? '';
+-    for (const fragment of fragments) assert.ok(!value.includes(fragment), `step ${expectation.step}: ${key} must not include ${fragment}`);
++    for (const fragment of fragments) assert.ok(!value.includes(fragment), `step ${expectation.step}: ${key} must not include ${fragment}; actual=${JSON.stringify(value)}`);
+   }
+   for (const missing of expectation.expectedMissingIncludes ?? []) assert.ok(stepResult?.missing.some((item) => item.includes(missing)), `step ${expectation.step}: expected missing ${missing}`);
+   for (const missing of expectation.forbiddenMissingIncludes ?? []) assert.ok(!stepResult?.missing.some((item) => item.includes(missing)), `step ${expectation.step}: must not report missing ${missing}`);
+@@ -116,11 +116,22 @@ function assertExpectation(expectation: ScenarioStepExpectation | undefined, res
+   if (expectation.expectedChangePaths?.length) assert.deepEqual(result.appliedChanges.map((change) => change.path), expectation.expectedChangePaths);
+   if (expectation.changeContentIncludes?.length || expectation.changeContentForbids?.length) {
+     const content = result.appliedChanges.filter((change): change is Extract<FileChange, { type: 'write' }> => change.type === 'write').map((change) => change.content).join('\n');
+-    for (const fragment of expectation.changeContentIncludes ?? []) assert.ok(content.includes(fragment), `step ${expectation.step}: change must include ${fragment}`);
+-    for (const fragment of expectation.changeContentForbids ?? []) assert.ok(!content.includes(fragment), `step ${expectation.step}: change must not include ${fragment}`);
++    const checkedContent = expectation.changeContentScope
++      ? scopedChangeContent(content, expectation.changeContentScope.start, expectation.changeContentScope.end, expectation.step)
++      : content;
++    for (const fragment of expectation.changeContentIncludes ?? []) assert.ok(checkedContent.includes(fragment), `step ${expectation.step}: change scope must include ${fragment}`);
++    for (const fragment of expectation.changeContentForbids ?? []) assert.ok(!checkedContent.includes(fragment), `step ${expectation.step}: change scope must not include ${fragment}`);
+   }
+ }
+ 
++function scopedChangeContent(content: string, startMarker: string, endMarker: string, step: number): string {
++  const start = content.indexOf(startMarker);
++  assert.ok(start >= 0, `step ${step}: change scope start not found: ${startMarker}`);
++  const end = content.indexOf(endMarker, start + startMarker.length);
++  assert.ok(end >= 0, `step ${step}: change scope end not found: ${endMarker}`);
++  return content.slice(start, end + endMarker.length);
++}
++
+ function getStep(schema: ModelScenarioSchema, stepNumber: number): PlanStep {
+   const step = schema.plan.steps[stepNumber - 1];
+   if (!step) throw new Error(`Scenario ${schema.id} has no step ${stepNumber}`);
+diff --git a/test/model/support/ScenarioSchema.ts b/test/model/support/ScenarioSchema.ts
+index 3aa8b48..ed9ffae 100644
+--- a/test/model/support/ScenarioSchema.ts
++++ b/test/model/support/ScenarioSchema.ts
+@@ -22,6 +22,7 @@ export interface ScenarioStepExpectation {
+   expectedChangePaths?: string[];
+   changeContentIncludes?: string[];
+   changeContentForbids?: string[];
++  changeContentScope?: { start: string; end: string };
+ }
+ 
+ export interface ModelScenarioSchema {
+diff --git a/test/unit/contracts/RequirementConstraintValidatorSmoke.ts b/test/unit/contracts/RequirementConstraintValidatorSmoke.ts
+index 78cdb38..987c91b 100644
+--- a/test/unit/contracts/RequirementConstraintValidatorSmoke.ts
++++ b/test/unit/contracts/RequirementConstraintValidatorSmoke.ts
+@@ -40,7 +40,19 @@ const good = validator.validate(step, {
+ });
+ if (!good.goalSatisfied || good.facts.length !== 1) throw new Error('Compliant read-only existing-state fact should pass');
+ 
++const rejectedPlaceholder = validator.validate(step, {
++  goalSatisfied: true,
++  findings: [],
++  evidence: [],
++  missing: [],
++  facts: [{ key: step.outputs[0], value: 'MISSING', evidence: [] }],
++});
++if (rejectedPlaceholder.goalSatisfied) throw new Error('Placeholder model fact must not satisfy understand');
++if (rejectedPlaceholder.facts.length !== 0) throw new Error('Placeholder model fact must be removed');
++if (!rejectedPlaceholder.missing.includes(step.outputs[0])) throw new Error('Placeholder model fact must become an explicit missing output');
++
+ console.log('## requirement constraint validator');
+ console.log('scan()/refresh()-style fact rejected for read-only existing-state contract: OK');
+ console.log('optional current-index read accepted: OK');
++console.log('placeholder fact rejected without deriving an answer from requirement text: OK');
+ console.log('PASS');

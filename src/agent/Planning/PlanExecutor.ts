@@ -690,16 +690,16 @@ export class PlanExecutor {
       exactEntries = [...state.execution.getToolContext()];
     }
 
-    let assessment = this.retrievalClassifier.classify(exactEntries, []);
+    const constraints = Array.from(new Set((step.requirements ?? []).flatMap((requirement) => requirement.constraints ?? [])));
+    let assessment = this.retrievalClassifier.classify(exactEntries, [], constraints);
     if (assessment.match !== 'exact' && request.related.length > 0) {
       const summary = await this.toolExecutor.execute(request.related, state.execution, context, 5);
       this.reporter.tools(summary.executed);
       relatedEntries = [...state.execution.getToolContext()];
-      assessment = this.retrievalClassifier.classify(exactEntries, relatedEntries);
+      assessment = this.retrievalClassifier.classify(exactEntries, relatedEntries, constraints);
     }
 
-    const allEntries = [...exactEntries, ...relatedEntries];
-    return this.completeSearchToolRound(state, step, assessment.match, assessment.reason, allEntries)
+    return this.completeSearchToolRound(state, step, assessment.match, assessment.reason, assessment.entries)
       ? 'completed'
       : 'unresolved';
   }

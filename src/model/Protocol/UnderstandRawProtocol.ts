@@ -100,8 +100,11 @@ Do not wrap the response in markdown. Keep FACT/FINDING/EVIDENCE/MISSING values 
       throw new Error(`Invalid understand GOAL value: ${goalValue || '<empty>'}`);
     }
 
+    const missingOutput = expectedOutputs.some((output) => missing.some((item) => item.includes(output)));
+    const allOutputsPublished = expectedOutputs.length === 0 || expectedOutputs.every((output) => facts.some((fact) => fact.key === output));
+
     return {
-      goalSatisfied: goalValue === 'true',
+      goalSatisfied: goalValue === 'true' && !missingOutput && allOutputsPublished,
       findings,
       evidence,
       missing,

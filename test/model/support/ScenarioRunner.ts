@@ -99,11 +99,11 @@ function assertExpectation(expectation: ScenarioStepExpectation | undefined, res
 
   for (const [key, fragments] of Object.entries(expectation.expectedValueIncludes ?? {})) {
     const value = context.select([key])[0]?.value ?? '';
-    for (const fragment of fragments) assert.ok(value.includes(fragment), `step ${expectation.step}: ${key} must include ${fragment}`);
+    for (const fragment of fragments) assert.ok(value.includes(fragment), `step ${expectation.step}: ${key} must include ${fragment}; actual=${JSON.stringify(value)}`);
   }
   for (const [key, fragments] of Object.entries(expectation.forbiddenValueIncludes ?? {})) {
     const value = context.select([key])[0]?.value ?? '';
-    for (const fragment of fragments) assert.ok(!value.includes(fragment), `step ${expectation.step}: ${key} must not include ${fragment}`);
+    for (const fragment of fragments) assert.ok(!value.includes(fragment), `step ${expectation.step}: ${key} must not include ${fragment}; actual=${JSON.stringify(value)}`);
   }
   for (const missing of expectation.expectedMissingIncludes ?? []) assert.ok(stepResult?.missing.some((item) => item.includes(missing)), `step ${expectation.step}: expected missing ${missing}`);
   for (const missing of expectation.forbiddenMissingIncludes ?? []) assert.ok(!stepResult?.missing.some((item) => item.includes(missing)), `step ${expectation.step}: must not report missing ${missing}`);
@@ -116,9 +116,20 @@ function assertExpectation(expectation: ScenarioStepExpectation | undefined, res
   if (expectation.expectedChangePaths?.length) assert.deepEqual(result.appliedChanges.map((change) => change.path), expectation.expectedChangePaths);
   if (expectation.changeContentIncludes?.length || expectation.changeContentForbids?.length) {
     const content = result.appliedChanges.filter((change): change is Extract<FileChange, { type: 'write' }> => change.type === 'write').map((change) => change.content).join('\n');
-    for (const fragment of expectation.changeContentIncludes ?? []) assert.ok(content.includes(fragment), `step ${expectation.step}: change must include ${fragment}`);
-    for (const fragment of expectation.changeContentForbids ?? []) assert.ok(!content.includes(fragment), `step ${expectation.step}: change must not include ${fragment}`);
+    const checkedContent = expectation.changeContentScope
+      ? scopedChangeContent(content, expectation.changeContentScope.start, expectation.changeContentScope.end, expectation.step)
+      : content;
+    for (const fragment of expectation.changeContentIncludes ?? []) assert.ok(checkedContent.includes(fragment), `step ${expectation.step}: change scope must include ${fragment}`);
+    for (const fragment of expectation.changeContentForbids ?? []) assert.ok(!checkedContent.includes(fragment), `step ${expectation.step}: change scope must not include ${fragment}`);
   }
+}
+
+function scopedChangeContent(content: string, startMarker: string, endMarker: string, step: number): string {
+  const start = content.indexOf(startMarker);
+  assert.ok(start >= 0, `step ${step}: change scope start not found: ${startMarker}`);
+  const end = content.indexOf(endMarker, start + startMarker.length);
+  assert.ok(end >= 0, `step ${step}: change scope end not found: ${endMarker}`);
+  return content.slice(start, end + endMarker.length);
 }
 
 function getStep(schema: ModelScenarioSchema, stepNumber: number): PlanStep {

@@ -81,6 +81,8 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
         'Do not broaden the active goal merely to gather more files.',
         'After each evidence round, summarize what is known and publish reusable results under the exact activeStep.outputs keys.',
         'Preserve concrete receiver chains and source scope from supplied evidence; do not replace configuration.project.id with state.task.projectId, nodus.projectSession with this.index, or otherwise substitute a different access path without direct evidence.',
+        'An integration access path may compose a runtime receiver visible in the target source with public members established by supplied evidence. The complete expression does not need to already exist in the target file; do not report it missing merely because the requested integration has not been implemented yet.',
+        'Preserve member optionality exactly as declared by evidence. Use optional chaining only when the receiver/member is shown as nullable or optional; do not add optional chaining to a required downstream member.',
         'Treat requirement constraints as part of the fact contract, not as advice. A candidate that violates read-only, existing-state, no-side-effects, nullable, must-not-scan-or-refresh, or another supplied constraint cannot satisfy that output.',
         'Do not replace read access to existing state with an operation that creates, refreshes, scans, mutates, or otherwise changes that state. If no compliant access path is supported by evidence, return the exact output key in MISSING instead of inventing a workaround.',
         'If the supplied facts/evidence are sufficient for the active goal, derive the requested outputs and mark the goal satisfied instead of requesting more files.',
