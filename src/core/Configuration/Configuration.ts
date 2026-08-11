@@ -25,6 +25,7 @@ export interface ModelConfiguration {
   temperature?: number;
   maxTokens?: number;
   messageLayout?: ModelMessageLayout;
+  requestTimeoutMs?: number;
 }
 
 export type ResponseLanguage = 'auto' | string;

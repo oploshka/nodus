@@ -160,7 +160,7 @@ export const DEFAULT_OPERATION_PROFILES: OperationProfile[] = [
         'Do not request tools or another file read during edit-file. Missing project understanding belongs in prepare-change/understand, not in the edit loop.',
         'Use the supplied target-file content as authoritative current source. Do not re-plan the task and do not edit a second file in the same response.',
         'Prefer minimal changes and preserve unrelated content.',
-        'For a write, return the complete resulting file content. For a delete, return ACTION delete.',
+        'Prefer ACTION patch with a minimal unified diff and enough unchanged context to locate every hunk. Treat hunk line numbers as useful location hints, not as a reason to regenerate unchanged source. Return a complete-file ACTION write only when a minimal diff cannot safely express the edit. For a delete, return ACTION delete.',
       ],
     },
     model: { temperature: 0 },

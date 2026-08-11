@@ -255,11 +255,12 @@ export class PlanExecutor {
         await this.logger.error('model-error', { operation: step.type, error: String(error) }, context);
         state.execution.addEvent('model-error', { operation: step.type, error: String(error) });
         if (error instanceof ModelTransportError) {
-          this.pause(
-            state,
-            `step:${step.id}:model-transport-error`,
-            `Модель недоступна: ${error.message}. Проверьте model.endpoint и запустите model-server, затем продолжите выполнение.`,
-          );
+          const message = error.kind === 'timeout'
+            ? `Истекло время ожидания ответа модели: ${error.message} Увеличьте model.requestTimeoutMs или продолжите выполнение.`
+            : error.kind === 'connection'
+              ? `Не удалось подключиться к model-server: ${error.message}. Проверьте model.endpoint и запустите model-server, затем продолжите выполнение.`
+              : `Ошибка транспорта model-server: ${error.message}. Соединение могло быть прервано; проверьте сервер и продолжите выполнение.`;
+          this.pause(state, `step:${step.id}:model-transport-error`, message);
           return 'paused';
         }
         const recovered = await this.recover(state, `model-error:${String(error)}`);

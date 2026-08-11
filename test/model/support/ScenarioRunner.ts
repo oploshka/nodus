@@ -118,7 +118,7 @@ function assertExpectation(expectation: ScenarioStepExpectation | undefined, res
 
   if (expectation.expectedChangePaths?.length) assert.deepEqual(result.appliedChanges.map((change) => change.path), expectation.expectedChangePaths);
   if (expectation.changeContentIncludes?.length || expectation.changeContentForbids?.length) {
-    const content = result.appliedChanges.filter((change): change is Extract<FileChange, { type: 'write' }> => change.type === 'write').map((change) => change.content).join('\n');
+    const content = result.appliedChanges.map((change) => change.type === 'write' ? change.content : change.type === 'patch' ? change.hunks.flatMap((hunk) => hunk.lines.filter((line) => line.type !== 'remove').map((line) => line.text)).join('\n') : '').join('\n');
     const checkedContent = expectation.changeContentScope
       ? scopedChangeContent(content, expectation.changeContentScope.start, expectation.changeContentScope.end, expectation.step)
       : content;

@@ -1,5 +1,5 @@
 // ChangeExecutor.ts
-import type { FileChange } from '@core/Change/ChangeSet';
+import type { FileChange, UnifiedDiffHunk } from '@core/Change/ChangeSet';
 import type { Execution } from '@core/Execution/Execution';
 import type { LogContext } from '@core/Logging/Log';
 import type { Logger } from '@core/Logging/Logger';
@@ -14,46 +14,75 @@ export class ChangeExecutor {
     private readonly logger: Logger,
   ) {}
 
-  public async apply(
-    changes: FileChange[],
-    execution: Execution,
-    logContext: LogContext,
-  ): Promise<void> {
+  public async apply(changes: FileChange[], execution: Execution, logContext: LogContext): Promise<void> {
     const tool = this.toolRegistry.get('file-system');
-    if (!tool) {
-      throw new Error('file-system tool is required to apply changes');
-    }
+    if (!tool) throw new Error('file-system tool is required to apply changes');
+
+    const toolContext = { projectRoot: this.projectSession.root, exclude: this.projectSession.configuration.exclude ?? [] };
 
     for (const change of changes) {
       let result: ToolResult;
       if (change.type === 'write') {
-        result = await tool.execute({ action: 'write', path: change.path, content: change.content }, {
-          projectRoot: this.projectSession.root,
-          exclude: this.projectSession.configuration.exclude ?? [],
-        });
+        result = await tool.execute({ action: 'write', path: change.path, content: change.content }, toolContext);
+      } else if (change.type === 'patch') {
+        const read = await tool.execute({ action: 'read', path: change.path }, toolContext);
+        if (!read.ok || typeof read.data !== 'string') throw new Error(`Failed to read patch target ${change.path}: ${read.error ?? 'invalid file content'}`);
+        const usesCrLf = read.data.includes('\r\n');
+        const normalized = read.data.replace(/\r\n/g, '\n');
+        const patched = this.applyUnifiedDiff(normalized, change.hunks, change.path);
+        const output = usesCrLf ? patched.replace(/\n/g, '\r\n') : patched;
+        result = await tool.execute({ action: 'write', path: change.path, content: output }, toolContext);
       } else {
-        result = await tool.execute({ action: 'delete', path: change.path }, {
-          projectRoot: this.projectSession.root,
-          exclude: this.projectSession.configuration.exclude ?? [],
-        });
+        result = await tool.execute({ action: 'delete', path: change.path }, toolContext);
       }
 
-      execution.addEvent('change-applied', {
-        type: change.type,
-        path: change.path,
-        ok: result.ok,
-        error: result.error,
-      });
-
-      await this.logger.info('change-applied', {
-        type: change.type,
-        path: change.path,
-        ok: result.ok,
-      }, logContext);
-
-      if (!result.ok) {
-        throw new Error(`Failed to apply change ${change.path}: ${result.error ?? 'unknown error'}`);
-      }
+      execution.addEvent('change-applied', { type: change.type, path: change.path, ok: result.ok, error: result.error });
+      await this.logger.info('change-applied', { type: change.type, path: change.path, ok: result.ok }, logContext);
+      if (!result.ok) throw new Error(`Failed to apply change ${change.path}: ${result.error ?? 'unknown error'}`);
     }
+  }
+
+  private applyUnifiedDiff(content: string, hunks: UnifiedDiffHunk[], path: string): string {
+    const hadTrailingNewline = content.endsWith('\n');
+    const source = content.split('\n');
+    if (hadTrailingNewline) source.pop();
+
+    const resolved = hunks.map((hunk) => ({ hunk, index: this.resolveHunkIndex(source, hunk, path) }));
+    resolved.sort((a, b) => b.index - a.index);
+
+    let result = [...source];
+    for (const { hunk, index } of resolved) {
+      const oldLines = hunk.lines.filter((line) => line.type !== 'add').map((line) => line.text);
+      const newLines = hunk.lines.filter((line) => line.type !== 'remove').map((line) => line.text);
+      const actual = result.slice(index, index + oldLines.length);
+      if (!this.sameLines(actual, oldLines)) {
+        throw new Error(`Patch context for ${path} changed before hunk at old line ${hunk.oldStart} could be applied`);
+      }
+      result.splice(index, oldLines.length, ...newLines);
+    }
+
+    return result.join('\n') + (hadTrailingNewline ? '\n' : '');
+  }
+
+  private resolveHunkIndex(source: string[], hunk: UnifiedDiffHunk, path: string): number {
+    const oldLines = hunk.lines.filter((line) => line.type !== 'add').map((line) => line.text);
+    const expected = Math.max(0, hunk.oldStart - 1);
+    if (this.sameLines(source.slice(expected, expected + oldLines.length), oldLines)) return expected;
+
+    const candidates: number[] = [];
+    for (let index = 0; index <= source.length - oldLines.length; index += 1) {
+      if (this.sameLines(source.slice(index, index + oldLines.length), oldLines)) candidates.push(index);
+    }
+    if (candidates.length === 0) throw new Error(`Patch hunk for ${path} could not match context near old line ${hunk.oldStart}`);
+
+    candidates.sort((a, b) => Math.abs(a - expected) - Math.abs(b - expected));
+    if (candidates.length > 1 && Math.abs(candidates[0] - expected) === Math.abs(candidates[1] - expected)) {
+      throw new Error(`Patch hunk for ${path} is ambiguous near old line ${hunk.oldStart}`);
+    }
+    return candidates[0];
+  }
+
+  private sameLines(left: string[], right: string[]): boolean {
+    return left.length === right.length && left.every((line, index) => line === right[index]);
   }
 }

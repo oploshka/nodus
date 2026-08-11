@@ -250,6 +250,6 @@ export class Nodus {
       throw new Error('model.endpoint is required for openai-compatible provider');
     }
 
-    return new OpenAICompatibleModelAdapter(configuration.model.endpoint, configuration.model.apiKey);
+    return new OpenAICompatibleModelAdapter(configuration.model.endpoint, configuration.model.apiKey, configuration.model.requestTimeoutMs);
   }
 }

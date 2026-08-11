@@ -22,7 +22,8 @@
     "model": "local-model",
     "temperature": 0.2,
     "maxTokens": 4096,
-    "messageLayout": "collapsed-user"
+    "messageLayout": "collapsed-user",
+    "requestTimeoutMs": 600000
   },
   "agent": {
     "maxSteps": 20,

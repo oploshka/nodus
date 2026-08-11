@@ -1,5 +1,10 @@
 # Nodus roadmap
 
+- [x] `edit-file`: компактный `ACTION patch` с точными FIND/REPLACE вместо обязательной регенерации всего файла; full write оставлен fallback-ом.
+- [x] Transport модели: конфигурируемый `model.requestTimeoutMs` и отдельные сообщения для timeout/connection/прочих transport errors.
+- [ ] Model-test harness: зафиксировать concurrency=1 на уровне инфраструктуры, а не только структуры suite.
+- [ ] Тестовые duration выводить в секундах с одной цифрой после запятой (`13.4 sec`).
+
 New work is added at the top of **Current / next**. Completed or rejected items keep their status so architectural decisions do not have to be reconstructed from chat history.
 
 Status: `[x]` done · `[ ]` planned/pending · `[-]` rejected/deferred design.

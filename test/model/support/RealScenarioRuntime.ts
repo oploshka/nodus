@@ -60,7 +60,7 @@ export async function createRealScenarioRuntime(): Promise<RealScenarioRuntime> 
   toolRegistry.register(new GitTool());
   toolRegistry.register(new SearchTool());
 
-  const adapter = new OpenAICompatibleModelAdapter(endpoint, configuration.model.apiKey);
+  const adapter = new OpenAICompatibleModelAdapter(endpoint, configuration.model.apiKey, configuration.model.requestTimeoutMs);
   const reporter = new ExecutionReporter('quiet', false);
   const baseModelController = new ModelController(
     configuration.model,
