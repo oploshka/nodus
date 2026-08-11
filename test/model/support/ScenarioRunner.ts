@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import type { PlanStep, TaskPlan } from '@agent/Planning/TaskPlan';
+import type { PlanStep } from '@agent/Planning/TaskPlan';
 import type { FileChange } from '@core/Change/ChangeSet';
 import type { ModelExecutionInput } from '@model/Controller/ModelController';
 import { runPlanHarness } from '@test/support/StepHarness';
 import { createRealScenarioRuntime } from '@test/model/support/RealScenarioRuntime';
-import type { ModelScenarioSchema, ScenarioStepExpectation } from '@test/model/support/ScenarioSchema';
+import type { ModelScenarioSchema, ScenarioSeedFact, ScenarioStepExpectation } from '@test/model/support/ScenarioSchema';
 
 export interface ScenarioRunResult {
   modelCalls: number;
@@ -33,23 +33,58 @@ export async function testStep(schema: ModelScenarioSchema, stepNumber: number):
 
 export async function testChain(schema: ModelScenarioSchema, fromStep: number, toStep: number): Promise<ScenarioRunResult> {
   assert.ok(fromStep >= 1 && toStep >= fromStep && toStep <= schema.plan.steps.length);
-  const runtime = await createRealScenarioRuntime();
-  const steps = schema.plan.steps.slice(fromStep - 1, toStep).map(cloneStep);
-  const plan: TaskPlan = { version: schema.plan.version, goal: schema.plan.goal, steps };
-  const result = await runPlanHarness({
-    taskDescription: schema.task,
-    plan,
-    seedFacts: fromStep === 1 ? [] : (schema.inputsBeforeStep[fromStep] ?? []),
-    operationRegistry: runtime.operationRegistry,
-    model: (input) => runtime.modelController.execute(input),
-    tool: async (calls, execution) => (await runtime.toolExecutor.execute(calls, execution, {}, 5)).executed,
-    change: async () => {},
-  });
-  const output: ScenarioRunResult = { ...result, modelInputs: runtime.modelInputs };
+
+  let seedFacts: ScenarioSeedFact[] = fromStep === 1 ? [] : [...(schema.inputsBeforeStep[fromStep] ?? [])];
+  let finalResult: ScenarioRunResult | undefined;
+  let totalModelCalls = 0;
+  let totalToolCalls = 0;
+  const appliedChanges: FileChange[] = [];
+  const modelInputs: ModelExecutionInput[] = [];
+
   for (let number = fromStep; number <= toStep; number += 1) {
-    assertExpectation(schema.expectations[number], output, getStep(schema, number));
+    const step = cloneStep(getStep(schema, number));
+    const runtime = await createRealScenarioRuntime();
+    const result = await runPlanHarness({
+      taskDescription: schema.task,
+      plan: { version: schema.plan.version, goal: schema.plan.goal, steps: [step] },
+      seedFacts,
+      operationRegistry: runtime.operationRegistry,
+      model: (input) => runtime.modelController.execute(input),
+      tool: async (calls, execution) => (await runtime.toolExecutor.execute(calls, execution, {}, 5)).executed,
+      change: async () => {},
+    });
+
+    const stepOutput: ScenarioRunResult = { ...result, modelInputs: runtime.modelInputs };
+
+    // Chain semantics are intentionally fail-fast. If a real step diverges from the
+    // scenario contract, later steps would receive invalid state and their failures
+    // would be diagnostic noise rather than independent information.
+    assertExpectation(schema.expectations[number], stepOutput, step);
+
+    totalModelCalls += stepOutput.modelCalls;
+    totalToolCalls += stepOutput.toolCalls;
+    appliedChanges.push(...stepOutput.appliedChanges);
+    modelInputs.push(...stepOutput.modelInputs);
+
+    // Unlike testStep(), a chain must propagate the REAL state produced by the
+    // previous step. This is what lets chain tests detect broken step boundaries.
+    seedFacts = stepOutput.state.executionContext.all().map((fact) => ({
+      key: fact.key,
+      value: fact.value,
+      evidence: fact.evidence,
+    }));
+
+    finalResult = {
+      ...stepOutput,
+      modelCalls: totalModelCalls,
+      toolCalls: totalToolCalls,
+      appliedChanges: [...appliedChanges],
+      modelInputs: [...modelInputs],
+    };
   }
-  return output;
+
+  assert.ok(finalResult, `Scenario ${schema.id} chain produced no steps`);
+  return finalResult;
 }
 
 function assertExpectation(expectation: ScenarioStepExpectation | undefined, result: ScenarioRunResult, step: PlanStep): void {
