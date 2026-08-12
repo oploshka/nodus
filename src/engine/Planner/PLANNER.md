@@ -31,3 +31,17 @@ until it can solve a step or discover concrete APIs for Worker.
 `PlanStep.knowledgeImpact` is an optional invalidation hint: knowledge that may
 become stale after the step changes the project. It does not instruct Worker to
 research that knowledge before execution.
+
+## Decomposition rule
+
+Planner splits by semantic outcomes, not by implementation mechanics. A separate
+`PlanStep` is justified only by one of these fixed decomposition types:
+
+- `coherent-outcome` — no split reason applies; keep the coherent request in one step;
+- `independent-outcome` — the outcome can succeed or fail independently;
+- `dependency` — a later requested outcome cannot reasonably be attempted before it exists;
+- `separate-deliverable` — the user explicitly expects a separately observable result.
+
+Files, architectural layers, research, validation, configuration flow and other
+technical phases are not reasons to split a step. Statements that describe when
+one outcome is correct belong in `constraints` instead.

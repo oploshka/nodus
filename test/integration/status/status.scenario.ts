@@ -33,6 +33,7 @@ export const statusScenario = scenario({
           'Do not scan or refresh the index just to display status.',
           'Do not change unrelated behavior.',
         ],
+        decompositionType: 'coherent-outcome',
       }],
     }),
     JSON.stringify({ optionId: 'code' }),

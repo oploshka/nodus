@@ -29,6 +29,8 @@ export const maxPlanStepsScenario = scenario({
     JSON.stringify({
       steps: [{
         goal: 'Make Planner maxPlanSteps configurable through runtime.maxPlanSteps, preserve default 8, pass it through Bootstrap, and update the example config.',
+        constraints: [],
+        decompositionType: 'coherent-outcome',
       }],
     }),
     JSON.stringify({ optionId: 'code' }),

@@ -3,13 +3,13 @@ import { NullLogger } from '@app/Logging/Logger.js';
 import { Project } from '@engine/Project/Project.js';
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
-import type { ResearchResolver } from '@engine/Research/ResearchTypes.js';
+import type { ResearchResolveOptions, ResearchResolver, ResolvedResearch } from '@engine/Research/ResearchTypes.js';
 import { TestProject } from '@test/framework/TestProject.js';
 
 class CountingResolver implements ResearchResolver {
   public calls = 0;
   public constructor(private readonly path: string) {}
-  public async resolve() {
+  public async resolve(_question: string, _options?: ResearchResolveOptions): Promise<ResolvedResearch> {
     this.calls += 1;
     return { status: 'resolved', answer: `answer-${this.calls}`, sources: [this.path] };
   }

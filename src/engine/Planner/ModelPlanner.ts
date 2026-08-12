@@ -5,13 +5,14 @@ import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { Task } from '@engine/Task/Task.js';
-import type { Plan } from '@engine/Planner/Plan.js';
+import type { Plan, PlanStepDecompositionType } from '@engine/Planner/Plan.js';
 import type { Planner } from '@engine/Planner/Planner.js';
 
 interface PlannerModelResponse {
   steps: Array<{
     goal: string;
-    constraints?: string[];
+    constraints: string[];
+    decompositionType: PlanStepDecompositionType;
     knowledgeImpact?: string[];
   }>;
 }
@@ -29,8 +30,17 @@ const plannerSchema: ModelResponseSchema = {
           constraints: {
             type: 'array',
             items: { type: 'string' },
-            optional: true,
-            description: 'User constraints relevant to this step.',
+            description: 'Explicit user constraints that define when this goal is correctly completed. Use an empty array when none apply.',
+          },
+          decompositionType: {
+            type: 'option',
+            optionList: [
+              { id: 'coherent-outcome', description: 'The request is one coherent outcome and no split reason applies.' },
+              { id: 'independent-outcome', description: 'This outcome can be completed and judged independently from the other requested outcomes.' },
+              { id: 'dependency', description: 'A later requested outcome cannot reasonably be attempted before this outcome exists.' },
+              { id: 'separate-deliverable', description: 'The user explicitly expects this result as a separately observable deliverable.' },
+            ],
+            description: 'Why this outcome is represented as this PlanStep. This describes decomposition only, never implementation type.',
           },
           knowledgeImpact: {
             type: 'array',
@@ -65,7 +75,12 @@ export class ModelPlanner implements Planner {
           'Do not add research/understand/discover steps merely because implementation details are unknown; the Worker resolves missing project knowledge while executing.',
           'Do NOT solve implementation details, discover APIs, name files unless the user named them, or prescribe patch mechanics.',
           'Each step must be something a Worker can try to complete, not a question or preparatory investigation.',
-          'Prefer one step when the request is one coherent change. Split only when parts are meaningfully independent or ordered.',
+          'Decompose by user-visible semantic outcomes, never by files, architectural layers, implementation phases, research needs, validation phases, or technical sub-actions.',
+          'Create a separate step only when at least one reason applies: (1) independent-outcome: the result can succeed/fail independently, (2) dependency: another requested result cannot reasonably be attempted before it exists, or (3) separate-deliverable: the user explicitly expects it as a separate observable deliverable.',
+          'If none of those separation reasons apply, return exactly one coherent-outcome step.',
+          'Treat wording such as preserve/default/do not/change only/pass through/update example as constraints of the coherent goal when they describe correctness of that same outcome; do not automatically turn each clause into its own step.',
+          'Every step must include constraints. Copy only explicit user constraints that remain relevant to that goal; use an empty array when there are none.',
+          'The decompositionType field explains why the step exists as a semantic planning unit. It is not a Worker type, Action type, file category, or implementation strategy.',
           'Preserve explicit user constraints and nothing more.',
         ].join('\n'),
       },
@@ -78,7 +93,8 @@ export class ModelPlanner implements Planner {
         // Step identity belongs to Nodus runtime, not to the model response.
         id: `step-${index + 1}`,
         goal: step.goal,
-        constraints: step.constraints ?? [],
+        constraints: step.constraints,
+        decompositionType: step.decompositionType,
         knowledgeImpact: step.knowledgeImpact,
       })),
     };

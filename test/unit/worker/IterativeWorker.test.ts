@@ -51,7 +51,7 @@ describe('Iterative Worker action lifecycle', () => {
     const research = new ScriptedResearchAction();
     const worker = new CodeWorker(change, research, new NullLogger(), 3, 2);
 
-    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [] });
+    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [], decompositionType: 'coherent-outcome' });
 
     expect(result.status).toBe('completed');
     expect(research.asked).toEqual(['Where is CLI dispatch?']);
@@ -63,7 +63,7 @@ describe('Iterative Worker action lifecycle', () => {
     const research = new ScriptedResearchAction();
     const worker = new CodeWorker(change, research, new NullLogger(), 3, 2);
 
-    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [] });
+    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [], decompositionType: 'coherent-outcome' });
 
     expect(result.status).toBe('completed');
     expect(research.asked).toHaveLength(0);
@@ -82,7 +82,7 @@ describe('Iterative Worker action lifecycle', () => {
     }]);
     const worker = new CodeWorker(change, new ScriptedResearchAction(), new NullLogger(), 3, 1);
 
-    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [] });
+    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [], decompositionType: 'coherent-outcome' });
     expect(result.status).toBe('not-completed');
   });
 });

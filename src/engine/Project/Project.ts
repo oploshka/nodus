@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { ProjectIndex, ProjectFileFact } from '@engine/Project/ProjectIndex.js';
 import { ProjectScanner } from '@engine/Project/ProjectScanner.js';
+import { ProjectPathResolver } from '@engine/Project/ProjectPathResolver.js';
 
 export class Project {
   private _index?: ProjectIndex;
+  private readonly pathResolver: ProjectPathResolver;
 
   public readonly configuration: ProjectConfiguration;
 
@@ -16,6 +18,7 @@ export class Project {
     private readonly logger: EngineLogger,
     private readonly scanner = new ProjectScanner(),
   ) {
+    this.pathResolver = new ProjectPathResolver(configuration.root);
     this.configuration = {
       ...configuration,
       scanMode: configuration.scanMode ?? 'on-open',
@@ -42,18 +45,33 @@ export class Project {
     return this._index;
   }
 
+  public async resolvePath(path: string): Promise<string> {
+    const resolved = await this.pathResolver.resolveExisting(path, this._index);
+    this.logPathCorrection(path, resolved);
+    return resolved;
+  }
+
+  public async resolveTargetPath(path: string): Promise<string> {
+    const resolved = await this.pathResolver.resolveTarget(path);
+    this.logPathCorrection(path, resolved);
+    return resolved;
+  }
+
   public async read(path: string): Promise<string> {
-    return readFile(this.resolveProjectPath(path), 'utf8');
+    const projectPath = await this.resolvePath(path);
+    return readFile(this.resolveProjectPath(projectPath), 'utf8');
   }
 
   public async write(path: string, content: string): Promise<void> {
-    const absolute = this.resolveProjectPath(path);
+    const projectPath = await this.resolveTargetPath(path);
+    const absolute = this.resolveProjectPath(projectPath);
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, content, 'utf8');
   }
 
   public async hash(path: string): Promise<string> {
-    const content = await readFile(this.resolveProjectPath(path));
+    const projectPath = await this.resolvePath(path);
+    const content = await readFile(this.resolveProjectPath(projectPath));
     return createHash('sha256').update(content).digest('hex');
   }
 
@@ -79,11 +97,18 @@ export class Project {
       .map((item) => item.file);
   }
 
+
+  private logPathCorrection(requested: string, resolved: string): void {
+    let canonicalRequested: string | undefined;
+    try { canonicalRequested = this.pathResolver.normalize(requested); } catch { /* absolute/model path */ }
+    if (canonicalRequested !== resolved) {
+      this.logger.info('project.path.corrected', { requested, resolved });
+    }
+  }
+
   private resolveProjectPath(path: string): string {
-    const absolute = isAbsolute(path) ? resolve(path) : resolve(this.root, path);
-    const rel = relative(this.root, absolute).split(sep).join('/');
-    if (rel === '..' || rel.startsWith('../') || isAbsolute(rel)) throw new Error(`Path escapes project root: ${path}`);
-    return absolute;
+    const projectPath = this.pathResolver.normalize(path);
+    return resolve(this.root, ...projectPath.split('/'));
   }
 
   private async loadIndex(): Promise<void> {

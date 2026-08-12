@@ -149,7 +149,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     for (const edit of edits) {
       const result = await this.applyEditWithRecovery(context, edit);
       if (result.status === 'not-completed') return { ...result, canContinue: true };
-      if (result.changed) changed.push(edit.path);
+      if (result.changed) changed.push(result.path);
     }
 
     if (changed.length === 0) return { status: 'not-completed', reason: 'Action produced no project changes.', canContinue: true };
@@ -162,15 +162,16 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
   private async applyEditWithRecovery(
     context: ChangeCodeActionInput,
     edit: { path: string; instruction: string },
-  ): Promise<{ status: 'completed'; changed: boolean } | { status: 'not-completed'; reason: string }> {
+  ): Promise<{ status: 'completed'; changed: boolean; path: string } | { status: 'not-completed'; reason: string }> {
     let lastError: string | undefined;
+    const path = await this.project.resolvePath(edit.path);
 
     for (let editAttempt = 1; editAttempt <= this.maxEditAttempts; editAttempt += 1) {
-      const source = await this.project.read(edit.path);
+      const source = await this.project.read(path);
 
       try {
         const response = await callDiffFile(this.model, this.logger, {
-          path: edit.path,
+          path,
           request: {
             message: editAttempt === 1
               ? 'Apply this concrete project edit.'
@@ -180,7 +181,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
               step: context.step,
               instruction: edit.instruction,
               knowledge: context.knowledge.map((item) => ({ question: item.question, status: item.status, answer: item.answer })),
-              authoritativeSource: { path: edit.path, content: source },
+              authoritativeSource: { path, content: source },
               recovery: editAttempt === 1 ? undefined : {
                 attempt: editAttempt,
                 previousError: lastError,
@@ -202,21 +203,21 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
           },
         });
 
-        const content = this.applicator.apply(source, response.hunks, edit.path);
-        if (content === source) return { status: 'completed', changed: false };
+        const content = this.applicator.apply(source, response.hunks, path);
+        if (content === source) return { status: 'completed', changed: false, path };
 
-        await this.project.write(edit.path, content);
+        await this.project.write(path, content);
         if (editAttempt > 1) {
           this.logger.info('worker.edit.recovered', {
-            path: edit.path,
+            path,
             editAttempt,
           });
         }
-        return { status: 'completed', changed: true };
+        return { status: 'completed', changed: true, path };
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
         this.logger.warn('worker.edit.error', {
-          path: edit.path,
+          path,
           editAttempt,
           maxEditAttempts: this.maxEditAttempts,
           error: lastError,
@@ -226,7 +227,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
 
     return {
       status: 'not-completed',
-      reason: `Edit recovery limit reached (${this.maxEditAttempts}) for ${edit.path}. Last error: ${lastError ?? 'unknown edit error'}`,
+      reason: `Edit recovery limit reached (${this.maxEditAttempts}) for ${path}. Last error: ${lastError ?? 'unknown edit error'}`,
     };
   }
 

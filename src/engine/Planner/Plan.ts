@@ -1,4 +1,16 @@
 /**
+ * Why Planner kept this outcome as a separate semantic unit.
+ *
+ * This is planning metadata, not an execution type. Engine/Worker must not use
+ * it to choose implementation mechanics.
+ */
+export type PlanStepDecompositionType =
+  | 'coherent-outcome'
+  | 'independent-outcome'
+  | 'dependency'
+  | 'separate-deliverable';
+
+/**
  * A semantic unit of the high-level task plan.
  *
  * PlanStep intentionally describes an outcome, not implementation mechanics.
@@ -14,6 +26,9 @@ export interface PlanStep {
 
   /** User/task constraints that remain relevant while executing this step. */
   constraints: string[];
+
+  /** Why this outcome exists as this semantic planning unit. */
+  decompositionType: PlanStepDecompositionType;
 
   /**
    * Optional project knowledge that may become stale after this step changes
