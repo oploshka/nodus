@@ -1,8 +1,8 @@
 // ExecutionReporter.ts
 import type { ConsoleMode } from '@core/Configuration/Configuration';
-import type { RequirementMap } from '@agent/Planning/RequirementMap';
-import type { TaskPlan } from '@agent/Planning/TaskPlan';
-import { formatWorkflowDataRef } from '@agent/Planning/WorkflowData';
+import type { RequirementMap } from '@planner/RequirementMap';
+import type { TaskPlan } from '@planner/TaskPlan';
+import { formatWorkflowDataRef } from '@planner/WorkflowData';
 import type { StepResult } from '@model/Result/OperationResult';
 
 export class ExecutionReporter {

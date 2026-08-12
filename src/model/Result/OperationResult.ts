@@ -1,5 +1,5 @@
 // OperationResult.ts
-import type { FileChange } from '@core/Change/ChangeSet';
+import type { FileChange } from '@execution/State/ChangeSet';
 
 export type OperationStatus = 'continue' | 'waiting' | 'completed' | 'failed';
 export type TaskIntent = 'read' | 'write';

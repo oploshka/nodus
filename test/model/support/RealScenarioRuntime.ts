@@ -1,32 +1,30 @@
-import { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
-import { ToolExecutor } from '@agent/Execution/ToolExecutor';
-import { RecoveryController } from '@agent/Planning/RecoveryController';
-import { StepRegistry } from '@agent/Planning/StepRegistry';
+import { ToolExecutor } from '@model/Tool/Execution/ToolExecutor';
+import { RecoveryController } from '@planner/RecoveryController';
+import { StepRegistry } from '@planner/StepRegistry';
 import { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import { ContextSelector } from '@context/Selector/ContextSelector';
 import { ConfigurationLoader } from '@core/Configuration/ConfigurationLoader';
 import { Logger } from '@core/Logging/Logger';
 import { PayloadLogger } from '@core/Logging/PayloadLogger';
-import { KnowledgeResolver } from '@knowledge/Resolver/KnowledgeResolver';
-import { KnowledgeStore } from '@knowledge/Store/KnowledgeStore';
+import { ResearchResolver } from '@research/Resolver/ResearchResolver';
+import { ResearchStore } from '@research/Store/ResearchStore';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter';
 import { ModelController, type ModelExecutionInput } from '@model/Controller/ModelController';
 import { DEFAULT_OPERATION_PROFILES } from '@operation/Default/DefaultOperationProfile';
 import { OperationRegistry } from '@operation/Registry/OperationRegistry';
 import { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import { ProjectScanner } from '@project/Scanner/ProjectScanner';
-import { FileSystemTool } from '@tool/FileSystem/FileSystemTool';
-import { GitTool } from '@tool/Git/GitTool';
-import { ToolRegistry } from '@tool/Registry/ToolRegistry';
-import { SearchTool } from '@tool/Search/SearchTool';
-import { TerminalTool } from '@tool/Terminal/TerminalTool';
+import { FileSystemTool } from '@model/Tool/FileSystem/FileSystemTool';
+import { GitTool } from '@model/Tool/Git/GitTool';
+import { ToolRegistry } from '@model/Tool/Registry/ToolRegistry';
+import { SearchTool } from '@model/Tool/Search/SearchTool';
+import { TerminalTool } from '@model/Tool/Terminal/TerminalTool';
 
 export interface RealScenarioRuntime {
   projectSession: ProjectSession;
   operationRegistry: OperationRegistry;
   modelController: Pick<ModelController, 'execute'>;
   toolExecutor: ToolExecutor;
-  changeExecutor: ChangeExecutor;
   recoveryController: RecoveryController;
   modelInputs: ModelExecutionInput[];
 }
@@ -46,8 +44,8 @@ export async function createRealScenarioRuntime(): Promise<RealScenarioRuntime> 
   };
 
   const logger = new Logger('error', []);
-  const knowledgeStore = new KnowledgeStore();
-  const projectSession = new ProjectSession(configuration.project, knowledgeStore, new ProjectScanner(), logger);
+  const researchStore = new ResearchStore();
+  const projectSession = new ProjectSession(configuration.project, researchStore, new ProjectScanner(), logger);
   await projectSession.open();
   await projectSession.scan();
 
@@ -67,7 +65,7 @@ export async function createRealScenarioRuntime(): Promise<RealScenarioRuntime> 
     configuration.agent,
     configuration.logging,
     adapter,
-    new ContextSelector(new KnowledgeResolver(knowledgeStore)),
+    new ContextSelector(new ResearchResolver(researchStore)),
     projectSession,
     operationRegistry,
     toolRegistry,
@@ -89,7 +87,6 @@ export async function createRealScenarioRuntime(): Promise<RealScenarioRuntime> 
     operationRegistry,
     modelController,
     toolExecutor: new ToolExecutor(toolRegistry, projectSession, logger),
-    changeExecutor: new ChangeExecutor(toolRegistry, projectSession, logger),
     recoveryController: new RecoveryController(configuration.model, adapter, new StepRegistry(), logger),
     modelInputs,
   };

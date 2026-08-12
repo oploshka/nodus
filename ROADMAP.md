@@ -11,9 +11,24 @@ Status: `[x]` done · `[ ]` planned/pending · `[-]` rejected/deferred design.
 
 ## Current / next
 
+## v0.3.0 — Planner / Research / Execution
+
+[x] Разделить верхний runtime на `planner/`, `research/`, `execution/`.
+[x] Перенести model tools под `model/Tool`.
+[x] Вынести первый реальный execution pipeline для `edit-file` как `State → Option → Worker`.
+[x] Отделить proposal, candidate, validation и commit.
+[x] Перенести patch applicator в CPU `PatchApplyWorker`.
+[x] Добавить локальный execution retry: rejected candidate повторяется без возврата в общий Planner loop.
+[x] Переименовать planner-local `ExecutionContext` в `PlannerContext`.
+[x] Собрать project research memory в `ResearchStore` с fact cache и invalidation по source.
+[ ] Вынести оставшийся search/understand orchestration из `PlanExecutor` к Research boundary.
+[ ] Сформировать более простой Planner API поверх текущих `PlanGenerator/Compiler/Executor/Updater`.
+[ ] Решить судьбу `operation/`: разделить profile между Option policy и Worker/model config либо удалить.
+[ ] Добавить второй execution pipeline, чтобы проверить, что State/Option/Worker не заточен только под edit-file.
+
 [ ] Replace the remaining legacy linear `PlanGenerator` fallback (`step-N.result`) with a requirement-compatible fallback or an explicit bounded planning failure.
 [ ] Strengthen `exact` evidence qualification if lexical exact-tier matches prove too permissive, without reintroducing an LLM evaluator after every retrieval round.
-[ ] Measure v0.2 live `/status` latency after deterministic prepare/finalize + RAW understand and optimize only the remaining expensive model stages.
+[ ] Measure v0.3 live `/status` latency after deterministic prepare/finalize + RAW understand and optimize only the remaining expensive model stages.
 [ ] Extend deterministic constraint validation beyond the first read-only/existing-state/no-side-effects mutating-call rules as new contract types appear.
 [ ] Define a first-class verification contract/policy and decide when `verify` is inserted by default.
 [ ] Continue migrating generic recovery toward requirement-based resolution where a typed missing contract exists.

@@ -1,8 +1,8 @@
 // SearchToolPromptRegressionSmoke.ts
 import { toolDefinitionsMessage, toolDescriptionsMessage } from '@model/Prompt/ModelInputComposer';
 import { DEFAULT_OPERATION_PROFILES } from '@operation/Default/DefaultOperationProfile';
-import { FileSystemTool } from '@tool/FileSystem/FileSystemTool';
-import { SearchTool } from '@tool/Search/SearchTool';
+import { FileSystemTool } from '@model/Tool/FileSystem/FileSystemTool';
+import { SearchTool } from '@model/Tool/Search/SearchTool';
 
 console.log('## retrieval prompt/tool contract regression smoke');
 

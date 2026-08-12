@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import type { ProjectConfiguration } from '@core/Configuration/Configuration';
 import type { Logger } from '@core/Logging/Logger';
-import type { KnowledgeStore } from '@knowledge/Store/KnowledgeStore';
+import type { ResearchStore } from '@research/Store/ResearchStore';
 import type { ProjectIndex } from '@project/Index/ProjectIndex';
 import type { ProjectScanner } from '@project/Scanner/ProjectScanner';
 import type { ProjectSnapshot } from '@project/Snapshot/ProjectSnapshot';
@@ -13,7 +13,7 @@ export class ProjectSession {
 
   public constructor(
     public readonly configuration: ProjectConfiguration,
-    public readonly knowledge: KnowledgeStore,
+    public readonly research: ResearchStore,
     private readonly scanner: ProjectScanner,
     private readonly logger: Logger,
   ) {}
@@ -27,14 +27,14 @@ export class ProjectSession {
   }
 
   public async open(): Promise<void> {
-    await this.knowledge.load(this.resolveOptionalPath(this.configuration.knowledgePath));
+    await this.research.load(this.resolveOptionalPath(this.configuration.knowledgePath));
     if (this.configuration.clearCacheOnStart) await this.clearCache();
     await this.loadSnapshot();
 
     await this.logger.info('project-opened', {
       root: this.root,
       hasIndex: Boolean(this.index),
-      knowledgeEntries: this.knowledge.all().length,
+      knowledgeEntries: this.research.all().length,
       scanMode: this.configuration.scanMode,
     }, { projectId: this.projectId });
 
@@ -46,6 +46,7 @@ export class ProjectSession {
 
   public async clearCache(): Promise<void> {
     this.index = undefined;
+    this.research.clearFacts();
     const cachePath = this.resolveOptionalPath(this.configuration.cachePath);
     if (!cachePath) return;
     await rm(cachePath, { force: true });

@@ -1,25 +1,54 @@
-# Nodus Agent v0.2.0
+# Nodus Agent v0.3.0
 
-Nodus is a developer-agent runtime built around explicit project state, typed workflow knowledge, deterministic execution where possible, and operation-scoped language-model reasoning.
+Nodus — runtime для управляемого coding-agent, где модель не управляет всем циклом самостоятельно.
+Сложность задачи по возможности выносится из модели в состояние, планирование, research-cache и ограниченные исполнители.
 
-Core principle: **Understand before you generate.**
+Текущая архитектурная гипотеза v0.3:
 
 ```text
-Task
- ↓
-RequirementPlanner → RequirementMap
- ↓
-PlanCompiler → TaskPlan
- ↓
-PlanExecutor
- ├─ deterministic retrieval
- ├─ semantic understand/model calls where needed
- ├─ deterministic prepare/finalize fast paths
- ├─ tools / ChangeExecutor
- └─ bounded child requirement resolution / minimal capability-addition
+Task → Planner
+Planner ↔ Research
+Planner → Execution → Result → Planner
+
+Execution = State + Option + Worker
 ```
 
-Nodus/runtime is the agent. The model is an intellectual function inside controlled workflow algorithms.
+## Основные слои
+
+### Planner
+
+Отвечает за **что делать**: план, зависимости, критерии, recovery/replan и выбор следующей работы.
+`PlannerContext` хранит состояние текущего плана, но не является хранилищем знаний о проекте.
+
+### Research
+
+Отвечает за **что известно о проекте**. Это прежде всего store/cache с resolver-ами:
+
+- `ResearchStore` — project knowledge + cache фактов;
+- `ResearchResolver` — выбор сохранённых знаний для текущего контекста;
+- `SearchRequestCompiler` / `RetrievalResultClassifier` — уточнение отсутствующих данных через проектные источники;
+- cache-факты можно инвалидировать по исходному файлу.
+
+### Execution
+
+Отвечает за **как выполнить уже подготовленную работу**.
+
+Первый реальный вертикальный pipeline — изменение файла:
+
+```text
+ChangeState
+→ propose-change / EditProposalWorker
+→ prepare-candidate / ChangePrepareWorker
+→ validate-candidate / ChangeValidationWorker
+→ commit-candidate / ChangeCommitWorker
+→ completed
+```
+
+Ошибочный patch не отправляет Planner обратно в общий agent-loop: retry остаётся внутри execution runtime до исчерпания локального бюджета.
+
+## Model
+
+`src/model` содержит adapter/controller/protocol и доступные модели capabilities. Поэтому tools теперь также находятся под `src/model/Tool`.
 
 ## Quick start
 
@@ -29,49 +58,26 @@ cp nodus.config.example.json nodus.config.json
 npm run dev -- nodus.config.json
 ```
 
-On PowerShell:
+PowerShell:
 
 ```powershell
 Copy-Item nodus.config.example.json nodus.config.json
 ```
 
-For an OpenAI-compatible local endpoint, configure `model.provider`, `model.endpoint`, and `model.model` in `nodus.config.json`.
+Для локального OpenAI-compatible endpoint настройте `model.provider`, `model.endpoint` и `model.model`.
 
-Useful startup overrides:
-
-```bash
-npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
-```
-
-The canonical fast `/status` scenario skips manual task entry and requirement-planner latency:
-
-```bash
-npm run dev -- nodus.config.json --clear-cache --clear-logs --scan --scenario=status
-```
-
-## Workflow data
-
-The current runtime separates:
-
-```text
-Evidence → Fact → ChangeDefinition → ChangeResult → FinalResult
-```
-
-Raw source is transient operation input rather than durable workflow history. Typed refs such as `evidence:project.id.definition` and `fact:project.id.access@cli` make step dependencies explicit.
-
-## Model response formats
-
-Nodus uses three response wire formats: `json | raw | text`. The parser converts the wire response into validated internal objects. Large escaping-heavy operations such as `understand` and `edit-file` use the existing flat RAW `FIELD value` style; compact stable planners may continue to use JSON.
-
-## Development
+## Проверки
 
 ```bash
 npm run typecheck
-npm run test:core
+npm run test:unit
+npm run test:integration
 ```
 
-Focused `/status` stage tests are available under `test/scenario/status`.
+Model/e2e тесты требуют настроенный model-server.
 
-## Documentation
+## Статус v0.3
 
-Start with [`doc/README.md`](doc/README.md). The active work list is [`ROADMAP.md`](ROADMAP.md).
+Это сознательно не compatibility-preserving refactor. Старые сущности ещё остаются там, где их новая ответственность пока не определена. В частности, `operation/` пока сохранён как переходный слой конфигурации model operations.
+
+Подробнее: [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) и [`ROADMAP.md`](ROADMAP.md).

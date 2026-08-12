@@ -1,5 +1,5 @@
 // PlanStageSmoke.ts
-import { StepRegistry } from '@agent/Planning/StepRegistry';
+import { StepRegistry } from '@planner/StepRegistry';
 import { STATUS_COMMAND_CANONICAL_PLAN } from './StatusCommandScenario';
 
 console.log('## /status canonical requirement-compiled plan');
@@ -24,7 +24,7 @@ const understands = plan.steps.filter((step) => step.type === 'understand');
 const prepares = plan.steps.filter((step) => step.type === 'prepare-change');
 const edits = plan.steps.filter((step) => step.type === 'edit-file');
 if (searches.length !== 4) throw new Error(`Expected 4 evidence searches, got ${searches.length}`);
-if (understands.length !== 1) throw new Error(`Expected one fact-producing understand step, got ${understands.length}`);
+if (understands.length !== 2) throw new Error(`Expected two dependency-aware fact-producing understand steps, got ${understands.length}`);
 if (prepares.length !== 1) throw new Error(`Expected one prepare-change step, got ${prepares.length}`);
 if (edits.length !== 1 || edits[0]?.targetPath !== 'src/cli/Cli.ts') throw new Error('Expected exactly one guarded Cli.ts edit');
 if (plan.steps.at(-1)?.type !== 'finalize') throw new Error('Finalize must be last');

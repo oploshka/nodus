@@ -1,13 +1,13 @@
 // StepHarness.ts
-import { ExecutionContext } from '@agent/Planning/ExecutionContext';
-import { PlanExecutor, type PlanExecutionState } from '@agent/Planning/PlanExecutor';
-import type { PlanStep, TaskPlan } from '@agent/Planning/TaskPlan';
+import { PlannerContext } from '@planner/PlannerContext';
+import { PlanExecutor, type PlanExecutionState } from '@planner/PlanExecutor';
+import type { PlanStep, TaskPlan } from '@planner/TaskPlan';
 import { Conversation } from '@core/Conversation/Conversation';
 import { Execution } from '@core/Execution/Execution';
 import { Task } from '@core/Task/Task';
 import type { ModelExecutionInput } from '@model/Controller/ModelController';
 import type { OperationResult, StepEvidenceItem, ToolCallRequest } from '@model/Result/OperationResult';
-import type { FileChange } from '@core/Change/ChangeSet';
+import type { FileChange } from '@execution/State/ChangeSet';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 
 export interface SeedFact {
@@ -58,7 +58,7 @@ export async function runPlanHarness(options: PlanHarnessOptions): Promise<StepH
   const conversation = new Conversation('test-project', 'test-conversation');
   const execution = new Execution(task.id);
   execution.status = 'running';
-  const executionContext = new ExecutionContext();
+  const executionContext = new PlannerContext();
 
   for (const fact of options.seedFacts ?? []) {
     executionContext.mergeStepResult({
@@ -85,45 +85,92 @@ export async function runPlanHarness(options: PlanHarnessOptions): Promise<StepH
   let recoveryCalls = 0;
   const appliedChanges: FileChange[] = [];
 
+  const operationRegistry = options.operationRegistry ?? ({ get: (id: string) => ({ id }) } as never);
+  const modelController = {
+    execute: async (input: ModelExecutionInput) => {
+      modelCalls += 1;
+      return options.model(input, modelCalls);
+    },
+  };
+  const toolExecutor = {
+    execute: async (calls: ToolCallRequest[], currentExecution: Execution) => {
+      toolCalls += calls.length;
+      const executed = options.tool ? await options.tool(calls, currentExecution) : 0;
+      return {
+        requested: calls.length,
+        executed,
+        success: executed,
+        failed: Math.max(0, calls.length - executed),
+        useful: executed,
+      };
+    },
+  };
+  const changeExecution = {
+    execute: async (input: any) => {
+      const readCall: ToolCallRequest = { tool: 'file-system', input: { action: 'read', path: input.work.targetPath } };
+      await toolExecutor.execute([readCall], input.context.execution);
+      const proposal = await modelController.execute({
+        task: input.context.task,
+        conversation: input.context.conversation,
+        execution: input.context.execution,
+        operation: operationRegistry.get('edit-file') as never,
+        activeStep: {
+          id: input.work.id,
+          type: 'edit-file',
+          action: input.work.action,
+          subject: input.work.subject,
+          goal: input.work.goal,
+          attempt: 1,
+          maxAttempts: input.work.maxAttempts,
+          inputs: input.work.inputs,
+          outputs: input.work.outputs,
+          targetPath: input.work.targetPath,
+          sourceHints: input.work.sourceHints,
+          requirements: input.work.requirements,
+        },
+        stepContext: { facts: input.facts, missingInputs: [], activeEvidence: input.context.activeEvidence },
+      });
+      if (proposal.changes.length === 0) {
+        return { status: 'failed', state: { work: input.work, facts: input.facts, phase: 'failed', attempt: 1, history: [] }, error: 'no changes' };
+      }
+      appliedChanges.push(...proposal.changes);
+      await options.change?.(proposal.changes);
+      return {
+        status: 'completed',
+        state: {
+          work: input.work,
+          facts: input.facts,
+          phase: 'completed',
+          attempt: 1,
+          proposal: proposal.changes,
+          prepared: proposal.changes.map((change: FileChange) => ({ change, path: change.path })),
+          history: [],
+        },
+      };
+    },
+    executeProposal: async (input: any) => {
+      appliedChanges.push(...input.proposal);
+      await options.change?.(input.proposal);
+      return {
+        status: 'completed',
+        state: {
+          work: input.work,
+          facts: input.facts,
+          phase: 'completed',
+          attempt: 1,
+          proposal: input.proposal,
+          prepared: input.proposal.map((change: FileChange) => ({ change, path: change.path })),
+          history: [],
+        },
+      };
+    },
+  };
+
   const executor = new PlanExecutor(
-    options.operationRegistry ?? ({ get: (id: string) => ({ id }) } as never),
-    {
-      execute: async (input: ModelExecutionInput) => {
-        modelCalls += 1;
-        return options.model(input, modelCalls);
-      },
-    } as never,
-    {
-      execute: async (calls: ToolCallRequest[], currentExecution: Execution) => {
-        toolCalls += calls.length;
-        const executed = options.tool ? await options.tool(calls, currentExecution) : 0;
-        return {
-          requested: calls.length,
-          executed,
-          success: executed,
-          failed: Math.max(0, calls.length - executed),
-          useful: executed,
-        };
-      },
-    } as never,
-    {
-      prepare: async (changes: FileChange[]) => changes.map((change) => ({
-        change, path: change.path,
-        resultingContent: change.type === 'write' ? change.content : change.type === 'patch'
-          ? change.hunks.flatMap((hunk) => hunk.lines.filter((line) => line.type !== 'remove').map((line) => line.text)).join('\n')
-          : undefined,
-        originalContent: '',
-      })),
-      commit: async (prepared: Array<{ change: FileChange }>) => {
-        const changes = prepared.map((item) => item.change);
-        appliedChanges.push(...changes);
-        await options.change?.(changes);
-      },
-      apply: async (changes: FileChange[]) => {
-        appliedChanges.push(...changes);
-        await options.change?.(changes);
-      },
-    } as never,
+    operationRegistry,
+    modelController as never,
+    toolExecutor as never,
+    changeExecution as never,
     { ask: async () => 'stop' } as never,
     {
       recover: async () => {
@@ -139,6 +186,7 @@ export async function runPlanHarness(options: PlanHarnessOptions): Promise<StepH
       stepAlreadySatisfiedAt() {}, deterministicStep() {}, retrieval() {}, requirementResolution() {}, requirementRechecked() {}, stepContinuation() {},
     } as never,
   );
+
 
   const plan: TaskPlan = {
     ...options.plan,

@@ -4,14 +4,14 @@ import type { Execution } from '@core/Execution/Execution';
 import type { Task } from '@core/Task/Task';
 import type { ModelContext } from '@context/Context/ModelContext';
 import { ContextBudget } from '@context/Selector/ContextBudget';
-import type { KnowledgeResolver } from '@knowledge/Resolver/KnowledgeResolver';
+import type { ResearchResolver } from '@research/Resolver/ResearchResolver';
 import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
 
 export class ContextSelector {
   private readonly budget = new ContextBudget();
 
-  public constructor(private readonly knowledgeResolver: KnowledgeResolver) {}
+  public constructor(private readonly researchResolver: ResearchResolver) {}
 
   public select(
     task: Task,
@@ -20,7 +20,7 @@ export class ContextSelector {
     projectSession: ProjectSession,
     operation: OperationProfile,
   ): ModelContext {
-    const resolved = this.knowledgeResolver.resolve(task, operation);
+    const resolved = this.researchResolver.resolve(task, operation);
     const budget = this.budget.profile(operation.id);
     const indexedFiles = this.selectIndexedFiles(task.description, projectSession, budget.indexedFiles);
 

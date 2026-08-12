@@ -1,6 +1,6 @@
 // RequirementResolutionPlannerSmoke.ts
-import { RequirementResolutionPlanner } from '@agent/Planning/RequirementResolutionPlanner';
-import { StepRegistry } from '@agent/Planning/StepRegistry';
+import { RequirementResolutionPlanner } from '@planner/RequirementResolutionPlanner';
+import { StepRegistry } from '@planner/StepRegistry';
 import { Task } from '@core/Task/Task';
 
 const projectSession = {

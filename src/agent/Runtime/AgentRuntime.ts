@@ -1,13 +1,13 @@
-import type { PlanGenerator } from '@agent/Planning/PlanGenerator';
-import { PlanExecutor, type PlanExecutionState } from '@agent/Planning/PlanExecutor';
-import { ExecutionContext } from '@agent/Planning/ExecutionContext';
+import type { PlanGenerator } from '@planner/PlanGenerator';
+import { PlanExecutor, type PlanExecutionState } from '@planner/PlanExecutor';
+import { PlannerContext } from '@planner/PlannerContext';
 import type { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
 import type { Conversation } from '@core/Conversation/Conversation';
 import { Execution } from '@core/Execution/Execution';
 import type { Logger } from '@core/Logging/Logger';
 import type { Task } from '@core/Task/Task';
-import type { RequirementMap } from '@agent/Planning/RequirementMap';
-import type { TaskPlan } from '@agent/Planning/TaskPlan';
+import type { RequirementMap } from '@planner/RequirementMap';
+import type { TaskPlan } from '@planner/TaskPlan';
 
 export class AgentRuntime {
   private readonly pausedByConversation = new Map<string, PlanExecutionState>();
@@ -56,7 +56,7 @@ export class AgentRuntime {
       stepAttempts: 0,
       recoveryAttempts: new Map(),
       stepResults: new Map(),
-      executionContext: new ExecutionContext(),
+      executionContext: new PlannerContext(),
       recoveryMissing: new Map(),
       recoveryGoals: new Set(),
       stepProgress: new Map(),

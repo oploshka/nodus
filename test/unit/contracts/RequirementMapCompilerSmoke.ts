@@ -1,8 +1,8 @@
 // RequirementMapCompilerSmoke.ts
-import { PlanCompiler } from '@agent/Planning/PlanCompiler';
-import { STATUS_SCENARIO_REQUIREMENTS } from '@agent/Planning/Scenario/StatusScenario';
-import { StepRegistry } from '@agent/Planning/StepRegistry';
-import { formatWorkflowDataRef, parseWorkflowDataRef } from '@agent/Planning/WorkflowData';
+import { PlanCompiler } from '@planner/PlanCompiler';
+import { STATUS_SCENARIO_REQUIREMENTS } from '@planner/Scenario/StatusScenario';
+import { StepRegistry } from '@planner/StepRegistry';
+import { formatWorkflowDataRef, parseWorkflowDataRef } from '@planner/WorkflowData';
 
 console.log('## backward requirement map compiler smoke');
 
@@ -13,7 +13,7 @@ console.log('typed data refs separate kind/key/scope: OK');
 
 const plan = new PlanCompiler(new StepRegistry()).compile(STATUS_SCENARIO_REQUIREMENTS, 'ru');
 const types = plan.steps.map((step) => step.type);
-if (types.join(',') !== 'search,search,search,search,understand,prepare-change,edit-file,finalize') {
+if (types.join(',') !== 'search,search,search,search,understand,understand,prepare-change,edit-file,finalize') {
   throw new Error(`Unexpected compiled workflow: ${types.join(' -> ')}`);
 }
 console.log('backward requirement graph compiles to familiar workflow steps: OK');
@@ -25,20 +25,22 @@ const currentIndex = searches.find((step) => step.outputs.includes('evidence:pro
 if (!currentIndex?.requirements?.[0]?.constraints?.includes('no-side-effects')) throw new Error('Evidence constraints were not preserved on the search contract');
 console.log('search keeps grounded source hints, constraints, and one semantic attempt: OK');
 
-const understand = plan.steps.find((step) => step.type === 'understand');
-if (!understand) throw new Error('Understand step is missing');
-const expectedFacts = new Set([
+const understands = plan.steps.filter((step) => step.type === 'understand');
+if (understands.length !== 2) throw new Error(`Expected two dependency-aware understand steps, got ${understands.length}`);
+const requiredFacts = new Set([
   'fact:project.id.access@cli',
   'fact:conversation.id.access@cli',
   'fact:project.index.fileCount.access@cli',
   'fact:cli.command.pattern@cli',
 ]);
-if (understand.outputs.length !== expectedFacts.size || understand.outputs.some((output) => !expectedFacts.has(output))) {
-  throw new Error(`Understand outputs are not the required semantic facts: ${understand.outputs.join(', ')}`);
+const producedFacts = new Set(understands.flatMap((step) => step.outputs));
+if ([...requiredFacts].some((output) => !producedFacts.has(output))) {
+  throw new Error(`Understand outputs are missing required semantic facts: ${[...producedFacts].join(', ')}`);
 }
-const fileCountContract = understand.requirements?.find((item) => item.ref === 'fact:project.index.fileCount.access@cli');
+const fileCountUnderstand = understands.find((step) => step.outputs.includes('fact:project.index.fileCount.access@cli'));
+const fileCountContract = fileCountUnderstand?.requirements?.find((item) => item.ref === 'fact:project.index.fileCount.access@cli');
 if (!fileCountContract?.constraints?.includes('must-not-scan-or-refresh')) throw new Error('Fact semantic constraints were not preserved');
-console.log('understand is the evidence -> constrained fact boundary: OK');
+console.log('understand keeps dependency-aware evidence -> constrained fact boundaries: OK');
 
 const prepare = plan.steps.find((step) => step.type === 'prepare-change');
 if (!prepare) throw new Error('Prepare-change step is missing');

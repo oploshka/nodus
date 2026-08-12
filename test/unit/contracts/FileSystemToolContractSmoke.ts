@@ -2,9 +2,9 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { normalizeToolCallRequest } from '@agent/Execution/ToolExecutor';
+import { normalizeToolCallRequest } from '@model/Tool/Execution/ToolExecutor';
 import { toolDefinitionsMessage, toolDescriptionsMessage } from '@model/Prompt/ModelInputComposer';
-import { FileSystemTool } from '@tool/FileSystem/FileSystemTool';
+import { FileSystemTool } from '@model/Tool/FileSystem/FileSystemTool';
 
 console.log('## file-system tool contract smoke');
 

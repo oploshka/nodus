@@ -1,4 +1,4 @@
-import type { TaskPlan } from '@agent/Planning/TaskPlan';
+import type { TaskPlan } from '@planner/TaskPlan';
 import type { StepEvidenceItem } from '@model/Result/OperationResult';
 
 export interface ScenarioSeedFact {

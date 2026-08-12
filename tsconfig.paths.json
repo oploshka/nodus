@@ -1,18 +1,43 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "paths": {
-      "@core/*": ["src/core/*"],
-      "@project/*": ["src/project/*"],
-      "@knowledge/*": ["src/knowledge/*"],
-      "@operation/*": ["src/operation/*"],
-      "@context/*": ["src/context/*"],
-      "@agent/*": ["src/agent/*"],
-      "@model/*": ["src/model/*"],
-      "@tool/*": ["src/tool/*"],
-      "@cli/*": ["src/cli/*"],
-      "@test/*": ["test/*"]
+      "@core/*": [
+        "src/core/*"
+      ],
+      "@project/*": [
+        "src/project/*"
+      ],
+      "@operation/*": [
+        "src/operation/*"
+      ],
+      "@context/*": [
+        "src/context/*"
+      ],
+      "@agent/*": [
+        "src/agent/*"
+      ],
+      "@model/*": [
+        "src/model/*"
+      ],
+      "@cli/*": [
+        "src/cli/*"
+      ],
+      "@test/*": [
+        "test/*"
+      ],
+      "@planner/*": [
+        "src/planner/*"
+      ],
+      "@research/*": [
+        "src/research/*"
+      ],
+      "@execution/*": [
+        "src/execution/*"
+      ]
     }
   }
 }

@@ -1,8 +1,8 @@
 // RequirementCapabilityRecheckSmoke.ts
-import { ExecutionContext } from '@agent/Planning/ExecutionContext';
-import { PlanExecutor, type PlanExecutionState } from '@agent/Planning/PlanExecutor';
-import { PlanUpdater } from '@agent/Planning/PlanUpdater';
-import type { TaskPlan } from '@agent/Planning/TaskPlan';
+import { PlannerContext } from '@planner/PlannerContext';
+import { PlanExecutor, type PlanExecutionState } from '@planner/PlanExecutor';
+import { PlanUpdater } from '@planner/PlanUpdater';
+import type { TaskPlan } from '@planner/TaskPlan';
 import { Conversation } from '@core/Conversation/Conversation';
 import { Execution } from '@core/Execution/Execution';
 import { Task } from '@core/Task/Task';
@@ -124,7 +124,23 @@ const executor = new PlanExecutor(
     },
   } as never,
   {
-    apply: async () => { capabilityAdded = true; },
+    execute: async (input: any) => {
+      modelCalls += 1;
+      capabilityAdded = true;
+      return {
+        status: 'completed',
+        state: {
+          work: input.work,
+          facts: input.facts,
+          phase: 'completed',
+          attempt: 1,
+          proposal: [{ type: 'write', path: input.work.targetPath, content: '// capability added' }],
+          prepared: [],
+          history: [],
+        },
+      };
+    },
+    executeProposal: async () => { throw new Error('not expected'); },
   } as never,
   { ask: async () => 'stop' } as never,
   { recover: async () => { recoveryCalls += 1; return { action: 'request-human', reason: 'unexpected recovery' }; } } as never,
@@ -208,7 +224,7 @@ const state: PlanExecutionState = {
   stepAttempts: 0,
   recoveryAttempts: new Map(),
   stepResults: new Map(),
-  executionContext: new ExecutionContext(),
+  executionContext: new PlannerContext(),
   recoveryMissing: new Map(),
   recoveryGoals: new Set(),
   requirementResolutionAttempts: new Map(),
@@ -224,7 +240,7 @@ if (recoveryCalls !== 0) throw new Error('Capability resolution should avoid gen
 if (!state.executionContext.has(requirement)) throw new Error('Original evidence requirement was not re-established after capability edit');
 if (!rechecks.includes(requirement)) throw new Error('Original requirement was not explicitly rechecked after capability edit');
 if (state.execution.status !== 'completed' || state.execution.result !== 'done') throw new Error('Parent plan did not continue after successful recheck');
-if (modelCalls !== 3) throw new Error(`Expected understand + edit + final model calls, got ${modelCalls}; prepare should be deterministic`);
+if (modelCalls !== 3) throw new Error(`Expected understand + execution edit + final calls, got ${modelCalls}; prepare should be deterministic`);
 console.log('## capability-addition requirement recheck');
 console.log('missing evidence triggered one supporting child edit: OK');
 console.log('prepare-change stayed deterministic inside capability child: OK');

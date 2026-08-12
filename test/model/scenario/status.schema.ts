@@ -1,6 +1,6 @@
-import { PlanCompiler } from '@agent/Planning/PlanCompiler';
-import { STATUS_SCENARIO_REQUIREMENTS, STATUS_SCENARIO_TASK } from '@agent/Planning/Scenario/StatusScenario';
-import { StepRegistry } from '@agent/Planning/StepRegistry';
+import { PlanCompiler } from '@planner/PlanCompiler';
+import { STATUS_SCENARIO_REQUIREMENTS, STATUS_SCENARIO_TASK } from '@planner/Scenario/StatusScenario';
+import { StepRegistry } from '@planner/StepRegistry';
 import type { ModelScenarioSchema, ScenarioSeedFact } from '@test/model/support/ScenarioSchema';
 
 const plan = new PlanCompiler(new StepRegistry()).compile(STATUS_SCENARIO_REQUIREMENTS, 'ru');

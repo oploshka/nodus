@@ -1,6 +1,6 @@
-import { PlanCompiler } from '@agent/Planning/PlanCompiler';
-import { STATUS_SCENARIO_REQUIREMENTS } from '@agent/Planning/Scenario/StatusScenario';
-import { StepRegistry } from '@agent/Planning/StepRegistry';
+import { PlanCompiler } from '@planner/PlanCompiler';
+import { STATUS_SCENARIO_REQUIREMENTS } from '@planner/Scenario/StatusScenario';
+import { StepRegistry } from '@planner/StepRegistry';
 
 const plan = new PlanCompiler(new StepRegistry()).compile(STATUS_SCENARIO_REQUIREMENTS, 'ru');
 const understand = plan.steps.filter((step) => step.type === 'understand');

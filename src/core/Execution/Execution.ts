@@ -1,7 +1,7 @@
 // Execution.ts
 import { randomUUID } from 'node:crypto';
 import type { ToolCallRequest } from '@model/Result/OperationResult';
-import type { ToolResult } from '@tool/Tool/Tool';
+import type { ToolResult } from '@model/Tool/Tool/Tool';
 
 export type ExecutionStatus = 'created' | 'running' | 'waiting' | 'paused' | 'completed' | 'failed' | 'cancelled';
 

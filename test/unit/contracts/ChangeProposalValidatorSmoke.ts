@@ -1,8 +1,8 @@
-import { ChangeProposalValidator } from '@agent/Execution/ChangeProposalValidator';
-import type { PreparedFileChange } from '@agent/Execution/ChangeExecutor';
-import type { FileChange } from '@core/Change/ChangeSet';
+import { ChangeValidationWorker } from '@execution/Worker/ChangeValidationWorker';
+import type { PreparedFileChange } from '@execution/State/ChangeState';
+import type { FileChange } from '@execution/State/ChangeSet';
 
-const validator = new ChangeProposalValidator();
+const validator = new ChangeValidationWorker();
 const contract = `Target: src/cli/Cli.ts
 Intent: minimal /status command implementation
 Established facts:

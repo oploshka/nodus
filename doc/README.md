@@ -1,6 +1,6 @@
 # Nodus documentation
 
-Current architecture documentation for Nodus v0.2.0:
+Current architecture documentation for Nodus v0.3.0:
 
 - [Workflow architecture](./WorkflowArchitecture.md) — execution layers, workflow data catalog, requirement map, plan compiler, and source lifecycle.
 - [Retrieval and requirement resolution](./RetrievalAndResolution.md) — `exact | related | missing`, child knowledge/capability-addition plans, recursion limits, and parent recheck.

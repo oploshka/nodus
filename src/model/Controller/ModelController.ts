@@ -15,7 +15,7 @@ import type { OperationResult, StepEvidenceItem, StepResult } from '@model/Resul
 import type { OperationProfile } from '@operation/Profile/OperationProfile';
 import type { OperationRegistry } from '@operation/Registry/OperationRegistry';
 import type { ProjectSession } from '@project/ProjectSession/ProjectSession';
-import type { ToolRegistry } from '@tool/Registry/ToolRegistry';
+import type { ToolRegistry } from '@model/Tool/Registry/ToolRegistry';
 import { composePrompt } from '@model/Prompt/PromptComposer';
 import {
   activeEvidenceMessage,

@@ -1,8 +1,8 @@
 // RequirementResolutionRecheckSmoke.ts
-import { ExecutionContext } from '@agent/Planning/ExecutionContext';
-import { PlanExecutor, type PlanExecutionState } from '@agent/Planning/PlanExecutor';
-import { PlanUpdater } from '@agent/Planning/PlanUpdater';
-import type { TaskPlan } from '@agent/Planning/TaskPlan';
+import { PlannerContext } from '@planner/PlannerContext';
+import { PlanExecutor, type PlanExecutionState } from '@planner/PlanExecutor';
+import { PlanUpdater } from '@planner/PlanUpdater';
+import type { TaskPlan } from '@planner/TaskPlan';
 import { Conversation } from '@core/Conversation/Conversation';
 import { Execution } from '@core/Execution/Execution';
 import { Task } from '@core/Task/Task';
@@ -104,7 +104,7 @@ const state: PlanExecutionState = {
   stepAttempts: 0,
   recoveryAttempts: new Map(),
   stepResults: new Map(),
-  executionContext: new ExecutionContext(),
+  executionContext: new PlannerContext(),
   recoveryMissing: new Map(),
   recoveryGoals: new Set(),
   requirementResolutionAttempts: new Map(),

@@ -1,9 +1,9 @@
 // ModelInputComposer.ts
 import type { ToolContextEntry } from '@core/Execution/Execution';
-import type { KnowledgeEntry } from '@knowledge/Entry/KnowledgeEntry';
+import type { KnowledgeEntry } from '@research/Entry/KnowledgeEntry';
 import type { ModelMessage } from '@model/Request/ModelRequest';
 import type { StepEvidenceItem } from '@model/Result/OperationResult';
-import type { ToolDefinition } from '@tool/Tool/Tool';
+import type { ToolDefinition } from '@model/Tool/Tool/Tool';
 
 export interface LogicalFactView {
   key: string;

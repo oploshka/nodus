@@ -2,8 +2,8 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
-import type { RequirementMap } from '@agent/Planning/RequirementMap';
-import { STATUS_SCENARIO_REQUIREMENTS, STATUS_SCENARIO_TASK } from '@agent/Planning/Scenario/StatusScenario';
+import type { RequirementMap } from '@planner/RequirementMap';
+import { STATUS_SCENARIO_REQUIREMENTS, STATUS_SCENARIO_TASK } from '@planner/Scenario/StatusScenario';
 import { ConfigurationLoader } from '@core/Configuration/ConfigurationLoader';
 import { Nodus } from '@core/Nodus/Nodus';
 
@@ -41,7 +41,7 @@ export async function runCli(args: string[]): Promise<void> {
     await nodus.initialize();
 
     let conversation = nodus.createConversation();
-    console.log(`Nodus v0.2.0 ready. Project: ${configuration.project.id}`);
+    console.log(`Nodus v0.3.0 ready. Project: ${configuration.project.id}`);
     console.log(`Conversation: ${conversation.id}`);
     console.log('Commands: ' + COMMANDS.map(cmd => cmd.name).join(' '));
 

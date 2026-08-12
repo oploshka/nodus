@@ -1,4 +1,4 @@
-import type { FileChange, UnifiedDiffHunk } from '@core/Change/ChangeSet';
+import type { FileChange, UnifiedDiffHunk } from '@execution/State/ChangeSet';
 import type { OperationResult, ToolCallRequest } from '@model/Result/OperationResult';
 
 export class EditFileRawProtocol {

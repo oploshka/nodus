@@ -1,6 +1,6 @@
 // RequirementConstraintValidatorSmoke.ts
-import { RequirementConstraintValidator } from '@agent/Planning/RequirementConstraintValidator';
-import type { PlanStep } from '@agent/Planning/TaskPlan';
+import { RequirementConstraintValidator } from '@planner/RequirementConstraintValidator';
+import type { PlanStep } from '@planner/TaskPlan';
 
 const step: PlanStep = {
   id: 'understand-index',

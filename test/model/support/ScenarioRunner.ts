@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import type { PlanStep } from '@agent/Planning/TaskPlan';
-import type { FileChange } from '@core/Change/ChangeSet';
+import type { PlanStep } from '@planner/TaskPlan';
+import type { FileChange } from '@execution/State/ChangeSet';
 import type { ModelExecutionInput } from '@model/Controller/ModelController';
 import { runPlanHarness } from '@test/support/StepHarness';
 import { createRealScenarioRuntime } from '@test/model/support/RealScenarioRuntime';

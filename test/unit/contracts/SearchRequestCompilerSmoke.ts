@@ -1,6 +1,6 @@
 // SearchRequestCompilerSmoke.ts
-import { SearchRequestCompiler } from '@agent/Planning/SearchRequestCompiler';
-import type { PlanStep } from '@agent/Planning/TaskPlan';
+import { SearchRequestCompiler } from '@research/Resolver/SearchRequestCompiler';
+import type { PlanStep } from '@planner/TaskPlan';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);

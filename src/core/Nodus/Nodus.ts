@@ -2,18 +2,24 @@
 import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { HumanInteraction } from '@agent/Human/HumanInteraction';
-import { ChangeExecutor } from '@agent/Execution/ChangeExecutor';
-import { ToolExecutor } from '@agent/Execution/ToolExecutor';
+import { ChangeExecution } from '@execution/ChangeExecution';
+import { ChangeOptionResolver } from '@execution/Option/ChangeOption';
+import { ChangeCommitWorker } from '@execution/Worker/ChangeCommitWorker';
+import { ChangePrepareWorker } from '@execution/Worker/ChangePrepareWorker';
+import { ChangeValidationWorker } from '@execution/Worker/ChangeValidationWorker';
+import { EditProposalWorker } from '@execution/Worker/EditProposalWorker';
+import { PatchApplyWorker } from '@execution/Worker/PatchApplyWorker';
+import { ToolExecutor } from '@model/Tool/Execution/ToolExecutor';
 import { AgentRuntime } from '@agent/Runtime/AgentRuntime';
 import { ExecutionReporter } from '@agent/Reporting/ExecutionReporter';
-import { PlanGenerator } from '@agent/Planning/PlanGenerator';
-import type { RequirementMap } from '@agent/Planning/RequirementMap';
-import type { TaskPlan } from '@agent/Planning/TaskPlan';
-import { PlanExecutor } from '@agent/Planning/PlanExecutor';
-import { PlanUpdater } from '@agent/Planning/PlanUpdater';
-import { RecoveryController } from '@agent/Planning/RecoveryController';
-import { RequirementResolutionPlanner } from '@agent/Planning/RequirementResolutionPlanner';
-import { StepRegistry } from '@agent/Planning/StepRegistry';
+import { PlanGenerator } from '@planner/PlanGenerator';
+import type { RequirementMap } from '@planner/RequirementMap';
+import type { TaskPlan } from '@planner/TaskPlan';
+import { PlanExecutor } from '@planner/PlanExecutor';
+import { PlanUpdater } from '@planner/PlanUpdater';
+import { RecoveryController } from '@planner/RecoveryController';
+import { RequirementResolutionPlanner } from '@planner/RequirementResolutionPlanner';
+import { StepRegistry } from '@planner/StepRegistry';
 import type { NodusConfiguration } from '@core/Configuration/Configuration';
 import { Conversation } from '@core/Conversation/Conversation';
 import { ConsoleLogSink } from '@core/Logging/ConsoleLogSink';
@@ -24,8 +30,8 @@ import { Logger } from '@core/Logging/Logger';
 import { PayloadLogger } from '@core/Logging/PayloadLogger';
 import { Task } from '@core/Task/Task';
 import { ContextSelector } from '@context/Selector/ContextSelector';
-import { KnowledgeResolver } from '@knowledge/Resolver/KnowledgeResolver';
-import { KnowledgeStore } from '@knowledge/Store/KnowledgeStore';
+import { ResearchResolver } from '@research/Resolver/ResearchResolver';
+import { ResearchStore } from '@research/Store/ResearchStore';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter';
 import { MockModelAdapter } from '@model/Adapter/MockModelAdapter';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter';
@@ -34,11 +40,11 @@ import { DEFAULT_OPERATION_PROFILES } from '@operation/Default/DefaultOperationP
 import { OperationRegistry } from '@operation/Registry/OperationRegistry';
 import { ProjectSession } from '@project/ProjectSession/ProjectSession';
 import { ProjectScanner } from '@project/Scanner/ProjectScanner';
-import { FileSystemTool } from '@tool/FileSystem/FileSystemTool';
-import { GitTool } from '@tool/Git/GitTool';
-import { ToolRegistry } from '@tool/Registry/ToolRegistry';
-import { SearchTool } from '@tool/Search/SearchTool';
-import { TerminalTool } from '@tool/Terminal/TerminalTool';
+import { FileSystemTool } from '@model/Tool/FileSystem/FileSystemTool';
+import { GitTool } from '@model/Tool/Git/GitTool';
+import { ToolRegistry } from '@model/Tool/Registry/ToolRegistry';
+import { SearchTool } from '@model/Tool/Search/SearchTool';
+import { TerminalTool } from '@model/Tool/Terminal/TerminalTool';
 
 export class Nodus {
   public readonly logger: Logger;
@@ -62,8 +68,8 @@ export class Nodus {
     }
     this.logger = new Logger(configuration.logging.level, sinks);
 
-    const knowledgeStore = new KnowledgeStore();
-    this.projectSession = new ProjectSession(configuration.project, knowledgeStore, new ProjectScanner(), this.logger);
+    const researchStore = new ResearchStore();
+    this.projectSession = new ProjectSession(configuration.project, researchStore, new ProjectScanner(), this.logger);
 
     this.operationRegistry = new OperationRegistry();
     for (const profile of DEFAULT_OPERATION_PROFILES) {
@@ -77,7 +83,7 @@ export class Nodus {
     this.toolRegistry.register(new SearchTool());
 
     const adapter = this.createModelAdapter(configuration);
-    const knowledgeResolver = new KnowledgeResolver(knowledgeStore);
+    const knowledgeResolver = new ResearchResolver(researchStore);
     const contextSelector = new ContextSelector(knowledgeResolver);
     const payloadLogger = new PayloadLogger(
       configuration.project.root,
@@ -125,13 +131,22 @@ export class Nodus {
     );
 
     const toolExecutor = new ToolExecutor(this.toolRegistry, this.projectSession, this.logger);
-    const changeExecutor = new ChangeExecutor(this.toolRegistry, this.projectSession, this.logger);
+    const patchApplyWorker = new PatchApplyWorker();
+    const changeExecution = new ChangeExecution(
+      new ChangeOptionResolver(),
+      [
+        new EditProposalWorker(modelController, toolExecutor, this.operationRegistry),
+        new ChangePrepareWorker(this.toolRegistry, this.projectSession, patchApplyWorker),
+        new ChangeValidationWorker(),
+        new ChangeCommitWorker(this.toolRegistry, this.projectSession, this.logger),
+      ],
+    );
 
     const planExecutor = new PlanExecutor(
       this.operationRegistry,
       modelController,
       toolExecutor,
-      changeExecutor,
+      changeExecution,
       human,
       recoveryController,
       planUpdater,

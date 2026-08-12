@@ -1,5 +1,5 @@
 // RetrievalResultSmoke.ts
-import { RetrievalResultClassifier } from '@agent/Planning/RetrievalResult';
+import { RetrievalResultClassifier } from '@research/Resolver/RetrievalResult';
 import { runStepHarness } from '@test/support/StepHarness';
 
 function entry(query: string, data: unknown) {
