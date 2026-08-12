@@ -7,4 +7,4 @@ The Engine-facing contract is intentionally small: `id`, `description`, `canHand
 `DefaultWorker` is currently the only implementation. It keeps the existing bounded local loop with `ExecutionPlanner`, `ExecutionState` and registered `ExecutionAction` capabilities (`research`, `edit-file`). This internal design is temporary and can evolve without changing the Engine/Worker boundary.
 
 
-Worker selection is isolated behind `WorkerSelector`. The current `FirstMatchWorkerSelector` is deterministic and intentionally temporary; richer routing can replace it without changing the Engine/Worker boundary.
+Worker selection is outside the Worker layer. Engine passes compatible Worker options to the generic `Determine` service and then runs the selected Worker.

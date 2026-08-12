@@ -4,7 +4,7 @@ import type { Project } from '@engine/Project/Project.js';
 import { Task } from '@engine/Task/Task.js';
 import { TaskRun } from '@engine/Task/TaskRun.js';
 import type { Worker } from '@engine/Worker/Worker.js';
-import type { WorkerSelector } from '@engine/Worker/WorkerSelector.js';
+import type { Determine } from '@engine/Determine/Determine.js';
 
 /** Coordinator only: plan -> route step -> run worker -> react to status. */
 export class Engine {
@@ -12,7 +12,7 @@ export class Engine {
     private readonly project: Project,
     private readonly planner: Planner,
     private readonly workers: ReadonlyArray<Worker>,
-    private readonly workerSelector: WorkerSelector,
+    private readonly determine: Determine,
     private readonly logger: EngineLogger,
   ) {}
 
@@ -28,7 +28,15 @@ export class Engine {
     for (const step of plan.steps) {
       this.logger.info('engine.step.start', { taskId: task.id, step });
 
-      const worker = await this.workerSelector.select(step, this.workers);
+      const availableWorkers = this.workers.filter((worker) => worker.canHandle(step));
+      const worker = await this.determine.option({
+        goal: step.goal,
+        options: availableWorkers.map((worker) => ({
+          id: worker.id,
+          description: worker.description,
+          value: worker,
+        })),
+      });
       this.logger.info('engine.worker.selected', { taskId: task.id, stepId: step.id, workerId: worker.id });
 
       const result = await worker.run(task, step);
