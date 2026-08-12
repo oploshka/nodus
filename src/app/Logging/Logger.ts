@@ -104,6 +104,46 @@ export class ConsoleLogger implements EngineLogger {
       return this.russian ? `${worker} ${workerId}: начало${suffix}` : `${worker} ${workerId}: start${suffix}`;
     }
 
+
+    if (event === 'worker.action.start') {
+      const workerId = stringValue(record.workerId);
+      const actionId = stringValue(record.actionId);
+      const attempt = numberValue(record.attempt);
+      const question = compactText(stringValue(record.question), 180);
+      const suffix = attempt ? (this.russian ? ` · попытка ${attempt}` : ` · attempt ${attempt}`) : '';
+      if (actionId === 'research' && question) {
+        return this.russian
+          ? `${worker} ${workerId}: action research${suffix}\n  ${question}`
+          : `${worker} ${workerId}: action research${suffix}\n  ${question}`;
+      }
+      return `${worker} ${workerId}: action ${actionId}${suffix}`;
+    }
+
+    if (event === 'worker.action.finish') {
+      const workerId = stringValue(record.workerId);
+      const actionId = stringValue(record.actionId);
+      const attempt = numberValue(record.attempt);
+      const result = isRecord(record.result) ? record.result : {};
+      const status = stringValue(result.status);
+      const requests = Array.isArray(result.requests) ? result.requests.length : 0;
+      let text = this.russian
+        ? `${worker} ${workerId}: ${actionId} · ${humanStatus(status, true)}`
+        : `${worker} ${workerId}: ${actionId} · ${humanStatus(status, false)}`;
+      if (attempt) text += this.russian ? ` · попытка ${attempt}` : ` · attempt ${attempt}`;
+      if (requests) text += this.russian ? ` · запросов: ${requests}` : ` · requests: ${requests}`;
+      return text;
+    }
+
+    if (event === 'worker.action.error') {
+      const workerId = stringValue(record.workerId);
+      const actionId = stringValue(record.actionId);
+      const attempt = numberValue(record.attempt);
+      const error = stringValue(record.error);
+      return this.russian
+        ? `${worker} ${workerId}: ${actionId} · ошибка${attempt ? ` · попытка ${attempt}` : ''} · ${error}`
+        : `${worker} ${workerId}: ${actionId} · error${attempt ? ` · attempt ${attempt}` : ''} · ${error}`;
+    }
+
     if (event === 'worker.attempt') {
       const workerId = stringValue(record.workerId);
       const attempt = numberValue(record.attempt);

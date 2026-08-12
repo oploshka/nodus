@@ -34,7 +34,7 @@ describe('runtime maxPlanSteps vertical slice', () => {
       const log = await readFile(result.logger.path, 'utf8');
       expect(log).toContain('research.miss');
       expect(log).toContain('research.resolved');
-      expect(log).not.toContain('worker.attempt.error');
+      expect(log).not.toContain('worker.action.error');
       expect(log).not.toContain('worker.edit.error');
     } finally {
       await result.dispose();

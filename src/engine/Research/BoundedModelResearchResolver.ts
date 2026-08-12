@@ -5,7 +5,7 @@ import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { Project } from '@engine/Project/Project.js';
-import type { ResolvedResearch, ResearchResolver } from '@engine/Research/ResearchTypes.js';
+import type { ResolvedResearch, ResearchResolveOptions, ResearchResolver } from '@engine/Research/ResearchTypes.js';
 
 interface ResearchModelResponse { text: string }
 const researchSchema: ModelResponseSchema = {
@@ -23,7 +23,7 @@ export class BoundedModelResearchResolver implements ResearchResolver {
     private readonly maxCharsPerFile = 12_000,
   ) {}
 
-  public async resolve(question: string): Promise<ResolvedResearch> {
+  public async resolve(question: string, options?: ResearchResolveOptions): Promise<ResolvedResearch> {
     const candidates = this.project.candidateFiles(question, this.maxFiles);
     if (candidates.length === 0) {
       return {
@@ -48,6 +48,7 @@ export class BoundedModelResearchResolver implements ResearchResolver {
         data: sourceBlocks.join('\n\n'),
         format: ModelRequestFormat.Text,
         guidance: [
+          options?.guidance?.trim(),
           'You answer one bounded question about an existing codebase.',
           `The question may originate from a user task in any language. Return the internal research answer in ${this.nodusLanguage}. Preserve code identifiers, paths and symbols exactly.`,
           'Use only the supplied files. Do not propose edits and do not broaden the task.',
@@ -56,7 +57,7 @@ export class BoundedModelResearchResolver implements ResearchResolver {
         ].join('\n'),
       },
       response: { format: ModelResponseFormat.Text, schema: researchSchema },
-      settings: { maxTokens: 2048 },
+      settings: { maxTokens: 2048, ...options?.settings },
     });
 
     return { status: 'resolved', answer: response.text, sources: paths };

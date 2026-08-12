@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Project } from '@engine/Project/Project.js';
-import type { ResearchAnswer, ResearchResolver } from '@engine/Research/ResearchTypes.js';
+import type { ResearchAnswer, ResearchResolveOptions, ResearchResolver } from '@engine/Research/ResearchTypes.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 
 export class Research {
@@ -11,7 +11,7 @@ export class Research {
     private readonly logger: EngineLogger,
   ) {}
 
-  public async ask(question: string): Promise<ResearchAnswer> {
+  public async ask(question: string, options?: ResearchResolveOptions): Promise<ResearchAnswer> {
     const cached = await this.store.get(question);
     if (cached) {
       this.logger.info('research.hit', { question });
@@ -19,7 +19,7 @@ export class Research {
     }
 
     this.logger.info('research.miss', { question });
-    const resolved = await this.resolver.resolve(question);
+    const resolved = await this.resolver.resolve(question, options);
     if (resolved.status === 'not-found') {
       const answer: ResearchAnswer = {
         question,

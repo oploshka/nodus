@@ -1,7 +1,10 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Project } from '@engine/Project/Project.js';
 import { PatchApplicator } from '@engine/Worker/Edit/PatchApplicator.js';
-import type { WorkerAttempt, WorkerAttemptContext, WorkerAttemptResult } from '@engine/Worker/Attempt/WorkerAttempt.js';
+import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
+import type { PlanStep } from '@engine/Planner/Plan.js';
+import type { Task } from '@engine/Task/Task.js';
+import type { ActionModelOptions, ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import { callDiffFile, callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
@@ -17,7 +20,7 @@ interface ChangeDecision {
   edits?: Array<{ path: string; instruction: string }>;
 }
 
-export interface ProjectChangeAttemptProfile {
+export interface ChangeCodeActionProfile {
   purpose: string;
   guidance: string;
   language: LanguageConfiguration;
@@ -53,23 +56,36 @@ const decisionSchema: ModelResponseSchema = {
   },
 };
 
-/**
- * Current concrete attempt implementation for project changes.
- * It first tries to execute the task; only an explicit lack of project facts
- * produces `missing-information` for the Worker loop to resolve via Research.
- */
-export class ModelProjectChangeAttempt implements WorkerAttempt {
+/** Project-change Action used by specialized Workers. Prompts live here because this Action owns the semantics of proposing and applying a coherent change. */
+export interface ChangeCodeActionInput extends ActionModelOptions {
+  task: Task;
+  step: PlanStep;
+  knowledge: ReadonlyArray<ResearchAnswer>;
+}
+
+export interface ChangeCodeActionData {
+  summary: string;
+}
+
+export interface ResearchActionRequest {
+  question: string;
+}
+
+export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
+  public readonly id = 'change-code';
+  public readonly description = 'Apply one coherent project/code change; multiple files are allowed when they belong to the same outcome.';
   public constructor(
     private readonly project: Project,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
-    private readonly profile: ProjectChangeAttemptProfile,
+    private readonly profile: ChangeCodeActionProfile,
+    private readonly defaultModelSettings: ChangeCodeActionInput['settings'] = undefined,
     private readonly maxEditsPerAttempt = 6,
     private readonly maxEditAttempts = 3,
     private readonly applicator = new PatchApplicator(),
   ) {}
 
-  public async execute(context: WorkerAttemptContext): Promise<WorkerAttemptResult> {
+  public async run(context: ChangeCodeActionInput): Promise<ActionResult<ChangeCodeActionData, ResearchActionRequest>> {
     const candidates = this.candidateFiles(context);
     const decision = await callModel<ChangeDecision>(this.model, this.logger, {
       request: {
@@ -97,26 +113,33 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
           'Return at most 3 questions. Prefer one precise question when it can unblock the task.',
           'Do not ask documentation, policy, best-practice, or hypothetical questions unless the user task explicitly requires them.',
           'Do not ask broad questions such as "understand the project". Ask only concrete project facts that block execution now.',
+          'Every edit.path must be relative to the project root; never resolve it relative to another source file.',
+          'One coherent change may edit multiple files when they are all required for the same outcome.',
           'Keep edits minimal and preserve unrelated behavior.',
           'Do not perform validation; validation is a separate concern.',
         ].join('\n'),
       },
       response: { format: ModelResponseFormat.Json, schema: decisionSchema },
-      settings: { maxTokens: 2048 },
+      settings: { maxTokens: 2048, ...this.defaultModelSettings, ...context.settings },
     });
 
     if (decision.outcome === 'already-completed') {
-      return { status: 'completed', summary: decision.summary ?? 'Requested outcome is already present.' };
+      return { status: 'completed', data: { summary: decision.summary ?? 'Requested outcome is already present.' } };
     }
 
     if (decision.outcome === 'failed') {
-      return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed under the supplied constraints.' };
+      return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed under the supplied constraints.', canContinue: false };
     }
 
     if (decision.outcome === 'missing-information') {
       const questions = (decision.questions ?? []).map((question) => question.trim()).filter(Boolean).slice(0, 3);
       if (questions.length === 0) throw new Error('Attempt reported missing information without concrete questions.');
-      return { status: 'missing-information', questions, reason: decision.reason };
+      return {
+        status: 'not-completed',
+        reason: decision.reason ?? 'Concrete project knowledge is required before the change can be applied safely.',
+        canContinue: true,
+        requests: questions.map((question) => ({ actionId: 'research', input: { question } })),
+      };
     }
 
     const edits = (decision.edits ?? []).slice(0, this.maxEditsPerAttempt);
@@ -125,19 +148,19 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
     const changed: string[] = [];
     for (const edit of edits) {
       const result = await this.applyEditWithRecovery(context, edit);
-      if (result.status === 'not-completed') return result;
+      if (result.status === 'not-completed') return { ...result, canContinue: true };
       if (result.changed) changed.push(edit.path);
     }
 
-    if (changed.length === 0) return { status: 'not-completed', reason: 'Attempt produced no project changes.' };
+    if (changed.length === 0) return { status: 'not-completed', reason: 'Action produced no project changes.', canContinue: true };
     return {
       status: 'completed',
-      summary: decision.summary ?? `Changed ${changed.join(', ')}`,
+      data: { summary: decision.summary ?? `Changed ${changed.join(', ')}` },
     };
   }
 
   private async applyEditWithRecovery(
-    context: WorkerAttemptContext,
+    context: ChangeCodeActionInput,
     edit: { path: string; instruction: string },
   ): Promise<{ status: 'completed'; changed: boolean } | { status: 'not-completed'; reason: string }> {
     let lastError: string | undefined;
@@ -207,7 +230,7 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
     };
   }
 
-  private candidateFiles(context: WorkerAttemptContext): string[] {
+  private candidateFiles(context: ChangeCodeActionInput): string[] {
     const paths = new Set<string>();
     for (const source of context.knowledge.flatMap((item) => item.sources)) paths.add(source.path);
     for (const file of this.project.candidateFiles(`${context.task.description}\n${context.step.goal}`, 16)) paths.add(file.path);

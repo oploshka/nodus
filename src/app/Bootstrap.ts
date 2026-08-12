@@ -8,7 +8,8 @@ import { BoundedModelResearchResolver } from '@engine/Research/BoundedModelResea
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import { ModelProjectChangeAttempt } from '@engine/Worker/Attempt/ModelProjectChangeAttempt.js';
+import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
+import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import { DocumentationWorker } from '@engine/Worker/DocumentationWorker.js';
 import { AgentWorker } from '@engine/Worker/AgentWorker.js';
@@ -57,25 +58,27 @@ export class Bootstrap {
       logger,
     );
 
+    const researchAction = new ResearchAction(research);
+
     const codeWorker = new CodeWorker(
-      new ModelProjectChangeAttempt(project, model, logger, {
+      new ChangeCodeAction(project, model, logger, {
         purpose: 'Implement the requested software/project behavior change.',
         guidance: 'Prefer existing project APIs and conventions. Change source code only when required by the task.',
         language,
       }),
-      research,
+      researchAction,
       logger,
       configuration.runtime?.maxWorkerAttempts,
       configuration.runtime?.maxResearchRequests,
     );
 
     const documentationWorker = new DocumentationWorker(
-      new ModelProjectChangeAttempt(project, model, logger, {
+      new ChangeCodeAction(project, model, logger, {
         purpose: 'Implement the requested human-facing documentation change.',
         guidance: 'Prefer documentation files and explanatory text. Do not modify runtime code unless the task explicitly requires it.',
         language,
       }),
-      research,
+      researchAction,
       logger,
       configuration.runtime?.maxWorkerAttempts,
       configuration.runtime?.maxResearchRequests,

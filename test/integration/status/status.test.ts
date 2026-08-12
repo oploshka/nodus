@@ -26,7 +26,8 @@ describe('/status vertical slice', () => {
       const log = await readFile(result.logger.path, 'utf8');
       expect(log).toContain('test.scenario.start');
       expect(log).toContain('engine.worker.selected');
-      expect(log).toContain('worker.attempt');
+      expect(log).toContain('worker.action.start');
+      expect(log).toContain('worker.action.finish');
       expect(log).toContain('research.miss');
       expect(log).toContain('test.scenario.finish');
     } finally {

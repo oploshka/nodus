@@ -10,6 +10,7 @@ export type WorkerResult =
 export interface Worker {
   readonly id: string;
   readonly description: string;
+  readonly actions?: ReadonlyArray<{ id: string; description: string }>;
 
   canHandle(step: PlanStep): boolean;
   run(task: Task, step: PlanStep): Promise<WorkerResult>;

@@ -1,3 +1,5 @@
+import type { ModelRunSettings } from '@model/Request/ModelRun.js';
+
 export interface ResearchSource {
   path: string;
   hash: string;
@@ -18,6 +20,11 @@ export interface ResolvedResearch {
   reason?: string;
 }
 
+export interface ResearchResolveOptions {
+  guidance?: string;
+  settings?: ModelRunSettings;
+}
+
 export interface ResearchResolver {
-  resolve(question: string): Promise<ResolvedResearch>;
+  resolve(question: string, options?: ResearchResolveOptions): Promise<ResolvedResearch>;
 }
