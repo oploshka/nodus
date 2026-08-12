@@ -56,3 +56,10 @@ it directly, so an available/current scan affects runtime Research behavior.
 
 In raw multiline mode, `Ctrl+C` cancels a non-empty input. Pressing `Ctrl+C` at an
 empty prompt exits the CLI. `/exit` remains available as an explicit command.
+
+
+## Console output
+
+The console is a human progress view, not the diagnostic log. Component labels are kept in English (`[Engine]`, `[Planner]`, `[Model]`, `[Research]`, `[Worker]`) and are colored when the terminal supports ANSI colors. The explanatory text follows `language.response`.
+
+`[Model] request ...` is printed before the model call starts so a long inference does not look like a frozen CLI. Full request/response payloads remain in the timestamped `.nodus/logs/*-nodus.log` file.

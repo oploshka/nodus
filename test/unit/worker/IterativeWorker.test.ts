@@ -44,6 +44,27 @@ describe('Iterative Worker lifecycle', () => {
     expect(attempt.knowledgeSizes).toEqual([0, 1]);
   });
 
+
+  it('does not call Research when the first execution attempt is already sufficient', async () => {
+    const attempt = new SequenceAttempt([
+      { status: 'completed', summary: 'done without research' },
+    ]);
+    let researchCalls = 0;
+    const worker = new CodeWorker(
+      attempt,
+      { async ask(question: string) { researchCalls += 1; return answer(question); } },
+      new NullLogger(),
+      3,
+      2,
+    );
+
+    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [] });
+
+    expect(result.status).toBe('completed');
+    expect(researchCalls).toBe(0);
+    expect(attempt.knowledgeSizes).toEqual([0]);
+  });
+
   it('returns not-completed when its local research budget is exhausted', async () => {
     const attempt = new SequenceAttempt([
       { status: 'missing-information', questions: ['q1', 'q2'] },

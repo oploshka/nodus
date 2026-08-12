@@ -5,13 +5,27 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 
 interface ConsolePlanStep { id?: string; goal?: string }
 
+type ConsoleColor = 'gray' | 'cyan' | 'magenta' | 'blue' | 'yellow' | 'green' | 'red';
+
+const ANSI: Record<ConsoleColor, string> = {
+  gray: '\x1b[90m',
+  cyan: '\x1b[36m',
+  magenta: '\x1b[35m',
+  blue: '\x1b[34m',
+  yellow: '\x1b[33m',
+  green: '\x1b[32m',
+  red: '\x1b[31m',
+};
+const RESET = '\x1b[0m';
+
 /**
- * Human-facing console logger. The file logger remains the diagnostic source of truth;
- * this logger deliberately translates low-level runtime events into a compact progress view.
+ * Human-facing console logger. FileLogger remains the diagnostic source of truth;
+ * the console shows compact progress and intentionally hides transport payloads.
  */
 export class ConsoleLogger implements EngineLogger {
   private readonly plans = new Map<string, ConsolePlanStep[]>();
   private readonly russian: boolean;
+  private readonly colorsEnabled = Boolean(process.stdout.isTTY) && !('NO_COLOR' in process.env);
 
   public constructor(responseLanguage = 'en') {
     this.russian = responseLanguage.toLowerCase().startsWith('ru');
@@ -29,22 +43,33 @@ export class ConsoleLogger implements EngineLogger {
     else console.log(text);
   }
 
+  private label(name: string, color: ConsoleColor): string {
+    const label = `[${name}]`;
+    return this.colorsEnabled ? `${ANSI[color]}${label}${RESET}` : label;
+  }
+
   private format(event: string, data: unknown): string {
     const record = isRecord(data) ? data : {};
+    const app = this.label('App', 'gray');
+    const engine = this.label('Engine', 'cyan');
+    const planner = this.label('Planner', 'magenta');
+    const model = this.label('Model', 'blue');
+    const research = this.label('Research', 'yellow');
+    const worker = this.label('Worker', 'green');
 
     if (event === 'app.startup') {
       const project = stringValue(record.projectId);
       const logPath = stringValue(record.logPath);
       return this.russian
-        ? `[Приложение] Проект: ${project}${logPath ? `\n  Лог: ${logPath}` : ''}`
-        : `[App] Project: ${project}${logPath ? `\n  Log: ${logPath}` : ''}`;
+        ? `${app} Проект: ${project}${logPath ? `\n  Лог: ${logPath}` : ''}`
+        : `${app} Project: ${project}${logPath ? `\n  Log: ${logPath}` : ''}`;
     }
 
-    if (event === 'app.exit') return this.russian ? '[Приложение] Завершено.' : '[App] Exited.';
+    if (event === 'app.exit') return this.russian ? `${app} Завершено.` : `${app} Exited.`;
 
     if (event === 'engine.task.start') {
       const description = stringValue(record.description);
-      return this.russian ? `\n[Движок] Новая задача\n  ${description}` : `\n[Engine] New task\n  ${description}`;
+      return this.russian ? `\n${engine} Новая задача\n  ${description}` : `\n${engine} New task\n  ${description}`;
     }
 
     if (event === 'engine.plan') {
@@ -54,7 +79,7 @@ export class ConsoleLogger implements EngineLogger {
         goal: stringValue(step.goal),
       })) : [];
       if (taskId) this.plans.set(taskId, steps);
-      const title = this.russian ? `[Планировщик] План: ${steps.length} шаг(а)` : `[Planner] Plan: ${steps.length} step(s)`;
+      const title = this.russian ? `${planner} План: ${steps.length} шаг(а)` : `${planner} Plan: ${steps.length} step(s)`;
       return [title, ...steps.map((step, index) => `  ${index + 1}. ${step.goal}`)].join('\n');
     }
 
@@ -64,41 +89,41 @@ export class ConsoleLogger implements EngineLogger {
       const stepId = stringValue(step.id);
       const goal = stringValue(step.goal);
       const position = this.stepPosition(taskId, stepId);
-      return this.russian
-        ? `\n[Движок] Шаг ${position}: ${goal}`
-        : `\n[Engine] Step ${position}: ${goal}`;
+      return this.russian ? `\n${engine} Шаг ${position}: ${goal}` : `\n${engine} Step ${position}: ${goal}`;
     }
 
     if (event === 'engine.worker.selected') {
-      const worker = stringValue(record.workerId);
-      return this.russian ? `  [Движок] Исполнитель: ${worker}` : `  [Engine] Worker: ${worker}`;
+      const workerId = stringValue(record.workerId);
+      return this.russian ? `${engine} Исполнитель: ${workerId}` : `${engine} Worker: ${workerId}`;
     }
 
     if (event === 'worker.start') {
-      const worker = stringValue(record.workerId);
+      const workerId = stringValue(record.workerId);
       const known = numberValue(record.knownAnswers);
       const suffix = known > 0 ? (this.russian ? ` · знаний: ${known}` : ` · known answers: ${known}`) : '';
-      return this.russian ? `  [Worker:${worker}] Начало${suffix}` : `  [Worker:${worker}] Start${suffix}`;
+      return this.russian ? `${worker} ${workerId}: начало${suffix}` : `${worker} ${workerId}: start${suffix}`;
     }
 
     if (event === 'worker.attempt') {
-      const worker = stringValue(record.workerId);
+      const workerId = stringValue(record.workerId);
       const attempt = numberValue(record.attempt);
       const result = isRecord(record.result) ? record.result : {};
       const status = stringValue(result.status);
       const questions = Array.isArray(result.questions) ? result.questions.map(String) : [];
-      let headline = this.russian ? `  [Worker:${worker}] Попытка ${attempt}: ${humanStatus(status, true)}` : `  [Worker:${worker}] Attempt ${attempt}: ${humanStatus(status, false)}`;
+      let headline = this.russian
+        ? `${worker} ${workerId}: попытка ${attempt} · ${humanStatus(status, true)}`
+        : `${worker} ${workerId}: attempt ${attempt} · ${humanStatus(status, false)}`;
       if (questions.length > 0) headline += ` (${questions.length})`;
-      return [headline, ...questions.map((question) => `    - ${question}`)].join('\n');
+      return [headline, ...questions.map((question) => `  - ${question}`)].join('\n');
     }
 
     if (event === 'worker.attempt.error') {
-      const worker = stringValue(record.workerId);
+      const workerId = stringValue(record.workerId);
       const attempt = numberValue(record.attempt);
       const error = stringValue(record.error);
       return this.russian
-        ? `  [Worker:${worker}] Попытка ${attempt}: ошибка · ${error}`
-        : `  [Worker:${worker}] Attempt ${attempt}: error · ${error}`;
+        ? `${worker} ${workerId}: попытка ${attempt} · ошибка · ${error}`
+        : `${worker} ${workerId}: attempt ${attempt} · error · ${error}`;
     }
 
     if (event === 'worker.edit.error') {
@@ -106,31 +131,44 @@ export class ConsoleLogger implements EngineLogger {
       const attempt = numberValue(record.editAttempt);
       const max = numberValue(record.maxEditAttempts);
       return this.russian
-        ? `  [Worker] Правка ${path}: diff не применился (${attempt}/${max}), пробую восстановить`
-        : `  [Worker] Edit ${path}: diff failed (${attempt}/${max}), trying recovery`;
+        ? `${worker} edit: ${path} · diff не применился (${attempt}/${max}), пробую восстановить`
+        : `${worker} edit: ${path} · diff failed (${attempt}/${max}), trying recovery`;
     }
 
     if (event === 'worker.edit.recovered') {
       const path = stringValue(record.path);
       const attempt = numberValue(record.editAttempt);
       return this.russian
-        ? `  [Worker] Правка ${path}: восстановлена на попытке ${attempt}`
-        : `  [Worker] Edit ${path}: recovered on attempt ${attempt}`;
+        ? `${worker} edit: ${path} · восстановлена на попытке ${attempt}`
+        : `${worker} edit: ${path} · recovered on attempt ${attempt}`;
+    }
+
+    if (event === 'research.hit') {
+      const question = stringValue(record.question);
+      return this.russian ? `${research} Кеш: ${question}` : `${research} Cache hit: ${question}`;
     }
 
     if (event === 'research.miss') {
       const question = stringValue(record.question);
-      return this.russian ? `    [Research] Ищу: ${question}` : `    [Research] Searching: ${question}`;
+      return this.russian ? `${research} Ищу: ${question}` : `${research} Searching: ${question}`;
     }
 
     if (event === 'research.resolved') {
       const sources = Array.isArray(record.sources) ? record.sources.length : 0;
-      return this.russian ? `    [Research] Ответ найден · источников: ${sources}` : `    [Research] Resolved · sources: ${sources}`;
+      return this.russian ? `${research} Ответ найден · источников: ${sources}` : `${research} Resolved · sources: ${sources}`;
     }
 
     if (event === 'research.not-found') {
       const question = stringValue(record.question);
-      return this.russian ? `    [Research] Не найдено: ${question}` : `    [Research] Not found: ${question}`;
+      return this.russian ? `${research} Не найдено: ${question}` : `${research} Not found: ${question}`;
+    }
+
+    if (event === 'model.run.start') {
+      const kind = stringValue(record.kind);
+      const path = stringValue(record.path);
+      const message = compactText(stringValue(record.message), 120);
+      if (kind === 'diff') return `${model} diff request${path ? `: ${path}` : ''}`;
+      return `${model} request${message ? `: ${message}` : ''}`;
     }
 
     if (event === 'model.run' || event === 'model.run.error') {
@@ -139,7 +177,7 @@ export class ConsoleLogger implements EngineLogger {
       const tokens = typeof meta.totalTokens === 'number' ? `${meta.totalTokens} tok` : undefined;
       const summary = summarizeModelData(record.data, this.russian);
       const parts = [summary, seconds, tokens].filter(Boolean);
-      return `    [ИИ] ${parts.join(' · ') || (this.russian ? 'вызов модели' : 'model call')}`;
+      return `${model} ${parts.join(' · ') || (this.russian ? 'ответ получен' : 'response received')}`;
     }
 
     if (event === 'worker.agent.finish') {
@@ -147,8 +185,8 @@ export class ConsoleLogger implements EngineLogger {
       const meta = isRecord(record.meta) ? record.meta : {};
       const rounds = numberValue(meta.rounds);
       return this.russian
-        ? `  [Worker:agent] ${humanStatus(status, true)}${rounds ? ` · раундов: ${rounds}` : ''}`
-        : `  [Worker:agent] ${humanStatus(status, false)}${rounds ? ` · rounds: ${rounds}` : ''}`;
+        ? `${worker} agent: ${humanStatus(status, true)}${rounds ? ` · раундов: ${rounds}` : ''}`
+        : `${worker} agent: ${humanStatus(status, false)}${rounds ? ` · rounds: ${rounds}` : ''}`;
     }
 
     if (event === 'engine.step.finish') {
@@ -156,25 +194,23 @@ export class ConsoleLogger implements EngineLogger {
       const stepId = stringValue(record.stepId);
       const position = this.stepPosition(taskId, stepId);
       const status = stringValue(record.status);
-      return this.russian
-        ? `[Движок] Шаг ${position}: ${humanStatus(status, true)}`
-        : `[Engine] Step ${position}: ${humanStatus(status, false)}`;
+      return this.russian ? `${engine} Шаг ${position}: ${humanStatus(status, true)}` : `${engine} Step ${position}: ${humanStatus(status, false)}`;
     }
 
     if (event === 'engine.task.finish') {
       const taskId = stringValue(record.taskId);
       if (taskId) this.plans.delete(taskId);
       const status = stringValue(record.status);
-      return this.russian ? `[Движок] Итог: ${humanStatus(status, true)}` : `[Engine] Result: ${humanStatus(status, false)}`;
+      return this.russian ? `${engine} Итог: ${humanStatus(status, true)}` : `${engine} Result: ${humanStatus(status, false)}`;
     }
 
-    // Detailed samples and transport diagnostics belong in FileLogger, not in the human console.
     if (event === 'engine.execution.sample') return '';
-
     if (event.startsWith('project.') || event.startsWith('research.cache')) return '';
+    if (event.startsWith('test.')) return '';
 
     const details = data === undefined ? '' : ` ${inspect(data, { depth: 3, maxArrayLength: 6, maxStringLength: 300, breakLength: 140, compact: true })}`;
-    return `[${event}]${details}`;
+    const fallback = levelLabel(event);
+    return `${fallback}${details}`;
   }
 
   private stepPosition(taskId: string, stepId: string): string {
@@ -216,39 +252,37 @@ export class NullLogger implements EngineLogger {
   public error(): void {}
 }
 
-function summarizeModelData(value: unknown, russian: boolean): string {
-  if (!isRecord(value)) return russian ? 'ответ модели' : 'model response';
-  if (Array.isArray(value.steps)) return russian ? `план: ${value.steps.length} шаг(а)` : `plan: ${value.steps.length} step(s)`;
-  if (typeof value.optionId === 'string') return russian ? `выбор: ${value.optionId}` : `selected: ${value.optionId}`;
-  if (typeof value.outcome === 'string') {
-    const questions = Array.isArray(value.questions) ? value.questions.length : 0;
-    const edits = Array.isArray(value.edits) ? value.edits.length : 0;
-    if (value.outcome === 'missing-information') return russian ? `нужны данные: ${questions}` : `missing information: ${questions}`;
-    if (value.outcome === 'ready') return russian ? `изменения готовы: ${edits}` : `edits ready: ${edits}`;
-    return russian ? `результат: ${value.outcome}` : `outcome: ${value.outcome}`;
-  }
-  if (typeof value.path === 'string' && Array.isArray(value.hunks)) return russian ? `diff: ${value.path} · hunks: ${value.hunks.length}` : `diff: ${value.path} · hunks: ${value.hunks.length}`;
-  return russian ? 'ответ модели' : 'model response';
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
+function stringValue(value: unknown): string { return typeof value === 'string' ? value : value == null ? '' : String(value); }
+function numberValue(value: unknown): number { return typeof value === 'number' ? value : 0; }
+function compactText(value: string, max: number): string {
+  const singleLine = value.replace(/\s+/g, ' ').trim();
+  return singleLine.length <= max ? singleLine : `${singleLine.slice(0, max - 1)}…`;
+}
+function levelLabel(event: string): string { return `[${event}]`; }
 
 function humanStatus(status: string, russian: boolean): string {
-  const ru: Record<string, string> = {
-    completed: 'завершено',
-    'not-completed': 'не завершено',
-    failed: 'ошибка',
-    'missing-information': 'не хватает информации',
-    ready: 'готово к выполнению',
-  };
-  const en: Record<string, string> = {
-    completed: 'completed',
-    'not-completed': 'not completed',
-    failed: 'failed',
-    'missing-information': 'missing information',
-    ready: 'ready',
-  };
-  return (russian ? ru : en)[status] ?? status;
+  if (!russian) return status || 'unknown';
+  if (status === 'completed') return 'завершено';
+  if (status === 'not-completed') return 'не завершено';
+  if (status === 'failed') return 'ошибка';
+  if (status === 'missing-information') return 'не хватает информации';
+  if (status === 'ready') return 'готово';
+  return status || 'неизвестно';
 }
 
-function stringValue(value: unknown): string { return typeof value === 'string' ? value : ''; }
-function numberValue(value: unknown): number { return typeof value === 'number' ? value : 0; }
-function isRecord(value: unknown): value is Record<string, any> { return typeof value === 'object' && value !== null; }
+function summarizeModelData(data: unknown, russian: boolean): string {
+  if (!isRecord(data)) return russian ? 'ответ модели' : 'model response';
+  if (Array.isArray(data.steps)) return russian ? `план: ${data.steps.length} шаг(а)` : `plan: ${data.steps.length} step(s)`;
+  if (typeof data.optionId === 'string') return russian ? `выбор: ${data.optionId}` : `selected: ${data.optionId}`;
+  if (typeof data.outcome === 'string') {
+    if (data.outcome === 'missing-information' && Array.isArray(data.questions)) return russian ? `нужны данные: ${data.questions.length}` : `missing information: ${data.questions.length}`;
+    if (data.outcome === 'ready' && Array.isArray(data.edits)) return russian ? `изменения готовы: ${data.edits.length}` : `edits ready: ${data.edits.length}`;
+    return `outcome: ${data.outcome}`;
+  }
+  if (typeof data.path === 'string' && Array.isArray(data.hunks)) return `diff: ${data.path} · hunks: ${data.hunks.length}`;
+  if (typeof data.text === 'string') return russian ? 'ответ модели' : 'model answer';
+  return russian ? 'ответ модели' : 'model response';
+}

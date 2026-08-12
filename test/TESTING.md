@@ -93,3 +93,12 @@ Integration scenario не должен парсить raw model output само�
 ## Model contract tests
 
 `test/unit/model` отдельно фиксирует boundary `ModelRunner` и common response schema. Это важно: format handler, schema validation и `ModelCaller` должны ломаться как unit regression до того, как ошибка попадёт в model/integration scenario.
+
+
+## Runtime contract scenario
+
+`test/integration/runtime/max-plan-steps.test.ts` is the current scripted happy-path for the new Engine/Worker lifecycle. It intentionally feeds each model boundary a known response and verifies the full sequence:
+
+`Planner -> Determine -> Worker attempt -> Research -> Worker retry -> multi-file edit -> completed`.
+
+The purpose is not to test model intelligence. It pins the response contracts, routing order and hand-off boundaries so architecture changes fail close to the broken signature instead of only during a live Kobold run.

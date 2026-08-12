@@ -51,3 +51,8 @@ This matters because earlier edits may already have changed the project. Re-runn
 There is intentionally no `DefaultWorker`. Workers are Engine options; `Determine` chooses the best option for the current `PlanStep`.
 
 `AgentWorker` is intentionally different from `IterativeWorker`: it gives a model bounded direct access to project tools and owns an agent loop. This keeps the raw-agent strategy available without turning Engine itself into an agent.
+
+
+## Research boundary
+
+A Worker always attempts execution first. Research is invoked only when the attempt returns `missing-information` with concrete blocking questions. `Research.ask(question)` first checks its cache; cached answers are reusable only while hashes of all source files still match. A stale entry is discarded and resolved again. The Worker does not proactively research before its first attempt.

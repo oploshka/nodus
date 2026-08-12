@@ -22,6 +22,11 @@ export async function callModel<TOutput extends object>(
   logger: ModelCallLogger,
   input: ModelRunInput<TOutput>,
 ): Promise<TOutput> {
+  logger.info('model.run.start', {
+    kind: 'model',
+    message: input.request.message,
+    responseFormat: input.response.format,
+  });
   try {
     const result = await runner.run<TOutput>(input);
     logger.info('model.run', result);
@@ -37,6 +42,11 @@ export async function callDiffFile(
   logger: ModelCallLogger,
   input: DiffFileRunInput,
 ): Promise<UnifiedDiffModelResponse> {
+  logger.info('model.run.start', {
+    kind: 'diff',
+    path: input.path,
+    message: input.request.message,
+  });
   try {
     const result = await runner.diffFile(input);
     logger.info('model.run', result);

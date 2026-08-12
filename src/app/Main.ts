@@ -41,7 +41,6 @@ async function main(args: string[]): Promise<void> {
 
   const engine = await Bootstrap.createEngine(configuration, { logger, project });
 
-  console.log(`Log: ${logPath}`);
   await runCli({
     engine,
     projectId: project.id,
