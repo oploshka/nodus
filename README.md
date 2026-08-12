@@ -114,3 +114,45 @@ ExecutionState
 - сложные multi-file edits.
 
 Это намеренно: сначала проверяется механика выполнения одного semantic PlanStep.
+
+## Testing
+
+Тесты переведены на Vitest как npm dev dependency. Vitest отвечает за test runner, assertions, filtering и проекты; Nodus-specific сценарии остаются в собственном test harness.
+
+```text
+test/
+  framework/      Nodus-specific test harness
+  unit/           быстрые локальные тесты
+  integration/    deterministic vertical slices со scripted model
+  model/          реальные model-сценарии, последовательно
+  e2e/            полный запуск через app/CLI/config
+  logs/           единый trace-log каждого scenario run
+```
+
+`test/framework` содержит:
+
+- `Scenario` — описание задачи, fixture-файлов и scripted model responses;
+- `ScenarioRunner` — собирает временный проект через обычный `Bootstrap` и запускает `Engine.runTask()`;
+- `TestProject` — временный project fixture;
+- `QueueModelAdapter` / `LoggedModelAdapter` — deterministic и traced model harness;
+- `TestFileLogger` — подменяемый Logger, который пишет весь trace одного scenario в один timestamped log-файл.
+
+Пример имени лога:
+
+```text
+test/logs/2026-08-12T12-34-56-123Z_status.log
+```
+
+В этот же файл попадают обычные runtime events (`engine.*`, `worker.*`, `research.*`) и model request/response от test harness. Отдельной runtime-сущности `Trace` нет.
+
+Vitest projects:
+
+```text
+npm test
+npm run test:unit
+npm run test:integration
+npm run test:model
+npm run test:e2e
+```
+
+`model` и `e2e` настроены без file-level parallelism; реальные model tests не должны конкурировать за локальный model endpoint.

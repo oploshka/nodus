@@ -20,11 +20,14 @@ export class Engine {
     const task = new Task(description, this.project.id);
     this.logger.info('engine.task.start', { taskId: task.id, description });
     const plan = await this.planner.plan(task);
+    this.logger.info('engine.plan', { taskId: task.id, steps: plan.steps });
     const run = new TaskRun(task, plan);
 
     for (const step of plan.steps) {
+      this.logger.info('engine.step.start', { taskId: task.id, step });
       const result = await this.worker.execute(task, step);
       run.add(step.id, result);
+      this.logger.info('engine.step.finish', { taskId: task.id, stepId: step.id, status: result.status });
       if (result.status === 'failed') break;
     }
 

@@ -23,3 +23,9 @@ Hash invalidation работает. Но resolver сейчас прикрепл�
 ## 5. Planner research
 
 Planner пока вообще не исследует проект. Это сознательно. Если появится задача, которую нельзя разумно декомпозировать без одного-двух фактов, нужен отдельный bounded planning-research contract, а не доступ Planner к общему research loop.
+
+## 6. Test framework
+
+Test runner теперь внешний (`vitest`), а `test/framework` содержит только Nodus-specific harness. Это намеренно: framework не дублирует `test/describe/expect/mock`, а отвечает за Project fixture, scenario setup, model harness и единый execution log.
+
+Trace не является отдельным storage. В тестах обычный Logger подменяется `TestFileLogger`, а model adapter оборачивается/заменяется harness-адаптером, поэтому один timestamped `.log` содержит runtime events и model payloads по порядку.

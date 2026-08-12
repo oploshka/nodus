@@ -26,12 +26,20 @@ export class DefaultWorker {
 
   public async execute(task: Task, step: PlanStep): Promise<WorkerResult> {
     const state = createExecutionState(task, step);
+    this.logger.info('worker.start', { taskId: task.id, stepId: step.id, actions: [...this.actions.keys()] });
 
     while (state.iteration < this.maxIterations) {
       state.iteration += 1;
       const decision = await this.planner.next(state, [...this.actions.values()]);
-      if (decision.type === 'completed') return { status: 'completed', summary: decision.summary, state };
-      if (decision.type === 'failed') return { status: 'failed', error: decision.reason, state };
+      this.logger.info('worker.decision', { stepId: step.id, iteration: state.iteration, decision });
+      if (decision.type === 'completed') {
+        this.logger.info('worker.finish', { stepId: step.id, status: 'completed', summary: decision.summary });
+        return { status: 'completed', summary: decision.summary, state };
+      }
+      if (decision.type === 'failed') {
+        this.logger.warn('worker.finish', { stepId: step.id, status: 'failed', reason: decision.reason });
+        return { status: 'failed', error: decision.reason, state };
+      }
 
       const action = this.actions.get(decision.actionId);
       if (!action) return { status: 'failed', error: `Unknown execution action: ${decision.actionId}`, state };
@@ -49,9 +57,15 @@ export class DefaultWorker {
         result = { status: 'failed' as const, summary: error instanceof Error ? error.message : String(error), fatal: false };
       }
       state.history.push({ actionId: action.id, input: decision.input, result });
-      if (result.status === 'failed' && result.fatal) return { status: 'failed', error: result.summary, state };
+      this.logger.info('worker.action.result', { stepId: step.id, action: action.id, iteration: state.iteration, result });
+      if (result.status === 'failed' && result.fatal) {
+        this.logger.warn('worker.finish', { stepId: step.id, status: 'failed', reason: result.summary });
+        return { status: 'failed', error: result.summary, state };
+      }
     }
 
-    return { status: 'failed', error: `Worker iteration limit exceeded (${this.maxIterations})`, state };
+    const error = `Worker iteration limit exceeded (${this.maxIterations})`;
+    this.logger.warn('worker.finish', { stepId: step.id, status: 'failed', reason: error });
+    return { status: 'failed', error, state };
   }
 }

@@ -31,6 +31,7 @@ export class Research {
       createdAt: new Date().toISOString(),
     };
     await this.store.put(answer);
+    this.logger.info('research.resolved', { question, sources: answer.sources.map((source) => source.path) });
     return answer;
   }
 }
