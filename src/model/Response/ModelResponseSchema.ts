@@ -96,15 +96,14 @@ function describeField(name: string, field: ModelResponseFieldInfo, depth: numbe
     ].join('\n');
   }
   if (field.type === 'array') {
-    return `${indent}- ${name}: array of ${fieldTypeLabel(field.items)}${optional}${description}`;
+    return [
+      `${indent}- ${name}: array${optional}${description}`,
+      describeField('item', field.items, depth + 1),
+    ].join('\n');
   }
   return `${indent}- ${name}: ${field.type}${optional}${description}`;
 }
 
-function fieldTypeLabel(field: ModelResponseFieldInfo): string {
-  if (field.type === 'option') return `option(${field.optionList.map((item) => item.id).join('|')})`;
-  return field.type;
-}
 
 function decodeField(field: ModelResponseFieldInfo, value: unknown, path: string): unknown {
   if (field.type === 'any') return value;

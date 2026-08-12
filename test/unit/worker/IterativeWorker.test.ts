@@ -19,7 +19,7 @@ class SequenceAttempt implements WorkerAttempt {
 }
 
 function answer(question: string): ResearchAnswer {
-  return { question, answer: `answer:${question}`, sources: [], createdAt: new Date(0).toISOString() };
+  return { question, status: 'resolved', answer: `answer:${question}`, sources: [], createdAt: new Date(0).toISOString() };
 }
 
 describe('Iterative Worker lifecycle', () => {

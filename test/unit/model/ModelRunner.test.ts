@@ -88,6 +88,25 @@ describe('ModelRunner', () => {
     expect(logged[0]).toHaveProperty('meta');
   });
 
+
+  it('ModelCaller logs the model exchange when response schema validation fails', async () => {
+    const adapter = new SingleResponseAdapter('{"unexpected":true}');
+    const runner = new ModelRunner(adapter, { provider: 'openai-compatible', endpoint: 'unused', model: 'test' });
+    const events: Array<{ event: string; value: unknown }> = [];
+
+    await expect(callModel(runner, {
+      info(event, value) { events.push({ event, value }); },
+    }, {
+      request: { message: 'Finish.', format: ModelRequestFormat.Text },
+      response: { format: ModelResponseFormat.Json, schema: decisionSchema },
+    })).rejects.toThrow('Required field is missing');
+
+    expect(events).toHaveLength(1);
+    expect(events[0].event).toBe('model.run.error');
+    expect(events[0].value).toHaveProperty('exchange.response.0.message', '{"unexpected":true}');
+    expect(events[0].value).toHaveProperty('meta.model', 'test');
+  });
+
   it('diffFile stays a thin specialized facade over the same runner contract', async () => {
     const adapter = new SingleResponseAdapter([
       '--- a/src/A.ts',

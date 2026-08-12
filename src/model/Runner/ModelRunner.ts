@@ -17,8 +17,7 @@ export interface ModelExchangeMessage {
   message: string;
 }
 
-export interface ModelRunResult<TOutput extends object> {
-  data: TOutput;
+export interface ModelRunDiagnostic {
   exchange: {
     request: ModelExchangeMessage[];
     response: ModelExchangeMessage[];
@@ -34,6 +33,12 @@ export interface ModelRunResult<TOutput extends object> {
     finishReason?: string;
   };
 }
+
+export interface ModelRunResult<TOutput extends object> extends ModelRunDiagnostic {
+  data: TOutput;
+}
+
+export type ModelRunError = Error & { modelRun?: ModelRunDiagnostic };
 
 export interface UnifiedDiffModelResponse {
   path: string;
@@ -98,11 +103,7 @@ export class ModelRunner {
     const startedAt = performance.now();
     const response = await this.adapter.complete(request);
     const durationMs = performance.now() - startedAt;
-    const wireValue = handler.parse(response.content);
-    const parsed = validateResponseSchema<TOutput>(input.response.schema, wireValue);
-
-    return {
-      data: parsed,
+    const modelRun: ModelRunDiagnostic = {
       exchange: {
         request: request.messages.map((message) => ({ role: message.role, message: message.content })),
         response: [{ role: 'assistant', message: response.content }],
@@ -118,6 +119,17 @@ export class ModelRunner {
         finishReason: response.finishReason,
       },
     };
+
+    try {
+      const wireValue = handler.parse(response.content);
+      const parsed = validateResponseSchema<TOutput>(input.response.schema, wireValue);
+      return { data: parsed, ...modelRun };
+    } catch (error) {
+      // Preserve the exact model exchange even when parsing/schema validation fails.
+      // ModelCaller can log it without coupling ModelRunner to a logger.
+      if (error instanceof Error) (error as ModelRunError).modelRun = modelRun;
+      throw error;
+    }
   }
 
   /**

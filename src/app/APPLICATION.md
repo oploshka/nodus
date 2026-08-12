@@ -22,3 +22,7 @@ The temporary `/scan` command remains app-level administration and is not part o
 ## Logging
 
 Concrete logger implementations live in `app/Logging`. Engine owns only the shared logging contract in `engine/Type`.
+## CLI input
+
+Interactive CLI input is multiline: `Enter` inserts a new line, while `Ctrl+Enter` or `Ctrl+D` submits the buffered task. `Ctrl+C` cancels the current input. After `Engine.run()` returns, CLI always prints an explicit terminal task status (`completed`, `not-completed`, or `failed`) so a blinking prompt is not confused with active execution.
+

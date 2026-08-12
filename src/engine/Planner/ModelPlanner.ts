@@ -10,9 +10,8 @@ import type { Planner } from '@engine/Planner/Planner.js';
 
 interface PlannerModelResponse {
   steps: Array<{
-    id: string;
     goal: string;
-    constraints: string[];
+    constraints?: string[];
     knowledgeImpact?: string[];
   }>;
 }
@@ -26,10 +25,19 @@ const plannerSchema: ModelResponseSchema = {
       items: {
         type: 'object',
         fields: {
-          id: { type: 'string', description: 'Stable short step id.' },
           goal: { type: 'string', description: 'Outcome this step must achieve.' },
-          constraints: { type: 'array', items: { type: 'string' }, description: 'User constraints relevant to this step.' },
-          knowledgeImpact: { type: 'array', items: { type: 'string' }, optional: true, description: 'Knowledge that may become stale or change after this step.' },
+          constraints: {
+            type: 'array',
+            items: { type: 'string' },
+            optional: true,
+            description: 'User constraints relevant to this step.',
+          },
+          knowledgeImpact: {
+            type: 'array',
+            items: { type: 'string' },
+            optional: true,
+            description: 'Knowledge that may become stale or change after this step.',
+          },
         },
       },
     },
@@ -45,15 +53,18 @@ export class ModelPlanner implements Planner {
   public async plan(task: Task): Promise<Plan> {
     const response = await callModel<PlannerModelResponse>(this.model, this.logger, {
       request: {
-        message: 'Break this user task into a small semantic plan.',
+        message: 'Split this user request into the smallest useful set of executable semantic tasks.',
         data: task.description,
         format: ModelRequestFormat.Text,
         guidance: [
           'You are the high-level Planner inside Nodus.',
-          'Break the user task into semantic work steps only.',
+          'Create only steps that directly contribute to the user-requested outcome.',
+          'Do not invent analysis, documentation, safety limits, configuration semantics, or other requirements the user did not ask for.',
+          'Do not add research/understand/discover steps merely because implementation details are unknown; the Worker resolves missing project knowledge while executing.',
           'Do NOT solve implementation details, discover APIs, name files unless the user named them, or prescribe patch mechanics.',
-          'A step describes an outcome, not a tool action.',
-          'Keep the plan small. Preserve user constraints.',
+          'Each step must be something a Worker can try to complete, not a question or preparatory investigation.',
+          'Prefer one step when the request is one coherent change. Split only when parts are meaningfully independent or ordered.',
+          'Preserve explicit user constraints and nothing more.',
         ].join('\n'),
       },
       response: { format: ModelResponseFormat.Json, schema: plannerSchema },
@@ -61,10 +72,11 @@ export class ModelPlanner implements Planner {
     });
 
     return {
-      steps: response.steps.slice(0, 8).map((step) => ({
-        id: step.id,
+      steps: response.steps.slice(0, 8).map((step, index) => ({
+        // Step identity belongs to Nodus runtime, not to the model response.
+        id: `step-${index + 1}`,
         goal: step.goal,
-        constraints: step.constraints,
+        constraints: step.constraints ?? [],
         knowledgeImpact: step.knowledgeImpact,
       })),
     };

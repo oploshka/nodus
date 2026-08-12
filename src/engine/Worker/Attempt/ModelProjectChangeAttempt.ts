@@ -78,6 +78,7 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
           candidateFiles: candidates,
           knowledge: context.knowledge.map((item) => ({
             question: item.question,
+            status: item.status,
             answer: item.answer,
             sources: item.sources.map((source) => source.path),
           })),
@@ -86,8 +87,10 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
         guidance: [
           this.profile.guidance,
           'Start from execution: if the supplied information is sufficient, return the concrete edits immediately.',
-          'If safe execution requires project facts that are not supplied, do not guess. Return only specific bounded questions.',
-          'Do not ask broad questions such as "understand the project". Ask only facts needed for this task.',
+          'If safe execution requires project facts that are not supplied, do not guess. Return only the smallest set of specific bounded questions needed for the next execution attempt.',
+          'Return at most 3 questions. Prefer one precise question when it can unblock the task.',
+          'Do not ask documentation, policy, best-practice, or hypothetical questions unless the user task explicitly requires them.',
+          'Do not ask broad questions such as "understand the project". Ask only concrete project facts that block execution now.',
           'Keep edits minimal and preserve unrelated behavior.',
           'Do not perform validation; validation is a separate concern.',
         ].join('\n'),
@@ -105,7 +108,7 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
     }
 
     if (decision.outcome === 'missing-information') {
-      const questions = (decision.questions ?? []).map((question) => question.trim()).filter(Boolean).slice(0, 4);
+      const questions = (decision.questions ?? []).map((question) => question.trim()).filter(Boolean).slice(0, 3);
       if (questions.length === 0) throw new Error('Attempt reported missing information without concrete questions.');
       return { status: 'missing-information', questions, reason: decision.reason };
     }
@@ -125,7 +128,7 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
               task: context.task.description,
               step: context.step,
               instruction: edit.instruction,
-              knowledge: context.knowledge.map((item) => ({ question: item.question, answer: item.answer })),
+              knowledge: context.knowledge.map((item) => ({ question: item.question, status: item.status, answer: item.answer })),
               authoritativeSource: { path: edit.path, content: source },
             },
             format: ModelRequestFormat.Json,

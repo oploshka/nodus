@@ -24,7 +24,14 @@ export class BoundedModelResearchResolver implements ResearchResolver {
 
   public async resolve(question: string): Promise<ResolvedResearch> {
     const candidates = this.project.candidateFiles(question, this.maxFiles);
-    if (candidates.length === 0) throw new Error(`Research found no candidate files for: ${question}`);
+    if (candidates.length === 0) {
+      return {
+        status: 'not-found',
+        answer: 'No candidate project files were found for this question.',
+        sources: [],
+        reason: 'No candidate files matched the research question.',
+      };
+    }
 
     const sourceBlocks: string[] = [];
     const paths: string[] = [];
@@ -50,6 +57,6 @@ export class BoundedModelResearchResolver implements ResearchResolver {
       settings: { maxTokens: 2048 },
     });
 
-    return { answer: response.text, sources: paths };
+    return { status: 'resolved', answer: response.text, sources: paths };
   }
 }

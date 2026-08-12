@@ -20,12 +20,26 @@ export class Research {
 
     this.logger.info('research.miss', { question });
     const resolved = await this.resolver.resolve(question);
+    if (resolved.status === 'not-found') {
+      const answer: ResearchAnswer = {
+        question,
+        status: 'not-found',
+        answer: resolved.answer,
+        sources: [],
+        createdAt: new Date().toISOString(),
+      };
+      // Do not cache misses: a later project change/index refresh may make the same question resolvable.
+      this.logger.info('research.not-found', { question, reason: resolved.reason });
+      return answer;
+    }
+
     const sources = [];
     for (const path of Array.from(new Set(resolved.sources))) {
       sources.push({ path, hash: await this.project.hash(path) });
     }
     const answer: ResearchAnswer = {
       question,
+      status: 'resolved',
       answer: resolved.answer,
       sources,
       createdAt: new Date().toISOString(),

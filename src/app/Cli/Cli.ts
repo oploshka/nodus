@@ -1,6 +1,8 @@
+import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import type { Engine } from '@engine/Engine.js';
+import type { TaskRun } from '@engine/Task/TaskRun.js';
 
 export interface CliRuntime {
   engine: Engine;
@@ -9,30 +11,118 @@ export interface CliRuntime {
 }
 
 export async function runCli(runtime: CliRuntime): Promise<void> {
-  const readline = createInterface({ input, output });
-
   console.log(`Nodus 0.3 runtime spike. Project: ${runtime.projectId}`);
   console.log('Commands: /help /scan /exit');
+  console.log('Input: Enter = new line, Ctrl+Enter or Ctrl+D = submit, Ctrl+C = cancel input.');
 
-  try {
-    while (true) {
-      const value = (await readline.question('\n> ')).trim();
-      if (!value) continue;
-      if (value === '/exit') break;
-      if (value === '/help') {
-        console.log('/scan - refresh project index\n/exit - exit\nAny other input is sent to engine.run().');
-        continue;
-      }
-      if (value === '/scan') {
-        console.log(`Indexed ${await runtime.scanProject()} files.`);
-        continue;
-      }
-
-      const run = await runtime.engine.run(value);
-      const last = run.steps.at(-1)?.result;
-      console.log(last?.status === 'completed' ? last.summary : last?.reason ?? run.status);
+  while (true) {
+    const value = (await readCliInput()).trim();
+    if (!value) continue;
+    if (value === '/exit') break;
+    if (value === '/help') {
+      console.log('/scan - refresh project index\n/exit - exit\nAny other input is sent to engine.run().');
+      console.log('Enter = new line; Ctrl+Enter or Ctrl+D = submit; Ctrl+C = cancel current input.');
+      continue;
     }
-  } finally {
-    readline.close();
+    if (value === '/scan') {
+      console.log(`Indexed ${await runtime.scanProject()} files.`);
+      continue;
+    }
+
+    try {
+      const run = await runtime.engine.run(value);
+      printRunResult(run);
+    } catch (error) {
+      console.error(`\n✗ Задача завершилась ошибкой: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
+}
+
+async function readCliInput(): Promise<string> {
+  if (!input.isTTY || typeof input.setRawMode !== 'function') {
+    const readline = createInterface({ input, output });
+    try {
+      return await readline.question('\n> ');
+    } finally {
+      readline.close();
+    }
+  }
+
+  emitKeypressEvents(input);
+  const previousRawMode = input.isRaw;
+  input.setRawMode(true);
+  input.resume();
+  output.write('\n> ');
+
+  return new Promise<string>((resolve) => {
+    let buffer = '';
+    let previousWasCarriageReturn = false;
+
+    const finish = (value: string): void => {
+      input.off('keypress', onKeypress);
+      input.setRawMode(Boolean(previousRawMode));
+      output.write('\n');
+      resolve(value);
+    };
+
+    const onKeypress = (text: string, key: { name?: string; ctrl?: boolean; sequence?: string }): void => {
+      if (key.ctrl && key.name === 'c') {
+        output.write('^C');
+        finish('');
+        return;
+      }
+
+      if ((key.ctrl && (key.name === 'return' || key.name === 'enter')) || (key.ctrl && key.name === 'd')) {
+        finish(buffer);
+        return;
+      }
+
+      if (key.name === 'backspace') {
+        if (!buffer) return;
+        const last = buffer.at(-1);
+        buffer = buffer.slice(0, -1);
+        output.write(last === '\n' ? '\x1b[1A\x1b[999C\x1b[K' : '\b \b');
+        return;
+      }
+
+      if (key.name === 'return' || key.name === 'enter') {
+        buffer += '\n';
+        output.write('\n... ');
+        previousWasCarriageReturn = true;
+        return;
+      }
+
+      // Ignore the LF half of CRLF when terminals/paste emit it separately.
+      if (text === '\n' && previousWasCarriageReturn) {
+        previousWasCarriageReturn = false;
+        return;
+      }
+      previousWasCarriageReturn = false;
+
+      if (!text || key.ctrl) return;
+      buffer += text;
+      output.write(text);
+    };
+
+    input.on('keypress', onKeypress);
+  });
+}
+
+function printRunResult(run: TaskRun): void {
+  const last = run.steps.at(-1)?.result;
+
+  if (run.status === 'completed') {
+    console.log(`\n✓ Задача завершена${last?.status === 'completed' && last.summary ? `: ${last.summary}` : '.'}`);
+    return;
+  }
+
+  if (run.status === 'not-completed') {
+    const reason = last?.status === 'not-completed' ? last.reason : 'Выполнение остановлено до завершения всех шагов.';
+    console.log(`\n! Задача не завершена: ${reason}`);
+    if (last?.status === 'not-completed' && last.canContinue) console.log('  Выполнение можно продолжить.');
+    return;
+  }
+
+  const reason = last?.status === 'failed' ? last.reason : 'Неизвестная ошибка выполнения.';
+  console.log(`\n✗ Задача завершилась ошибкой: ${reason}`);
 }

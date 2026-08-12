@@ -1,5 +1,5 @@
 import type { ModelRunInput } from '@model/Request/ModelRun.js';
-import type { DiffFileRunInput, ModelRunner, UnifiedDiffModelResponse } from '@model/Runner/ModelRunner.js';
+import type { DiffFileRunInput, ModelRunError, ModelRunner, UnifiedDiffModelResponse } from '@model/Runner/ModelRunner.js';
 
 /**
  * Minimal logging contract intentionally kept local to this boundary.
@@ -22,9 +22,14 @@ export async function callModel<TOutput extends object>(
   logger: ModelCallLogger,
   input: ModelRunInput<TOutput>,
 ): Promise<TOutput> {
-  const result = await runner.run<TOutput>(input);
-  logger.info('model.run', result);
-  return result.data;
+  try {
+    const result = await runner.run<TOutput>(input);
+    logger.info('model.run', result);
+    return result.data;
+  } catch (error) {
+    logModelFailure(logger, error);
+    throw error;
+  }
 }
 
 export async function callDiffFile(
@@ -32,7 +37,23 @@ export async function callDiffFile(
   logger: ModelCallLogger,
   input: DiffFileRunInput,
 ): Promise<UnifiedDiffModelResponse> {
-  const result = await runner.diffFile(input);
-  logger.info('model.run', result);
-  return result.data;
+  try {
+    const result = await runner.diffFile(input);
+    logger.info('model.run', result);
+    return result.data;
+  } catch (error) {
+    logModelFailure(logger, error);
+    throw error;
+  }
+}
+
+function logModelFailure(logger: ModelCallLogger, error: unknown): void {
+  if (!(error instanceof Error)) return;
+  const modelRun = (error as ModelRunError).modelRun;
+  if (!modelRun) return;
+
+  logger.info('model.run.error', {
+    error: { name: error.name, message: error.message },
+    ...modelRun,
+  });
 }

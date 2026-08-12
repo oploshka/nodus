@@ -11,7 +11,7 @@ class CountingResolver implements ResearchResolver {
   public constructor(private readonly path: string) {}
   public async resolve() {
     this.calls += 1;
-    return { answer: `answer-${this.calls}`, sources: [this.path] };
+    return { status: 'resolved', answer: `answer-${this.calls}`, sources: [this.path] };
   }
 }
 
@@ -40,4 +40,37 @@ describe('ResearchStore', () => {
       await fixture.dispose();
     }
   });
+
+  it('returns not-found without caching the miss', async () => {
+    const fixture = await TestProject.create('research-not-found', { 'A.ts': 'export const a = 1;\n' });
+    try {
+      const logger = new NullLogger();
+      const project = new Project({ id: 'p', root: fixture.root, scanMode: 'manual' }, logger);
+      await project.open();
+      const store = new ResearchStore(project, logger);
+      let calls = 0;
+      const resolver: ResearchResolver = {
+        async resolve() {
+          calls += 1;
+          return {
+            status: 'not-found',
+            answer: 'No candidate project files were found for this question.',
+            sources: [],
+            reason: 'No candidate files matched the research question.',
+          };
+        },
+      };
+      const research = new Research(store, resolver, project, logger);
+
+      const first = await research.ask('unknown thing?');
+      const second = await research.ask('unknown thing?');
+
+      expect(first.status).toBe('not-found');
+      expect(second.status).toBe('not-found');
+      expect(calls).toBe(2);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
 });
