@@ -2,87 +2,33 @@
 
 Nodus — экспериментальный runtime для управляемого coding-agent. Цель текущей ветки — вынести orchestration из модели и оставить LLM ограниченные, хорошо подготовленные решения.
 
-## Структура
+Текущая архитектура строится вокруг трёх верхних слоёв: `app` собирает и запускает приложение, `engine` координирует выполнение задачи, `model` изолирует работу с LLM и её wire-протоколами.
 
-Основной код намеренно собран в три верхних слоя:
+Сейчас основной runtime уже включает semantic Planner, bounded Research, `DefaultWorker` с локальным `ExecutionPlanner`, actions `research` / `edit-file` и единый `ModelRunner`. Validation как отдельный слой пока намеренно не реализована.
 
-- `src/app` — process/composition layer: startup input, DI, CLI and concrete logging;
-- `src/engine` — ядро Nodus: task lifecycle, Project, Planner, Research и DefaultWorker;
-- `src/model` — единая граница с LLM: adapters, `ModelRunner`, prompts, request/response formats, единая object-schema и model tools.
+## Документация
 
-Подробнее:
+### Проект
 
-- [`src/app/APPLICATION.md`](src/app/APPLICATION.md)
-- [`src/engine/ENGINE.md`](src/engine/ENGINE.md)
-- [`src/engine/Planner/PLANNER.md`](src/engine/Planner/PLANNER.md)
-- [`src/engine/Worker/WORKER.md`](src/engine/Worker/WORKER.md)
-- [`src/model/MODEL.md`](src/model/MODEL.md)
-- [`src/model/RESPONSE-FORMATS.md`](src/model/RESPONSE-FORMATS.md)
-- [`test/TESTING.md`](test/TESTING.md)
-- [`ROADMAP.md`](doc/ROADMAP.md)
-- [`CONVENTIONS.md`](doc/CONVENTIONS.md)
+- [Архитектура](doc/ARCHITECTURE.md)
+- [Соглашения проекта](doc/CONVENTIONS.md)
+- [Roadmap](doc/ROADMAP.md)
+- [Заметки](doc/NOTES.md)
+- [Сценарий `/status`](doc/STATUS-SCENARIO.md)
 
-## Текущий runtime
+### Слои
 
-`Engine.runTask()` координирует выполнение задачи. Он получает semantic plan от Planner и передаёт каждый `PlanStep` в `DefaultWorker`.
+- [Application](src/app/APPLICATION.md)
+- [Engine](src/engine/ENGINE.md)
+  - [Planner](src/engine/Planner/PLANNER.md)
+  - [Worker](src/engine/Worker/WORKER.md)
+- [Model](src/model/MODEL.md)
+  - [Response formats](src/model/RESPONSE-FORMATS.md)
 
-`DefaultWorker` агрегирует:
+### Тестирование и benchmark
 
-- `ExecutionPlanner` — планирует один следующий локальный action-step из текущего состояния;
-- `ExecutionState` — хранит локальную историю выполнения шага;
-- зарегистрированные `ExecutionAction` — реальные capabilities Worker.
-
-В текущем vertical slice доступны `research` и `edit-file`.
-
-Research — bounded knowledge service с hash-based cache. Cache entry считается актуальной, пока не изменился hash любого source-файла, участвовавшего в ответе.
-
-Validation намеренно ещё не реализована как отдельный слой.
-
-## Model layer
-
-Все runtime-вызовы модели проходят через `ModelRunner`.
-
-Adapter отвечает только за provider transport. `ModelRunner` принимает `message/data/guidance`, request format, response format + единую object-schema и per-call settings. Полный результат содержит `data`, нормализованный `exchange` и `meta`; обычные engine components используют `ModelCaller`, который пишет полный model run в logger и возвращает только `data`. Для unified diff уже есть специализированный facade `ModelRunner.diffFile(...)`.
-
-Сейчас model layer поддерживает `Text / Raw / Json / Diff` response formats. Planner и ExecutionPlanner используют JSON + common schema, Research — Text + common schema, а edit-file идёт через unified diff + ту же schema infrastructure. Operation-specific schema classes больше не нужны.
-
-Model-specific tools (`file-system`, `search`, `git`, `terminal`) снова находятся в `src/model/Tool`. Они пока не выдаются DefaultWorker автоматически: набор доступных capabilities должен задаваться явно.
-
-## Запуск
-
-```bash
-npm install
-cp nodus.config.example.json nodus.config.json
-npm run build
-npm run dev -- nodus.config.json
-```
-
-PowerShell:
-
-```powershell
-Copy-Item nodus.config.example.json nodus.config.json
-```
-
-## Тесты
-
-Vitest установлен как npm dev dependency. Nodus-specific scenario harness находится отдельно в `test/framework`.
-
-```bash
-npm test
-npm run test:unit
-npm run test:integration
-npm run test:model
-npm run test:e2e
-```
-
-Каждый scenario run может использовать подменяемый logger. `TestFileLogger` пишет один timestamped `.log` на запуск; туда же через model harness попадают model request/response.
-
-## Benchmark
-
-Raw-agent control group сохранён отдельно от тестов:
-
-```bash
-npm run benchmark:raw-agent -- nodus.config.json
-```
-
-Описание: [`benchmark/RAW-AGENT.md`](benchmark/RAW-AGENT.md).
+- [Тестирование](test/TESTING.md)
+- [Model tests](test/model/MODEL_TESTS.md)
+- [E2E tests](test/e2e/E2E_TESTS.md)
+- [Benchmark](doc/BENCHMARKS.md)
+- [Raw-agent benchmark](benchmark/RAW-AGENT.md)

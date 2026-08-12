@@ -1,25 +1,12 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
-    "types": [
-      "node"
-    ],
     "paths": {
-      "@app/*": [
-        "src/app/*"
-      ],
-      "@engine/*": [
-        "src/engine/*"
-      ],
-      "@model/*": [
-        "src/model/*"
-      ],
-      "@test/*": [
-        "test/*"
-      ],
-      "@bench/*": [
-        "benchmark/*"
-      ]
+      "@app/*": ["src/app/*"],
+      "@engine/*": ["src/engine/*"],
+      "@model/*": ["src/model/*"],
+      "@test/*": ["test/*"],
+      "@bench/*": ["benchmark/*"]
     }
   }
 }

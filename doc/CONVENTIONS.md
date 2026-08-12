@@ -55,3 +55,9 @@ Technical/category directories may stay lowercase when that meaning is intention
 A layer may expose a PascalCase `Type` directory for contracts shared outside one internal module, for example `src/engine/Type` and `src/model/Type`.
 
 Do not create a nested `Type` directory for every subsystem. Internal interfaces/types should normally stay in the file that owns the corresponding logic, or beside that implementation when they genuinely need a separate file.
+
+## Documentation placement
+
+Keep project documentation under `doc`. The repository root keeps `README.md` as the entry point and documentation index.
+
+Layer documentation may be grouped under `doc/App`, `doc/Engine`, `doc/Model`, `doc/Test`, and `doc/Benchmark`; it does not need to live beside source code.

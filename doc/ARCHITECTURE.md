@@ -25,7 +25,7 @@ Validation пока сознательно отсутствует. Completion Wo
 
 Подробности лежат рядом с кодом слоя:
 
-- [`../src/app/APPLICATION.md`](../src/app/APPLICATION.md)
-- [`../src/engine/ENGINE.md`](../src/engine/ENGINE.md)
-- [`../src/model/MODEL.md`](../src/model/MODEL.md)
-- [`../test/TESTING.md`](../test/TESTING.md)
+- [`src/app/APPLICATION.md`](../src/app/APPLICATION.md)
+- [`src/engine/ENGINE.md`](../src/engine/ENGINE.md)
+- [`src/model/MODEL.md`](../src/model/MODEL.md)
+- [`test/TESTING.md`](../test/TESTING.md)

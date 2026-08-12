@@ -29,7 +29,7 @@ Model benchmarks следует запускать последовательн�
 npm run benchmark:raw-agent -- nodus.config.json
 ```
 
-Подробности transport/tool loop находятся в `benchmark/RAW-AGENT.md`.
+Подробности transport/tool loop находятся в `doc/Benchmark/RAW-AGENT.md`.
 
 ## Raw-agent control
 
