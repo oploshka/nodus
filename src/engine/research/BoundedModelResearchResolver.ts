@@ -1,13 +1,14 @@
-import type { ModelAdapter } from '../../model/Adapter/ModelAdapter.js';
-import type { ModelConfiguration } from '../../app/config/Configuration.js';
+import type { ModelRunner } from '../../model/Runner/ModelRunner.js';
+import { TextResponseFormatter } from '../../model/Response/TextResponseFormatter.js';
 import type { Project } from '../project/Project.js';
 import type { ResolvedResearch, ResearchResolver } from './ResearchTypes.js';
 
 export class BoundedModelResearchResolver implements ResearchResolver {
+  private readonly formatter = new TextResponseFormatter();
+
   public constructor(
     private readonly project: Project,
-    private readonly model: ModelAdapter,
-    private readonly configuration: ModelConfiguration,
+    private readonly model: ModelRunner,
     private readonly maxFiles = 5,
     private readonly maxCharsPerFile = 12_000,
   ) {}
@@ -24,10 +25,9 @@ export class BoundedModelResearchResolver implements ResearchResolver {
       sourceBlocks.push(`FILE ${candidate.path}\n${content.slice(0, this.maxCharsPerFile)}`);
     }
 
-    const response = await this.model.complete({
-      model: this.configuration.model,
-      temperature: 0,
-      maxTokens: Math.min(this.configuration.maxTokens ?? 4096, 2048),
+    const response = await this.model.run({
+      maxTokens: 2048,
+      formatter: this.formatter,
       messages: [
         {
           role: 'system',
@@ -38,13 +38,10 @@ export class BoundedModelResearchResolver implements ResearchResolver {
             'If the files do not support an answer, say what is unknown.',
           ].join('\n'),
         },
-        {
-          role: 'user',
-          content: `QUESTION\n${question}\n\n${sourceBlocks.join('\n\n')}`,
-        },
+        { role: 'user', content: `QUESTION\n${question}\n\n${sourceBlocks.join('\n\n')}` },
       ],
     });
 
-    return { answer: response.content.trim(), sources: paths };
+    return { answer: response.output.text, sources: paths };
   }
 }

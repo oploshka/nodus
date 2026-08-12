@@ -1,4 +1,4 @@
-import type { Logger } from '../../src/app/logging/Logger.js';
+import type { EngineLogger } from '../../src/engine/EngineLogger.js';
 import type { ModelAdapter, RawModelResponse } from '../../src/model/Adapter/ModelAdapter.js';
 import type { ModelRequest } from '../../src/model/Request/ModelRequest.js';
 
@@ -8,7 +8,7 @@ export class QueueModelAdapter implements ModelAdapter {
 
   public constructor(
     private readonly responses: string[],
-    private readonly logger?: Logger,
+    private readonly logger?: EngineLogger,
   ) {}
 
   public async complete(request: ModelRequest): Promise<RawModelResponse> {
@@ -32,7 +32,7 @@ export class LoggedModelAdapter implements ModelAdapter {
 
   public constructor(
     private readonly inner: ModelAdapter,
-    private readonly logger: Logger,
+    private readonly logger: EngineLogger,
   ) {}
 
   public async complete(request: ModelRequest): Promise<RawModelResponse> {

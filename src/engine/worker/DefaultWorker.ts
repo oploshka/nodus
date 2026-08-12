@@ -1,4 +1,4 @@
-import type { Logger } from '../../app/logging/Logger.js';
+import type { EngineLogger } from '../EngineLogger.js';
 import type { PlanStep } from '../planner/Plan.js';
 import type { Task } from '../task/Task.js';
 import type { ExecutionAction } from './action/ExecutionAction.js';
@@ -15,7 +15,7 @@ export class DefaultWorker {
   public constructor(
     private readonly planner: ExecutionPlanner,
     actions: ExecutionAction[],
-    private readonly logger: Logger,
+    private readonly logger: EngineLogger,
     private readonly maxIterations = 8,
   ) {
     for (const action of actions) {

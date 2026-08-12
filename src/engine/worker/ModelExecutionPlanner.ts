@@ -1,14 +1,13 @@
-import type { ModelConfiguration } from '../../app/config/Configuration.js';
-import type { ModelAdapter } from '../../model/Adapter/ModelAdapter.js';
+import type { ModelRunner } from '../../model/Runner/ModelRunner.js';
+import { ExecutionPlannerResponseFormatter } from '../../model/Response/ExecutionPlannerResponseFormatter.js';
 import type { ExecutionAction } from './action/ExecutionAction.js';
 import type { ExecutionDecision, ExecutionPlanner } from './ExecutionPlanner.js';
 import type { ExecutionState } from './ExecutionState.js';
 
 export class ModelExecutionPlanner implements ExecutionPlanner {
-  public constructor(
-    private readonly model: ModelAdapter,
-    private readonly configuration: ModelConfiguration,
-  ) {}
+  private readonly formatter = new ExecutionPlannerResponseFormatter();
+
+  public constructor(private readonly model: ModelRunner) {}
 
   public async next(state: ExecutionState, actions: ReadonlyArray<ExecutionAction>): Promise<ExecutionDecision> {
     const history = state.history.map((entry, index) => [
@@ -19,10 +18,9 @@ export class ModelExecutionPlanner implements ExecutionPlanner {
     ].filter(Boolean).join('\n')).join('\n\n');
 
     const actionList = actions.map((action) => `- ${action.id}: ${action.description}`).join('\n');
-    const response = await this.model.complete({
-      model: this.configuration.model,
-      temperature: 0,
-      maxTokens: Math.min(this.configuration.maxTokens ?? 4096, 1024),
+    const response = await this.model.run({
+      maxTokens: 1024,
+      formatter: this.formatter,
       messages: [
         {
           role: 'system',
@@ -33,17 +31,7 @@ export class ModelExecutionPlanner implements ExecutionPlanner {
             'Use research when implementation facts are missing. Do not repeatedly research facts already present in history.',
             'Do not invent an unavailable action.',
             '',
-            'To call an action return exactly:',
-            'ACTION <action-id>',
-            'INPUT <single-line JSON object>',
-            '',
-            'When the semantic step is complete return:',
-            'STATUS completed',
-            'SUMMARY <one line>',
-            '',
-            'If it cannot be completed with available actions return:',
-            'STATUS failed',
-            'REASON <one line>',
+            this.formatter.instructions(),
           ].join('\n'),
         },
         {
@@ -59,25 +47,6 @@ export class ModelExecutionPlanner implements ExecutionPlanner {
       ],
     });
 
-    return this.parse(response.content);
-  }
-
-  private parse(content: string): ExecutionDecision {
-    const normalized = content.replace(/\r\n/g, '\n');
-    const status = normalized.match(/^STATUS\s+(completed|failed)\s*$/mi)?.[1]?.toLowerCase();
-    if (status === 'completed') {
-      return { type: 'completed', summary: normalized.match(/^SUMMARY\s+(.+)$/mi)?.[1]?.trim() ?? 'Step completed' };
-    }
-    if (status === 'failed') {
-      return { type: 'failed', reason: normalized.match(/^REASON\s+(.+)$/mi)?.[1]?.trim() ?? 'Execution planner failed the step' };
-    }
-
-    const actionId = normalized.match(/^ACTION\s+(.+)$/mi)?.[1]?.trim();
-    const inputRaw = normalized.match(/^INPUT\s+(.+)$/mi)?.[1]?.trim();
-    if (!actionId || !inputRaw) throw new Error(`Invalid ExecutionPlanner response: ${content.slice(0, 500)}`);
-    let input: unknown;
-    try { input = JSON.parse(inputRaw); }
-    catch { throw new Error(`ExecutionPlanner INPUT must be single-line JSON: ${inputRaw}`); }
-    return { type: 'action', actionId, input };
+    return response.output;
   }
 }

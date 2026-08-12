@@ -1,4 +1,4 @@
-import type { Logger } from '../../app/logging/Logger.js';
+import type { EngineLogger } from '../EngineLogger.js';
 import type { Project } from '../project/Project.js';
 import type { ResearchAnswer, ResearchResolver } from './ResearchTypes.js';
 import { ResearchStore } from './ResearchStore.js';
@@ -8,7 +8,7 @@ export class Research {
     private readonly store: ResearchStore,
     private readonly resolver: ResearchResolver,
     private readonly project: Project,
-    private readonly logger: Logger,
+    private readonly logger: EngineLogger,
   ) {}
 
   public async ask(question: string): Promise<ResearchAnswer> {

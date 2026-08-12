@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
-import type { ProjectConfiguration } from '../../app/config/Configuration.js';
-import type { Logger } from '../../app/logging/Logger.js';
+import type { ProjectConfiguration } from './ProjectConfiguration.js';
+import type { EngineLogger } from '../EngineLogger.js';
 import type { ProjectIndex, ProjectFileFact } from './ProjectIndex.js';
 import { ProjectScanner } from './ProjectScanner.js';
 
@@ -11,7 +11,7 @@ export class Project {
 
   public constructor(
     public readonly configuration: ProjectConfiguration,
-    private readonly logger: Logger,
+    private readonly logger: EngineLogger,
     private readonly scanner = new ProjectScanner(),
   ) {}
 

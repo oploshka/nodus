@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { Logger } from '../../app/logging/Logger.js';
+import type { EngineLogger } from '../EngineLogger.js';
 import type { Project } from '../project/Project.js';
 import type { ResearchAnswer } from './ResearchTypes.js';
 
@@ -14,7 +14,7 @@ export class ResearchStore {
 
   public constructor(
     private readonly project: Project,
-    private readonly logger: Logger,
+    private readonly logger: EngineLogger,
     private readonly cachePath?: string,
   ) {}
 

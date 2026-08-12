@@ -1,8 +1,7 @@
-import type { ModelConfiguration } from '../../../app/config/Configuration.js';
-import type { ModelAdapter } from '../../../model/Adapter/ModelAdapter.js';
+import type { ModelRunner } from '../../../model/Runner/ModelRunner.js';
+import { EditFileResponseFormatter } from '../../../model/Response/EditFileResponseFormatter.js';
 import type { Project } from '../../project/Project.js';
 import type { ExecutionAction, ExecutionActionContext } from './ExecutionAction.js';
-import { EditFileProtocol } from '../edit/EditFileProtocol.js';
 import { PatchApplicator } from '../edit/PatchApplicator.js';
 
 interface EditFileInput {
@@ -16,10 +15,8 @@ export class EditFileAction implements ExecutionAction {
 
   public constructor(
     private readonly project: Project,
-    private readonly model: ModelAdapter,
-    private readonly configuration: ModelConfiguration,
+    private readonly model: ModelRunner,
     public readonly maxUses = 2,
-    private readonly protocol = new EditFileProtocol(),
     private readonly applicator = new PatchApplicator(),
   ) {}
 
@@ -33,39 +30,38 @@ export class EditFileAction implements ExecutionAction {
 
     let lastError: string | undefined;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const response = await this.model.complete({
-        model: this.configuration.model,
-        temperature: 0,
-        maxTokens: this.configuration.maxTokens ?? 4096,
-        messages: [
-          {
-            role: 'system',
-            content: [
-              'You perform one focused file edit inside Nodus.',
-              'Use the authoritative source exactly as supplied. Do not request tools and do not edit another file.',
-              'Preserve unrelated content. Prefer a minimal unified diff.',
-              this.protocol.instructions(request.path),
-            ].join('\n\n'),
-          },
-          {
-            role: 'user',
-            content: [
-              `TASK\n${context.state.task.description}`,
-              `\nPLAN STEP\n${context.state.step.goal}`,
-              context.state.step.constraints.length ? `\nCONSTRAINTS\n${context.state.step.constraints.map((value) => `- ${value}`).join('\n')}` : '',
-              `\nEDIT INSTRUCTION\n${request.instruction}`,
-              research.length ? `\nRESEARCH\n${JSON.stringify(research)}` : '',
-              lastError ? `\nPREVIOUS EDIT ERROR\n${lastError}\nRebuild the complete edit from the authoritative source.` : '',
-              `\nAUTHORITATIVE SOURCE ${request.path}\n${source}`,
-            ].join('\n'),
-          },
-        ],
-      });
-
       try {
-        const change = this.protocol.parse(response.content, request.path);
-        if (change.type === 'delete') throw new Error('delete is intentionally disabled in the first runtime spike');
-        const content = change.type === 'write' ? change.content : this.applicator.apply(source, change.hunks, request.path);
+        const formatter = new EditFileResponseFormatter(request.path);
+        const response = await this.model.run({
+          formatter,
+          messages: [
+            {
+              role: 'system',
+              content: [
+                'You perform one focused file edit inside Nodus.',
+                'Use the authoritative source exactly as supplied. Do not request tools and do not edit another file.',
+                'Preserve unrelated content. Prefer a minimal unified diff.',
+                formatter.instructions(),
+              ].join('\n\n'),
+            },
+            {
+              role: 'user',
+              content: [
+                `TASK\n${context.state.task.description}`,
+                `\nPLAN STEP\n${context.state.step.goal}`,
+                context.state.step.constraints.length ? `\nCONSTRAINTS\n${context.state.step.constraints.map((value) => `- ${value}`).join('\n')}` : '',
+                `\nEDIT INSTRUCTION\n${request.instruction}`,
+                research.length ? `\nRESEARCH\n${JSON.stringify(research)}` : '',
+                lastError ? `\nPREVIOUS EDIT ERROR\n${lastError}\nRebuild the complete edit from the authoritative source.` : '',
+                `\nAUTHORITATIVE SOURCE ${request.path}\n${source}`,
+              ].join('\n'),
+            },
+          ],
+        });
+
+        const change = response.output;
+        if (change.action === 'delete') throw new Error('delete is intentionally disabled in the first runtime spike');
+        const content = change.action === 'write' ? change.content : this.applicator.apply(source, change.hunks, request.path);
         await this.project.write(request.path, content);
         return {
           status: 'completed' as const,

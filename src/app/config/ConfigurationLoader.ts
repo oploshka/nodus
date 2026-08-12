@@ -28,6 +28,7 @@ export class ConfigurationLoader {
         temperature: parsed.model.temperature ?? 0,
         maxTokens: parsed.model.maxTokens ?? 4096,
         requestTimeoutMs: parsed.model.requestTimeoutMs ?? 600_000,
+        messageLayout: parsed.model.messageLayout ?? 'collapsed-user',
       },
       runtime: {
         maxWorkerIterations: parsed.runtime?.maxWorkerIterations ?? 8,

@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Logger } from '../../src/app/logging/Logger.js';
+import type { EngineLogger } from '../../src/engine/EngineLogger.js';
 
 export interface TestLoggerOptions {
   directory?: string;
@@ -11,7 +11,7 @@ export interface TestLoggerOptions {
  * One human-readable log file per scenario/test runtime.
  * Runtime components keep using the normal Logger interface; no separate Trace store exists.
  */
-export class TestFileLogger implements Logger {
+export class TestFileLogger implements EngineLogger {
   public readonly path: string;
   private readonly now: () => Date;
 

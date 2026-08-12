@@ -3,7 +3,7 @@ import type { AppConfiguration } from '../../src/app/config/Configuration.js';
 import type { TaskRun } from '../../src/engine/task/TaskRun.js';
 import type { ModelAdapter } from '../../src/model/Adapter/ModelAdapter.js';
 import type { ScenarioDefinition } from './Scenario.js';
-import { QueueModelAdapter } from './ModelHarness.js';
+import { LoggedModelAdapter, QueueModelAdapter } from './ModelHarness.js';
 import { TestFileLogger } from './TestLogger.js';
 import { TestProject } from './TestProject.js';
 
@@ -28,7 +28,9 @@ export async function runScenario(
 ): Promise<ScenarioRun> {
   const project = await TestProject.create(definition.id, definition.files);
   const logger = options.logger ?? new TestFileLogger(definition.id);
-  const model = options.model ?? new QueueModelAdapter([...definition.modelResponses], logger);
+  const model = options.model
+    ? new LoggedModelAdapter(options.model, logger)
+    : new QueueModelAdapter([...definition.modelResponses], logger);
 
   const configuration: AppConfiguration = {
     project: {

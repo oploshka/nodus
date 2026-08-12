@@ -12,6 +12,7 @@ import { EditFileAction } from '../engine/worker/action/EditFileAction.js';
 import { ResearchAction } from '../engine/worker/action/ResearchAction.js';
 import type { ModelAdapter } from '../model/Adapter/ModelAdapter.js';
 import { OpenAICompatibleModelAdapter } from '../model/Adapter/OpenAICompatibleModelAdapter.js';
+import { ModelRunner } from '../model/Runner/ModelRunner.js';
 
 export interface ApplicationServices {
   engine: Engine;
@@ -24,11 +25,12 @@ export class Bootstrap {
     overrides: { logger?: Logger; model?: ModelAdapter } = {},
   ): Promise<ApplicationServices> {
     const logger = overrides.logger ?? new ConsoleLogger();
-    const model = overrides.model ?? new OpenAICompatibleModelAdapter(
+    const adapter = overrides.model ?? new OpenAICompatibleModelAdapter(
       configuration.model.endpoint,
       configuration.model.apiKey,
       configuration.model.requestTimeoutMs,
     );
+    const model = new ModelRunner(adapter, configuration.model);
 
     const project = new Project(configuration.project, logger);
     await project.open();
@@ -37,18 +39,18 @@ export class Bootstrap {
     await researchStore.open();
     const research = new Research(
       researchStore,
-      new BoundedModelResearchResolver(project, model, configuration.model),
+      new BoundedModelResearchResolver(project, model),
       project,
       logger,
     );
 
-    const planner = new ModelPlanner(model, configuration.model);
-    const executionPlanner = new ModelExecutionPlanner(model, configuration.model);
+    const planner = new ModelPlanner(model);
+    const executionPlanner = new ModelExecutionPlanner(model);
     const worker = new DefaultWorker(
       executionPlanner,
       [
         new ResearchAction(research, configuration.runtime?.maxResearchActions ?? 3),
-        new EditFileAction(project, model, configuration.model, configuration.runtime?.maxEditActions ?? 2),
+        new EditFileAction(project, model, configuration.runtime?.maxEditActions ?? 2),
       ],
       logger,
       configuration.runtime?.maxWorkerIterations ?? 8,

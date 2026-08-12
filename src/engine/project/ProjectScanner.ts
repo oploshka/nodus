@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, relative, resolve, sep } from 'node:path';
-import type { ProjectConfiguration } from '../../app/config/Configuration.js';
+import type { ProjectConfiguration } from './ProjectConfiguration.js';
 import type { ProjectFileFact, ProjectIndex } from './ProjectIndex.js';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue']);

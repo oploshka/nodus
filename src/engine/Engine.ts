@@ -1,4 +1,4 @@
-import type { Logger } from '../app/logging/Logger.js';
+import type { EngineLogger } from './EngineLogger.js';
 import type { Planner } from './planner/Planner.js';
 import type { Project } from './project/Project.js';
 import { Task } from './task/Task.js';
@@ -13,7 +13,7 @@ export class Engine {
     private readonly project: Project,
     private readonly planner: Planner,
     private readonly worker: DefaultWorker,
-    private readonly logger: Logger,
+    private readonly logger: EngineLogger,
   ) {}
 
   public async runTask(description: string): Promise<TaskRun> {
