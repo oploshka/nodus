@@ -1,15 +1,8 @@
-// ModelAdapter.ts
-import type { ModelRequest } from '@model/Request/ModelRequest';
-
-export interface ModelUsage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-}
+import type { ModelRequest } from '../Request/ModelRequest.js';
 
 export interface RawModelResponse {
   content: string;
-  usage?: ModelUsage;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
 export interface ModelAdapter {

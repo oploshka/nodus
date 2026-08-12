@@ -1,48 +1,21 @@
 {
   "project": {
-    "id": "example-project",
+    "id": "my-project",
     "root": ".",
-    "scanMode": "manual",
-    "cachePath": ".nodus/cache/project-index.json",
-    "knowledgePath": "knowledge.example.json",
-    "include": [
-      "src"
-    ],
-    "exclude": [
-      "node_modules",
-      "dist",
-      ".git",
-      ".nodus"
-    ],
-    "clearCacheOnStart": false
+    "scanMode": "on-open",
+    "exclude": ["node_modules", "dist", ".git", ".nodus"]
   },
   "model": {
-    "provider": "mock",
-    "endpoint": "http://127.0.0.1:11434/v1",
-    "model": "local-model",
-    "temperature": 0.2,
+    "provider": "openai-compatible",
+    "endpoint": "http://localhost:5001/v1",
+    "model": "koboldcpp",
+    "temperature": 0,
     "maxTokens": 4096,
-    "messageLayout": "collapsed-user",
     "requestTimeoutMs": 600000
   },
-  "agent": {
-    "maxSteps": 20,
-    "responseLanguage": "auto",
-    "internalLanguage": "original"
-  },
-  "knowledge": {
-    "generationMode": "disabled"
-  },
-  "logging": {
-    "level": "info",
-    "console": true,
-    "file": false,
-    "path": ".nodus/log/nodus.log",
-    "modelPayload": false,
-    "payloadPath": ".nodus/log/executions",
-    "executionPath": ".nodus/log/executions",
-    "consoleMode": "normal",
-    "colors": true,
-    "clearOnStart": false
+  "runtime": {
+    "maxWorkerIterations": 8,
+    "maxResearchActions": 3,
+    "maxEditActions": 2
   }
 }

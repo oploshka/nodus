@@ -1,29 +1,16 @@
 {
-  "name": "nodus-agent",
+  "name": "nodus-runtime-spike",
   "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/Main.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc && tsc-alias -f",
-    "test": "npm run test:unit && npm run test:integration",
-    "test:unit": "tsx --test test/unit/*.test.ts",
-    "test:integration": "tsx --test test/integration/*.test.ts",
-    "test:model": "npm run test:model:step && npm run test:model:chain",
-    "test:model:step": "tsx --test test/model/step/*.test.ts",
-    "test:model:chain": "tsx --test test/model/chain/*.test.ts",
-    "test:e2e": "tsx --test test/e2e/*.test.ts",
-    "test:all": "npm run typecheck && npm test && npm run test:model && npm run test:e2e",
-    "benchmark:raw-agent": "tsx benchmark/RawAgentBenchmark.ts",
-    "test:model:status:step": "tsx --test test/model/step/status-scenario.test.ts",
-    "test:model:status:chain": "tsx --test test/model/chain/status-chain.test.ts",
-    "test:model:status": "npm run test:model:status:step && npm run test:model:status:chain"
+    "build": "tsc",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "dev": "node dist/src/app/Main.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "tsc-alias": "^1.8.10",
-    "tsx": "^4.19.2",
     "typescript": "^5.8.3"
   }
 }

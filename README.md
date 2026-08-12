@@ -1,83 +1,116 @@
-# Nodus Agent v0.3.0
+# Nodus 0.3 — runtime spike
 
-Nodus — runtime для управляемого coding-agent, где модель не управляет всем циклом самостоятельно.
-Сложность задачи по возможности выносится из модели в состояние, планирование, research-cache и ограниченные исполнители.
+Экспериментальная сборка новой архитектуры без миграции старого `PlanExecutor`.
+Цель spike — проверить границы `app / engine / model` и механику `Planner -> DefaultWorker -> ExecutionPlanner -> Action` на простом `/status` сценарии.
 
-Текущая архитектурная гипотеза v0.3:
+## Верхний уровень
 
 ```text
-Task → Planner
-Planner ↔ Research
-Planner → Execution → Result → Planner
-
-Execution = State + Option + Worker
+src/
+  app/      composition root, configuration, console input
+  engine/   логика выполнения задач
+  model/    transport к LLM
 ```
 
-## Основные слои
+`app` только собирает зависимости и запускает Engine. Внутренняя логика задачи в `app` не живёт.
+
+## Engine
+
+```text
+engine/
+  Engine.ts
+  task/
+  planner/
+  project/
+  research/
+  worker/
+```
+
+### Engine
+
+`Engine.runTask()` — координатор цикла:
+
+1. создаёт Task;
+2. получает semantic Plan от Planner;
+3. отдаёт каждый PlanStep DefaultWorker;
+4. собирает TaskRun;
+5. останавливается при failed step.
+
+Engine не выбирает action, не исследует проект и не редактирует файлы.
 
 ### Planner
 
-Отвечает за **что делать**: план, зависимости, критерии, recovery/replan и выбор следующей работы.
-`PlannerContext` хранит состояние текущего плана, но не является хранилищем знаний о проекте.
+Planner создаёт только смысловые шаги. Он не должен искать API, выбирать файлы или описывать patch mechanics.
 
 ### Research
 
-Отвечает за **что известно о проекте**. Это прежде всего store/cache с resolver-ами:
+`Research.ask(question)` работает как cached function над состоянием проекта:
 
-- `ResearchStore` — project knowledge + cache фактов;
-- `ResearchResolver` — выбор сохранённых знаний для текущего контекста;
-- `SearchRequestCompiler` / `RetrievalResultClassifier` — уточнение отсутствующих данных через проектные источники;
-- cache-факты можно инвалидировать по исходному файлу.
+- cache hit используется только если hash каждого source-файла совпадает;
+- cache miss вызывает bounded resolver;
+- ответ сохраняется вместе с source hashes.
 
-### Execution
+В spike resolver намеренно простой: CPU выбирает небольшой список candidate files из ProjectIndex, затем модель отвечает по их содержимому. Свободного research-loop нет.
 
-Отвечает за **как выполнить уже подготовленную работу**.
+### DefaultWorker
 
-Первый реальный вертикальный pipeline — изменение файла:
+DefaultWorker агрегирует:
+
+- `ExecutionPlanner`;
+- `ExecutionState`;
+- зарегистрированный набор `ExecutionAction`.
+
+Цикл:
 
 ```text
-ChangeState
-→ propose-change / EditProposalWorker
-→ prepare-candidate / ChangePrepareWorker
-→ validate-candidate / ChangeValidationWorker
-→ commit-candidate / ChangeCommitWorker
-→ completed
+ExecutionState
+-> ExecutionPlanner.next(state, actions)
+-> Action
+-> ActionResult
+-> history/state
+-> ExecutionPlanner.next(...)
 ```
 
-Ошибочный patch не отправляет Planner обратно в общий agent-loop: retry остаётся внутри execution runtime до исчерпания локального бюджета.
+Модель не получает произвольные tools. Она может выбрать только зарегистрированный Action.
 
-## Model
+В текущем spike доступны только:
 
-`src/model` содержит adapter/controller/protocol и доступные модели capabilities. Поэтому tools теперь также находятся под `src/model/Tool`.
+- `research` — один ограниченный вопрос к Research;
+- `edit-file` — одно сфокусированное изменение известного файла.
 
-## Quick start
+`edit-file` внутри себя отвечает за proposal -> parse diff -> CPU apply -> write. Это специально: patch/apply пока не выставлены как отдельные Actions, чтобы ExecutionPlanner не планировал инфраструктурную механику изменения файла.
 
-```bash
-npm install
-cp nodus.config.example.json nodus.config.json
-npm run dev -- nodus.config.json
-```
+## Что spike уже показал
 
-PowerShell:
-
-```powershell
-Copy-Item nodus.config.example.json nodus.config.json
-```
-
-Для локального OpenAI-compatible endpoint настройте `model.provider`, `model.endpoint` и `model.model`.
+1. `Engine` реально может оставаться тонким координатором.
+2. Второй уровень планирования (`ExecutionPlanner`) естественно живёт внутри Worker.
+3. Одного списка Actions недостаточно для контроля слабой модели: Worker должен жёстко ограничивать iterations и usage каждого Action.
+4. Самая важная ещё не закрытая граница — **гранулярность Action**. На `/status` `research + edit-file` выглядят естественнее, чем `research + propose + apply + commit`.
+5. `ExecutionState` пока может быть почти только history. Отдельная phase-machine не понадобилась.
+6. Hash-based invalidation Research работает и не требует global project revision.
+7. Cache сейчас консервативно зависит от всех файлов, прочитанных resolver'ом; позже стоит хранить более точные evidence dependencies.
+8. Validation отсутствует намеренно. Сейчас `ExecutionPlanner` сообщает, что step завершён; это не считается доказательством корректности задачи.
 
 ## Проверки
 
-```bash
-npm run typecheck
-npm run test:unit
-npm run test:integration
-```
+В spike есть четыре теста:
 
-Model/e2e тесты требуют настроенный model-server.
+- DefaultWorker выполняет action, выбранный ExecutionPlanner;
+- per-action limit не даёт уйти в бесконечный research-loop;
+- Research cache протухает после изменения hash source-файла;
+- `/status` проходит полный scripted vertical slice: Engine -> Planner -> Worker -> Research -> EditFile -> completion.
 
-## Статус v0.3
+Последний тест использует queue model adapter, поэтому проверяет архитектурный pipeline без зависимости от локальной LLM.
 
-Это сознательно не compatibility-preserving refactor. Старые сущности ещё остаются там, где их новая ответственность пока не определена. В частности, `operation/` пока сохранён как переходный слой конфигурации model operations.
+## Не решаем в этом spike
 
-Подробнее: [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) и [`ROADMAP.md`](ROADMAP.md).
+- Validation;
+- pause/resume;
+- Conversation;
+- planning-time Research;
+- multi-model routing;
+- полноценный artifact/state model;
+- выбор разных Worker-конфигураций;
+- сложные multi-file edits.
+
+Это намеренно: сначала проверяется механика выполнения одного semantic PlanStep.
