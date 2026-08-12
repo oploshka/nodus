@@ -19,8 +19,8 @@ Nodus — экспериментальный runtime для управляемо
 - [`src/model/MODEL.md`](src/model/MODEL.md)
 - [`src/model/RESPONSE-FORMATS.md`](src/model/RESPONSE-FORMATS.md)
 - [`test/TESTING.md`](test/TESTING.md)
-- [`ROADMAP.md`](ROADMAP.md)
-- [`CONVENTIONS.md`](CONVENTIONS.md)
+- [`ROADMAP.md`](doc/ROADMAP.md)
+- [`CONVENTIONS.md`](doc/CONVENTIONS.md)
 
 ## Текущий runtime
 
