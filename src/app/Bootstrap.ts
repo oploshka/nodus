@@ -39,18 +39,18 @@ export class Bootstrap {
     await researchStore.open();
     const research = new Research(
       researchStore,
-      new BoundedModelResearchResolver(project, model),
+      new BoundedModelResearchResolver(project, model, logger),
       project,
       logger,
     );
 
-    const planner = new ModelPlanner(model);
-    const executionPlanner = new ModelExecutionPlanner(model);
+    const planner = new ModelPlanner(model, logger);
+    const executionPlanner = new ModelExecutionPlanner(model, logger);
     const worker = new DefaultWorker(
       executionPlanner,
       [
         new ResearchAction(research, configuration.runtime?.maxResearchActions ?? 3),
-        new EditFileAction(project, model, configuration.runtime?.maxEditActions ?? 2),
+        new EditFileAction(project, model, logger, configuration.runtime?.maxEditActions ?? 2),
       ],
       logger,
       configuration.runtime?.maxWorkerIterations ?? 8,

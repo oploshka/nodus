@@ -1,4 +1,6 @@
+import type { EngineLogger } from '../../EngineLogger.js';
 import type { ModelRunner } from '../../../model/Runner/ModelRunner.js';
+import { callDiffFile } from '../../../model/Runner/ModelCaller.js';
 import { ModelRequestFormat } from '../../../model/Request/ModelRequestFormat.js';
 import type { Project } from '../../project/Project.js';
 import type { ExecutionAction, ExecutionActionContext } from './ExecutionAction.js';
@@ -16,6 +18,7 @@ export class EditFileAction implements ExecutionAction {
   public constructor(
     private readonly project: Project,
     private readonly model: ModelRunner,
+    private readonly logger: EngineLogger,
     public readonly maxUses = 2,
     private readonly applicator = new PatchApplicator(),
   ) {}
@@ -31,22 +34,21 @@ export class EditFileAction implements ExecutionAction {
     let lastError: string | undefined;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
-        const data = [
-          `TASK\n${context.state.task.description}`,
-          `\nPLAN STEP\n${context.state.step.goal}`,
-          context.state.step.constraints.length ? `\nCONSTRAINTS\n${context.state.step.constraints.map((value) => `- ${value}`).join('\n')}` : '',
-          `\nEDIT INSTRUCTION\n${request.instruction}`,
-          research.length ? `\nRESEARCH\n${JSON.stringify(research)}` : '',
-          lastError ? `\nPREVIOUS EDIT ERROR\n${lastError}\nRebuild the complete diff from the authoritative source.` : '',
-          `\nAUTHORITATIVE SOURCE ${request.path}\n${source}`,
-        ].join('\n');
+        const data = {
+          task: context.state.task.description,
+          planStep: context.state.step,
+          editInstruction: request.instruction,
+          research,
+          previousEditError: lastError,
+          authoritativeSource: { path: request.path, content: source },
+        };
 
-        const response = await this.model.diffFile({
+        const response = await callDiffFile(this.model, this.logger, {
           path: request.path,
           request: {
             message: 'Produce the minimal patch required for this focused file edit.',
             data,
-            format: ModelRequestFormat.Text,
+            format: ModelRequestFormat.Json,
             guidance: [
               'You perform one focused file edit inside Nodus.',
               'Use the authoritative source exactly as supplied.',
@@ -56,7 +58,7 @@ export class EditFileAction implements ExecutionAction {
           },
         });
 
-        const content = this.applicator.apply(source, response.output.hunks, request.path);
+        const content = this.applicator.apply(source, response.hunks, request.path);
         await this.project.write(request.path, content);
         return {
           status: 'completed' as const,

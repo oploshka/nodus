@@ -17,7 +17,7 @@
 3. каждый PlanStep получает DefaultWorker;
 4. ExecutionPlanner выбирает только зарегистрированный ExecutionAction;
 5. `research` обращается к Research cache/resolver;
-6. `edit-file` вызывает ModelRunner и получает уже parsed edit object;
+6. `edit-file` вызывает model boundary через `ModelCaller`, получает только parsed data, а полный exchange/meta уходит в logger;
 7. Worker сохраняет ActionResult в ExecutionState history;
 8. Engine сохраняет WorkerResult в TaskRun.
 

@@ -2,7 +2,7 @@ import type { ModelAdapter, RawModelResponse } from './ModelAdapter.js';
 import type { ModelRequest } from '../Request/ModelRequest.js';
 
 interface OpenAICompatibleResponse {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
   usage?: RawModelResponse['usage'];
   error?: { message?: string };
 }
@@ -39,7 +39,7 @@ export class OpenAICompatibleModelAdapter implements ModelAdapter {
       if (!response.ok) throw new Error(payload.error?.message ?? `Model request failed with HTTP ${response.status}`);
       const content = payload.choices?.[0]?.message?.content;
       if (!content) throw new Error('Model returned an empty response');
-      return { content, usage: payload.usage };
+      return { content, usage: payload.usage, finishReason: payload.choices?.[0]?.finish_reason };
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         throw new Error(`Model request timed out after ${this.requestTimeoutMs} ms`);

@@ -30,3 +30,7 @@ npm run benchmark:raw-agent -- nodus.config.json
 ```
 
 Подробности transport/tool loop находятся в `benchmark/RAW-AGENT.md`.
+
+## Raw-agent control
+
+`benchmark/RawAgentBenchmark.ts` intentionally bypasses Engine/Planner/Research/Worker orchestration and remains a control group for comparing the same model and project tools against Nodus. Benchmark code is not a Vitest suite: correctness/regression belongs to `test/`, while timing/token/tool-call comparisons belong here.

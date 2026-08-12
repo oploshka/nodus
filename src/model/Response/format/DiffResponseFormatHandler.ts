@@ -73,7 +73,7 @@ export class DiffResponseFormatHandler implements ModelResponseFormatHandler {
     }
 
     if (hunks.length === 0) this.fail('Unified diff requires at least one hunk', content);
-    return { oldPath, newPath, hunks } satisfies UnifiedDiffDocument;
+    return { path: oldPath === newPath ? oldPath : newPath, oldPath, newPath, hunks };
   }
 
   private cleanPath(value: string): string {

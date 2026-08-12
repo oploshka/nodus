@@ -1,84 +1,113 @@
 # Model response formats
 
-Этот документ фиксирует не список текущих операций, а правила проектирования model-response boundary.
+Этот документ фиксирует правила model-response boundary, а не список текущих операций.
 
 ## Format и schema — разные вещи
 
 `response.format` определяет, как ответ представлен на wire-уровне модели.
 
-`response.schema` определяет, какие данные ожидает вызывающий код.
+`response.schema` единообразно определяет объект, который ожидает вызывающий код.
 
-Один и тот же смысловой результат теоретически может быть выражен разными wire-форматами. Поэтому schema не должна быть зашита в enum формата.
+Schema не меняется только потому, что меняется wire format. Все форматы в итоге должны дать object, который проходит одну общую schema validation.
 
 ## Pipeline
 
 ```text
-model response
--> response format handler
--> wire value
--> response schema
--> typed JS object
-```
-
-Обратное направление перед вызовом:
-
-```text
-response format + schema
+response schema + response format
 -> response instructions
--> ModelRunner request
+-> model request
 -> model
+-> wire response
+-> response format handler
+-> JS object
+-> common schema validation/normalization
+-> ModelRunResult.data
 ```
 
-Именно поэтому response contract влияет на request.
+## Common object schema
+
+Root всегда является object. Вызов обычно задаёт только `fields`:
+
+```ts
+schema: {
+  fields: {
+    status: {
+      type: 'option',
+      description: 'Result state.',
+      optionList: [
+        { id: 'completed', description: 'Work is finished.' },
+        { id: 'failed', description: 'Work cannot be finished.' },
+      ],
+    },
+    summary: {
+      type: 'string',
+      optional: true,
+    },
+  },
+}
+```
+
+Поддерживаемые field types пока намеренно малы: `string`, `number`, `boolean`, `option`, `object`, `array`, `any`.
+
+Не добавлять regex/min/max/union/nullable/transform, пока для этого нет реального кейса.
 
 ## Форматы
 
 ### Text
 
-Используется, когда ответ по смыслу является обычным текстовым значением. Даже такой ответ наружу возвращается объектом через schema, например `{ text: string }`.
+Используется, когда модель по смыслу возвращает одно текстовое значение.
+
+Format handler превращает текст в object вида `{ text: string }`, после чего применяется та же common schema.
 
 ### Raw
 
-Используется для компактного schema-driven текстового protocol, когда JSON даёт лишнюю хрупкость или escaping.
+Универсальный компактный FIELD-value формат:
 
-`Raw` сам по себе не определяет поля конкретной операции. Их задаёт `response.schema`.
+```text
+status completed
+summary Change prepared
+```
 
-Нельзя создавать новый transport family только потому, что новой операции нужны другие поля.
+или структурированное значение в одной строке:
+
+```text
+input {"path":"src/cli/Cli.ts"}
+```
+
+Raw handler знает только общий синтаксис `field value`. Он не знает Planner/Worker/Research semantics. Repeated fields становятся массивом.
+
+Operation-specific mini-language внутри Raw запрещён.
 
 ### Json
 
-Подходит для компактных структурированных ответов, когда модель стабильно генерирует JSON.
+Подходит для компактных структурированных ответов.
 
-Format handler отвечает только за JSON parsing. Проверка ожидаемых полей принадлежит schema.
+Format handler занимается только JSON parsing. Все ожидаемые поля/options проверяет common schema.
 
 ### Diff
 
-Отдельный wire format для реального coding-case.
+Отдельный wire format для unified diff.
 
-Модель возвращает обычный unified diff без `STATUS`, `ACTION`, markdown fences и других Nodus envelopes. Format handler разбирает diff в JS-структуру, schema проверяет ожидаемый target/path, а применение patch остаётся обязанностью engine.
-
-То есть:
+Модель возвращает обычный unified diff без `STATUS`, `ACTION`, markdown wrapper и других Nodus envelopes. Diff handler разбирает его в JS object; затем применяется та же common schema. Применение patch остаётся обязанностью engine.
 
 ```text
-model -> unified diff -> model layer parses -> JS diff object
-engine -> PatchApplicator -> candidate/file
+model -> unified diff -> DiffResponseFormatHandler -> JS object -> schema
+engine -> PatchApplicator -> file
 ```
 
 ## Не создавать mini-language на каждую операцию
 
-Новый Planner/Research/Worker action не должен автоматически порождать новый response format.
+Новый Planner/Research/Worker action не должен автоматически порождать новый response format или schema class.
 
-Сначала следует проверить, можно ли выразить ответ через существующий `Text`, `Raw`, `Json` или `Diff`, а различия оставить в schema.
+Сначала следует проверить, можно ли выразить результат через существующий `Text`, `Raw`, `Json` или `Diff` + common object schema.
 
-Новый format оправдан только когда действительно меняется wire representation и его parsing semantics.
+Новый format оправдан только когда реально меняется wire representation и parsing semantics.
 
-## Где заканчивается model layer
+## Ошибки
 
-Model layer отвечает за:
+Различаются как минимум две границы:
 
-- provider raw response;
-- очистку/parse wire representation;
-- schema decoding/validation;
-- типизированный JS result.
+- `ModelResponseFormatError` — wire response невозможно разобрать выбранным format handler;
+- `ModelResponseSchemaError` — wire response разобран, но object не соответствует ожидаемой common schema.
 
-Engine отвечает за смысловое применение результата. Например, model layer разбирает diff, но не пишет файл и не решает, считается ли задача успешно завершённой.
+Это различие полезно для будущих retry/recovery policy, но не требует разных schema API.

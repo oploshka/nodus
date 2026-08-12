@@ -24,23 +24,31 @@ export const statusScenario = scenario({
   },
   runtime: { maxWorkerIterations: 6, maxResearchActions: 2, maxEditActions: 2 },
   modelResponses: [
-    [
-      'STEP status-command',
-      'GOAL Add a /status CLI command that reports the requested current runtime state.',
-      'CONSTRAINT Use existing APIs and structures.',
-      'CONSTRAINT Do not scan or refresh the index just to display status.',
-      'CONSTRAINT Do not change unrelated behavior.',
-      'END',
-    ].join('\n'),
-    [
-      'ACTION research',
-      'INPUT {"question":"How are CLI commands registered and dispatched, and how can the CLI read current project id, conversation id, and existing project index file count without scan or refresh?"}',
-    ].join('\n'),
+    JSON.stringify({
+      steps: [{
+        id: 'status-command',
+        goal: 'Add a /status CLI command that reports the requested current runtime state.',
+        constraints: [
+          'Use existing APIs and structures.',
+          'Do not scan or refresh the index just to display status.',
+          'Do not change unrelated behavior.',
+        ],
+      }],
+    }),
+    JSON.stringify({
+      status: 'action',
+      actionId: 'research',
+      input: { question: 'How are CLI commands registered and dispatched, and how can the CLI read current project id, conversation id, and existing project index file count without scan or refresh?' },
+    }),
     'CLI commands are listed in COMMANDS and dispatched by value checks. Use configuration.project.id, conversation.id, and nodus.projectSession.index?.files.length without scan/refresh.',
-    [
-      'ACTION edit-file',
-      'INPUT {"path":"src/cli/Cli.ts","instruction":"Add /status to the existing command list and dispatch pattern. Print configuration.project.id, conversation.id, and nodus.projectSession.index?.files.length when available. Do not scan or refresh."}',
-    ].join('\n'),
+    JSON.stringify({
+      status: 'action',
+      actionId: 'edit-file',
+      input: {
+        path: 'src/cli/Cli.ts',
+        instruction: 'Add /status to the existing command list and dispatch pattern. Print configuration.project.id, conversation.id, and nodus.projectSession.index?.files.length when available. Do not scan or refresh.',
+      },
+    }),
     [
       '--- a/src/cli/Cli.ts',
       '+++ b/src/cli/Cli.ts',
@@ -64,9 +72,6 @@ export const statusScenario = scenario({
       '+  }',
       ' }',
     ].join('\n'),
-    [
-      'STATUS completed',
-      'SUMMARY /status was added using existing runtime state.',
-    ].join('\n'),
+    JSON.stringify({ status: 'completed', summary: '/status was added using existing runtime state.' }),
   ],
 });

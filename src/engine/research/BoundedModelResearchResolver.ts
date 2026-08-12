@@ -1,16 +1,23 @@
+import type { EngineLogger } from '../EngineLogger.js';
 import type { ModelRunner } from '../../model/Runner/ModelRunner.js';
+import { callModel } from '../../model/Runner/ModelCaller.js';
 import { ModelRequestFormat } from '../../model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '../../model/Response/ModelResponseFormat.js';
-import { TextResponseSchema } from '../../model/Response/schema/TextResponseSchema.js';
+import type { ModelResponseSchema } from '../../model/Response/ModelResponseSchema.js';
 import type { Project } from '../project/Project.js';
 import type { ResolvedResearch, ResearchResolver } from './ResearchTypes.js';
 
-export class BoundedModelResearchResolver implements ResearchResolver {
-  private readonly schema = new TextResponseSchema();
+interface ResearchModelResponse { text: string }
+const researchSchema: ModelResponseSchema = {
+  description: 'Concise bounded answer about the supplied project sources.',
+  fields: { text: { type: 'string', description: 'Answer the research question with concrete supported implementation facts.' } },
+};
 
+export class BoundedModelResearchResolver implements ResearchResolver {
   public constructor(
     private readonly project: Project,
     private readonly model: ModelRunner,
+    private readonly logger: EngineLogger,
     private readonly maxFiles = 5,
     private readonly maxCharsPerFile = 12_000,
   ) {}
@@ -27,7 +34,7 @@ export class BoundedModelResearchResolver implements ResearchResolver {
       sourceBlocks.push(`FILE ${candidate.path}\n${content.slice(0, this.maxCharsPerFile)}`);
     }
 
-    const response = await this.model.run({
+    const response = await callModel<ResearchModelResponse>(this.model, this.logger, {
       request: {
         message: question,
         data: sourceBlocks.join('\n\n'),
@@ -39,13 +46,10 @@ export class BoundedModelResearchResolver implements ResearchResolver {
           'If the files do not support an answer, say what is unknown.',
         ].join('\n'),
       },
-      response: {
-        format: ModelResponseFormat.Text,
-        schema: this.schema,
-      },
+      response: { format: ModelResponseFormat.Text, schema: researchSchema },
       settings: { maxTokens: 2048 },
     });
 
-    return { answer: response.output.text, sources: paths };
+    return { answer: response.text, sources: paths };
   }
 }

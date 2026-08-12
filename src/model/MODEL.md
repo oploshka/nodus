@@ -8,7 +8,7 @@ Engine не должен знать про OpenAI/Kobold wire response, markdown
 
 `ModelRunner` — основная runtime-точка вызова модели.
 
-Вызов описывает контракт, а не готовые `messages`:
+Вызов описывает application-level contract:
 
 ```ts
 model.run({
@@ -19,8 +19,18 @@ model.run({
     guidance: 'Use only available actions.',
   },
   response: {
-    format: ModelResponseFormat.Raw,
-    schema: executionPlannerSchema,
+    format: ModelResponseFormat.Json,
+    schema: {
+      fields: {
+        status: {
+          type: 'option',
+          optionList: [
+            { id: 'action', description: 'Run an available action.' },
+            { id: 'completed', description: 'The work is complete.' },
+          ],
+        },
+      },
+    },
   },
   settings: {
     temperature: 0.1,
@@ -36,16 +46,91 @@ model.run({
 - `request.format` — как представить `data` модели;
 - `guidance` — рекомендации/ограничения по выполнению;
 - `response.format` — wire-форма ответа модели;
-- `response.schema` — какие данные ожидает вызывающая сторона;
+- `response.schema` — единая object-schema ожидаемого JS результата;
 - `settings` — override настроек конкретного вызова.
 
-`settings` дополняет/переопределяет defaults из `ModelConfiguration`, а не заменяет конфигурацию provider целиком.
+`settings` дополняет/переопределяет defaults из `ModelConfiguration`, а не заменяет provider configuration целиком.
+
+## Единая response schema
+
+Schema не делится на `PlannerSchema`, `DiffSchema`, `ResearchSchema` и другие operation-specific классы.
+
+Корневой результат всегда object. Поэтому `type: 'object'` у root является неявным, а вызывающий код обычно задаёт только `fields`.
+
+Базовые field types:
+
+- `string`;
+- `number`;
+- `boolean`;
+- `option` + `optionList`;
+- `object`;
+- `array`;
+- `any` — только когда structure уже безопасно разобрана format handler'ом или действительно не важна этому boundary.
+
+`option` предпочтительнее технического `enum`, потому что каждый вариант может содержать описание того, когда модель должна его выбирать.
+
+Schema одновременно:
+
+1. участвует в формировании инструкции модели;
+2. проверяет parsed object;
+3. нормализует простые wire values в ожидаемые JS значения.
+
+Schema не должна знать особенности конкретного provider transport.
+
+## ModelRunResult
+
+`ModelRunner.run()` возвращает богатый диагностический объект:
+
+```ts
+{
+  data: { ... },
+  exchange: {
+    request: [
+      { role: 'system', message: '...' },
+      { role: 'user', message: '...' },
+    ],
+    response: [
+      { role: 'assistant', message: '...' },
+    ],
+  },
+  meta: {
+    model: '...',
+    temperature: 0,
+    maxTokens: 1024,
+    durationMs: 1234,
+    promptTokens: 100,
+    completionTokens: 20,
+    totalTokens: 120,
+    finishReason: 'stop',
+  },
+}
+```
+
+- `data` — единственная часть, которая обычно нужна Planner/Research/Worker;
+- `exchange` — нормализованный фактический обмен с моделью для логов/debug;
+- `meta` — технические параметры и метрики запуска.
+
+`exchange` намеренно не хранит provider-specific request object целиком. Он сохраняет важный логический обмен `role + message`, а transport details остаются внутри Adapter.
+
+## ModelCaller
+
+`Runner/ModelCaller.ts` содержит маленькие функции `callModel`/`callDiffFile`.
+
+Они:
+
+1. вызывают `ModelRunner`;
+2. логируют полный `ModelRunResult`;
+3. возвращают наружу только `result.data`.
+
+Это защита границы: обычный engine step не получает `exchange/meta` и не начинает зависеть от диагностической информации.
+
+`ModelCaller` намеренно является функцией, а не классом. Logger передаётся явно; эта простая зависимость не является частью логики `ModelRunner`.
 
 ## Response влияет на request
 
 Response contract двусторонний.
 
-До вызова модели `ModelRunner` использует `response.format` и `response.schema`, чтобы добавить инструкции об ожидаемом ответе. После вызова тот же contract используется для parsing и schema decoding.
+До вызова модели `ModelRunner` использует `response.format` и `response.schema`, чтобы добавить инструкции об ожидаемом ответе. После вызова format handler разбирает wire representation, а та же единая schema проверяет объект.
 
 Наружу из model layer всегда возвращается JavaScript object.
 
@@ -53,15 +138,15 @@ Response contract двусторонний.
 
 Специализированные методы допустимы как тонкие facade над `run()`.
 
-Первый реальный пример — `ModelRunner.diffFile(...)`. Он автоматически выбирает `ModelResponseFormat.Diff` и schema конкретного файла, но использует тот же transport/settings/parsing pipeline.
+Первый реальный пример — `ModelRunner.diffFile(...)`. Он автоматически выбирает `ModelResponseFormat.Diff`, использует ту же общую schema infrastructure и дополнительно проверяет ожидаемый target path.
 
 Пока специализированный вызов отличается только сборкой `ModelRun`, новый runner не нужен. Отдельный runner имеет смысл только если появляется другой lifecycle: tool loop, streaming, multi-turn conversation и т.п.
 
-Отдельный `type` в `ModelRun` сейчас не добавлен: intent уже выражается вызываемым методом и/или response contract. Его стоит добавить только если появится реальная неоднозначность маршрутизации.
+Отдельный `type` в `ModelRun` сейчас не добавлен: intent выражается вызываемым методом и/или request/response contract. Его стоит добавить только при реальной неоднозначности маршрутизации.
 
 ## Adapter
 
-`ModelAdapter` отвечает только за provider transport. `OpenAICompatibleModelAdapter` отправляет `ModelRequest` в `/chat/completions` и возвращает raw provider response.
+`ModelAdapter` отвечает только за provider transport. `OpenAICompatibleModelAdapter` отправляет `ModelRequest` в `/chat/completions` и возвращает минимальный raw provider response: content, usage и finish reason.
 
 Adapter ничего не знает про Planner, Worker, Research, response schemas или diff application.
 
@@ -74,18 +159,10 @@ Adapter ничего не знает про Planner, Worker, Research, response 
 - `Text`;
 - `Json`.
 
-Специализированные представления данных позже могут появиться как отдельные adapters/builders, но не должны бесконечно раздувать базовый enum.
-
-## Response formats and schemas
-
-Формат и schema разделены намеренно.
-
-Формат отвечает за wire representation (`Text`, `Raw`, `Json`, `Diff`). Schema описывает ожидаемые данные и преобразует уже разобранное wire value в типизированный JS object.
-
-Подробные правила: `RESPONSE-FORMATS.md`.
+Специализированные представления данных позже могут появиться как отдельные adapters/builders или специализированные `ModelRunner` methods. Базовый enum не должен раздуваться operation-specific значениями.
 
 ## Tools
 
 `model/Tool` содержит model capabilities: filesystem, search, git, terminal и registry.
 
-DefaultWorker не выдаёт весь набор tools модели автоматически. Capability должна быть явно разрешена конкретным execution flow.
+DefaultWorker не выдаёт весь набор tools модели автоматически. Capability должна быть явно разрешена конкретному execution flow.

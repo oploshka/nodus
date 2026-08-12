@@ -1,20 +1,43 @@
-import type { ModelAdapter, RawModelResponse } from '../Adapter/ModelAdapter.js';
+import type { ModelAdapter } from '../Adapter/ModelAdapter.js';
 import type { ModelConfiguration } from '../Configuration/ModelConfiguration.js';
 import type { ModelMessage, ModelRequest } from '../Request/ModelRequest.js';
 import { transportMessages } from '../Request/ModelMessageTransport.js';
 import { ModelRequestFormat, serializeRequestData } from '../Request/ModelRequestFormat.js';
 import type { ModelRunInput, ModelRunRequest, ModelRunSettings } from '../Request/ModelRun.js';
 import { ModelResponseFormat } from '../Response/ModelResponseFormat.js';
+import { responseSchemaInstructions, validateResponseSchema, type ModelResponseSchema } from '../Response/ModelResponseSchema.js';
 import type { ModelResponseFormatHandler } from '../Response/format/ModelResponseFormatHandler.js';
 import { TextResponseFormatHandler } from '../Response/format/TextResponseFormatHandler.js';
 import { RawResponseFormatHandler } from '../Response/format/RawResponseFormatHandler.js';
 import { JsonResponseFormatHandler } from '../Response/format/JsonResponseFormatHandler.js';
-import { DiffResponseFormatHandler } from '../Response/format/DiffResponseFormatHandler.js';
-import { UnifiedDiffResponseSchema, type UnifiedDiffModelResponse } from '../Response/schema/UnifiedDiffResponseSchema.js';
+import { DiffResponseFormatHandler, type UnifiedDiffHunk } from '../Response/format/DiffResponseFormatHandler.js';
+
+export interface ModelExchangeMessage {
+  role: 'system' | 'user' | 'assistant';
+  message: string;
+}
 
 export interface ModelRunResult<TOutput extends object> {
-  output: TOutput;
-  usage?: RawModelResponse['usage'];
+  data: TOutput;
+  exchange: {
+    request: ModelExchangeMessage[];
+    response: ModelExchangeMessage[];
+  };
+  meta: {
+    model: string;
+    temperature?: number;
+    maxTokens?: number;
+    durationMs: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    finishReason?: string;
+  };
+}
+
+export interface UnifiedDiffModelResponse {
+  path: string;
+  hunks: UnifiedDiffHunk[];
 }
 
 export interface DiffFileRunInput {
@@ -26,15 +49,9 @@ export interface DiffFileRunInput {
 /**
  * Single model boundary for Nodus.
  *
- * Callers describe:
- * - what the model should do (`request.message`),
- * - what data it should work with and how to represent it,
- * - optional guidance,
- * - expected response wire format + semantic schema,
- * - per-call model settings.
- *
- * ModelRunner owns prompt assembly, adapter transport, response-format parsing,
- * schema decoding, and always returns a JavaScript object.
+ * The caller supplies an application-level request, one common response schema,
+ * a wire response format, and optional per-call settings. ModelRunner owns the
+ * conversion to the actual adapter request and back to a validated JS object.
  */
 export class ModelRunner {
   private readonly responseHandlers: Map<ModelResponseFormat, ModelResponseFormatHandler>;
@@ -52,7 +69,7 @@ export class ModelRunner {
     this.responseHandlers = new Map(handlers.map((handler) => [handler.format, handler]));
   }
 
-  public async run<TOutput extends object>(input: ModelRunInput<TOutput>): Promise<ModelRunResult<TOutput>> {
+  public async run<TOutput extends object = Record<string, unknown>>(input: ModelRunInput<TOutput>): Promise<ModelRunResult<TOutput>> {
     const handler = this.responseHandlers.get(input.response.format);
     if (!handler) throw new Error(`Unsupported model response format: ${input.response.format}`);
 
@@ -61,7 +78,7 @@ export class ModelRunner {
     const system = [
       input.request.guidance?.trim(),
       handler.instructions(),
-      input.response.schema.instructions(),
+      responseSchemaInstructions(input.response.schema),
     ].filter((value): value is string => Boolean(value && value.trim())).join('\n\n');
     if (system) messages.push({ role: 'system', content: system });
 
@@ -78,31 +95,58 @@ export class ModelRunner {
       maxTokens: this.resolveMaxTokens(input.settings?.maxTokens),
     };
 
+    const startedAt = performance.now();
     const response = await this.adapter.complete(request);
+    const durationMs = performance.now() - startedAt;
     const wireValue = handler.parse(response.content);
+    const parsed = validateResponseSchema<TOutput>(input.response.schema, wireValue);
+
     return {
-      output: input.response.schema.decode(wireValue),
-      usage: response.usage,
+      data: parsed,
+      exchange: {
+        request: request.messages.map((message) => ({ role: message.role, message: message.content })),
+        response: [{ role: 'assistant', message: response.content }],
+      },
+      meta: {
+        model: request.model,
+        temperature: request.temperature,
+        maxTokens: request.maxTokens,
+        durationMs,
+        promptTokens: response.usage?.prompt_tokens,
+        completionTokens: response.usage?.completion_tokens,
+        totalTokens: response.usage?.total_tokens,
+        finishReason: response.finishReason,
+      },
     };
   }
 
   /**
-   * First specialized call helper. It is intentionally a thin facade over run().
-   * If edit calls later need a different lifecycle, this method is the natural seam
-   * to evolve without changing engine callers.
+   * Thin specialized call for the real diff use-case. It does not introduce a
+   * second runner lifecycle: it only supplies Diff format + a common schema and
+   * performs the target-path semantic check that belongs to this specialization.
    */
-  public diffFile(input: DiffFileRunInput): Promise<ModelRunResult<UnifiedDiffModelResponse>> {
-    return this.run({
+  public async diffFile(input: DiffFileRunInput): Promise<ModelRunResult<UnifiedDiffModelResponse>> {
+    const schema: ModelResponseSchema = {
+      description: `Unified diff for exactly ${input.path}`,
+      fields: {
+        path: { type: 'string', description: 'File path modified by the diff.' },
+        hunks: { type: 'array', items: { type: 'any' }, description: 'Parsed unified diff hunks.' },
+      },
+    };
+
+    const result = await this.run<UnifiedDiffModelResponse>({
       request: {
         ...input.request,
         format: input.request.format ?? ModelRequestFormat.Text,
       },
-      response: {
-        format: ModelResponseFormat.Diff,
-        schema: new UnifiedDiffResponseSchema(input.path),
-      },
+      response: { format: ModelResponseFormat.Diff, schema },
       settings: input.settings,
     });
+
+    if (result.data.path !== input.path) {
+      throw new Error(`Diff path mismatch: expected ${input.path}, received ${result.data.path}`);
+    }
+    return result;
   }
 
   private resolveMaxTokens(requested: number | undefined): number | undefined {

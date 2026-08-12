@@ -8,7 +8,7 @@ Nodus — экспериментальный runtime для управляемо
 
 - `src/app` — composition root: конфигурация, DI, CLI, logger implementations и запуск Engine;
 - `src/engine` — ядро Nodus: task lifecycle, project, Planner, Research и DefaultWorker;
-- `src/model` — единая граница с LLM: adapters, `ModelRunner`, prompts, request/response formats, schemas и model tools.
+- `src/model` — единая граница с LLM: adapters, `ModelRunner`, prompts, request/response formats, единая object-schema и model tools.
 
 Подробнее:
 
@@ -39,9 +39,9 @@ Validation намеренно ещё не реализована как отде
 
 Все runtime-вызовы модели проходят через `ModelRunner`.
 
-Adapter отвечает только за provider transport. `ModelRunner` принимает `message/data/guidance`, request format, response format + schema и per-call settings; наружу из model layer всегда возвращается JavaScript object. Для unified diff уже есть специализированный facade `ModelRunner.diffFile(...)`.
+Adapter отвечает только за provider transport. `ModelRunner` принимает `message/data/guidance`, request format, response format + единую object-schema и per-call settings. Полный результат содержит `data`, нормализованный `exchange` и `meta`; обычные engine components используют `ModelCaller`, который пишет полный model run в logger и возвращает только `data`. Для unified diff уже есть специализированный facade `ModelRunner.diffFile(...)`.
 
-Сейчас model layer поддерживает `Text / Raw / Json / Diff` response formats и отдельные response schemas. Planner/ExecutionPlanner используют RAW + schema, Research — Text + schema, а edit-file идёт через `ModelRunner.diffFile()` и обычный unified diff.
+Сейчас model layer поддерживает `Text / Raw / Json / Diff` response formats. Planner и ExecutionPlanner используют JSON + common schema, Research — Text + common schema, а edit-file идёт через unified diff + ту же schema infrastructure. Operation-specific schema classes больше не нужны.
 
 Model-specific tools (`file-system`, `search`, `git`, `terminal`) снова находятся в `src/model/Tool`. Они пока не выдаются DefaultWorker автоматически: набор доступных capabilities должен задаваться явно.
 

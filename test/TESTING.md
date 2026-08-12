@@ -76,3 +76,20 @@ Unit tests model layer должны отдельно проверять две �
 2. специализированные facade вроде `diffFile()` остаются тонкими wrappers над тем же pipeline и возвращают типизированный JS object.
 
 Integration scenario не должен парсить raw model output самостоятельно: scripted responses проходят через настоящий `ModelRunner` и те же response handlers/schemas, что real-model run.
+
+## Model logging
+
+Обычные engine components вызывают модель через `ModelCaller`: полный `ModelRunResult` пишется в тот же timestamped scenario log, а component получает только `data`.
+
+Поэтому один файл лога содержит:
+
+- нормализованный request (`role + message`);
+- нормализованный response;
+- model settings/tokens/duration;
+- последующие Engine/Worker/Research события.
+
+`ModelRunner` можно вызывать напрямую только там, где тест/benchmark специально проверяет полный диагностический contract.
+
+## Model contract tests
+
+`test/unit/model` отдельно фиксирует boundary `ModelRunner` и common response schema. Это важно: format handler, schema validation и `ModelCaller` должны ломаться как unit regression до того, как ошибка попадёт в model/integration scenario.
