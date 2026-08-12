@@ -25,7 +25,8 @@ Roadmap фиксирует только текущие архитектурны�
 ## Следующее
 
 - [ ] На реальном `/status` проверить новый ModelRunner contract (request/response/schema/diffFile) с локальной 14B.
-- [ ] Разобрать границу `ExecutionPlanner` / `ExecutionAction` на втором сценарии, не добавляя новые action-типы заранее.
+- [x] Уточнён текущий контракт `ExecutionPlanner`: incremental `nextStep(state, actions)`, action ids ограничены response schema, Worker владеет bounded loop.
+- [ ] Проверить границу `ExecutionPlanner` / `ExecutionAction` на втором сценарии, не добавляя новые action-типы заранее.
 - [ ] Решить ownership обновления `ExecutionState` после получения `ActionResult`.
 - [ ] Уточнить Research evidence dependencies: cache сейчас может зависеть от всех прочитанных candidate files, а не только от реально использованных источников.
 - [ ] Решить, нужен ли project-wide persistent ResearchStore по умолчанию или task-local overlay поверх project cache.

@@ -14,6 +14,8 @@ Nodus — экспериментальный runtime для управляемо
 
 - [`src/app/APPLICATION.md`](src/app/APPLICATION.md)
 - [`src/engine/ENGINE.md`](src/engine/ENGINE.md)
+- [`src/engine/planner/PLANNER.md`](src/engine/planner/PLANNER.md)
+- [`src/engine/worker/WORKER.md`](src/engine/worker/WORKER.md)
 - [`src/model/MODEL.md`](src/model/MODEL.md)
 - [`src/model/RESPONSE-FORMATS.md`](src/model/RESPONSE-FORMATS.md)
 - [`test/TESTING.md`](test/TESTING.md)
@@ -25,7 +27,7 @@ Nodus — экспериментальный runtime для управляемо
 
 `DefaultWorker` агрегирует:
 
-- `ExecutionPlanner` — выбирает следующее доступное действие;
+- `ExecutionPlanner` — планирует один следующий локальный action-step из текущего состояния;
 - `ExecutionState` — хранит локальную историю выполнения шага;
 - зарегистрированные `ExecutionAction` — реальные capabilities Worker.
 

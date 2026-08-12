@@ -9,11 +9,11 @@
 Текущая deterministic последовательность:
 
 1. Planner формирует один semantic PlanStep;
-2. ExecutionPlanner выбирает bounded `research`;
+2. ExecutionPlanner планирует следующий локальный шаг и выбирает bounded `research`;
 3. Research возвращает существующие access paths/patterns;
-4. ExecutionPlanner выбирает `edit-file`;
+4. с обновлённым ExecutionState ExecutionPlanner планирует следующий шаг и выбирает `edit-file`;
 5. ModelRunner форматирует model response в typed edit object;
 6. patch applicator применяет unified diff;
-7. ExecutionPlanner завершает Worker.
+7. после результата edit-file ExecutionPlanner возвращает `completed`, и Worker завершает PlanStep.
 
 Integration test хранится в `test/integration/status`. Тот же Scenario contract должен позже использоваться real-model test, чтобы deterministic runtime и LLM сравнивались на одинаковой задаче.

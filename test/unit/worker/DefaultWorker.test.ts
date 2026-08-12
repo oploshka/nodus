@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { NullLogger } from '../../../src/app/logging/Logger.js';
 import { Task } from '../../../src/engine/task/Task.js';
 import { DefaultWorker } from '../../../src/engine/worker/DefaultWorker.js';
-import type { ExecutionDecision, ExecutionPlanner } from '../../../src/engine/worker/ExecutionPlanner.js';
+import type { ExecutionPlanner, ExecutionStep } from '../../../src/engine/worker/ExecutionPlanner.js';
 import type { ExecutionAction } from '../../../src/engine/worker/action/ExecutionAction.js';
 
 class SequenceExecutionPlanner implements ExecutionPlanner {
-  public constructor(private readonly decisions: ExecutionDecision[]) {}
-  public async next(): Promise<ExecutionDecision> {
+  public constructor(private readonly decisions: ExecutionStep[]) {}
+  public async nextStep(): Promise<ExecutionStep> {
     const decision = this.decisions.shift();
     if (!decision) throw new Error('No scripted decision');
     return decision;

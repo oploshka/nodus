@@ -30,7 +30,7 @@ export class DefaultWorker {
 
     while (state.iteration < this.maxIterations) {
       state.iteration += 1;
-      const decision = await this.planner.next(state, [...this.actions.values()]);
+      const decision = await this.planner.nextStep(state, [...this.actions.values()]);
       this.logger.info('worker.decision', { stepId: step.id, iteration: state.iteration, decision });
       if (decision.type === 'completed') {
         this.logger.info('worker.finish', { stepId: step.id, status: 'completed', summary: decision.summary });
