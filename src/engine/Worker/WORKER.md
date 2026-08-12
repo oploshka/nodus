@@ -1,20 +1,20 @@
 # Worker
 
-Worker executes one `PlanStep` and hides its local execution process from Engine.
+Worker выполняет один `PlanStep` и скрывает локальный execution process от Engine.
 
-Engine only sees the final `WorkerResult`:
+Engine видит только:
 
-- `completed` — the PlanStep outcome was achieved;
-- `not-completed` — the current run stopped, but the same Worker instance may still be useful;
-- `failed` — the Worker considers this execution path terminal.
+- `completed`;
+- `not-completed` + `canContinue`;
+- `failed`.
+
+Worker — процесс с непредсказуемым итогом. Он может успешно решить задачу, исчерпать budget или столкнуться с terminal constraint.
 
 ## Actions
 
-A Worker owns an explicit bounded set of executable Actions. An Action is a capability with a concrete input/output contract, not a prompt description.
+Worker владеет bounded списком executable Actions. Action — capability с конкретным input/output contract, а не объект, который нужно «превратить в prompt» снаружи.
 
-The current `CodeWorker` starts with `change-code`. If that Action cannot execute safely because concrete project facts are missing, it explicitly requests `research`. The Worker runs only those requested Research actions and then retries the same change.
-
-Current shape:
+Текущий `CodeWorker`:
 
 ```text
 CodeWorker
@@ -22,16 +22,44 @@ CodeWorker
   research
 ```
 
-`ChangeCodeAction` may update multiple project-root-relative files when all edits belong to one coherent outcome. Project paths are canonical root-relative paths; before editing, `ProjectPathResolver` may repair an incorrect prefix only when the project index identifies exactly one existing file. Diff generation, patch application and local edit recovery belong to that Action.
+Нормальный цикл:
 
-Action-specific model guidance lives with the Action. Actions may override model/settings per call (`model`, `temperature`, `maxTokens`), while provider transport remains hidden behind `ModelRunner` / `ModelCaller`.
+```text
+ChangeCodeAction.run(step, knowledge)
+  -> completed
+  -> failed
+  -> not-completed + research requests
 
-Research is never run pre-emptively by the Worker. It is invoked only after the primary Action explicitly says which bounded project facts are required. `Research` itself owns cache lookup and source-hash invalidation.
+ResearchAction.run(question)
+  -> bounded Research answer
+
+ChangeCodeAction.run(step, updated knowledge)
+  -> retry execution
+```
+
+Research не запускается заранее. Primary Action сначала пытается выполнить задачу и только потом явно сообщает, каких concrete facts не хватает.
+
+## Action responsibilities
+
+`ChangeCodeAction` отвечает за coherent project change. Один Action может менять несколько файлов, если все edits нужны для одного outcome. Внутри Action находятся его model guidance/prompt, proposal/edit contract, diff generation, patch apply и local recovery конкретного edit.
+
+Action может использовать `ModelCaller`/`ModelRunner` и per-call model settings. Он не должен знать provider-specific HTTP/wire details.
+
+`ResearchAction` оборачивает Research service и возвращает его локальный результат Worker.
+
+Новые Actions (`RunCommandAction`, documentation и т.п.) не вводятся заранее — только когда capability становится отдельным повторяемым contract.
 
 ## Project paths
 
-Action file references are untrusted input. `ProjectPathResolver` canonicalizes them to project-root-relative paths. Existing-file operations require the file to exist, may repair one unambiguous indexed path, and reject paths/symlinks that escape the project root. Create targets may be missing, but their nearest existing parent must remain inside the project.
+Project file references считаются untrusted model input. Каноническая форма внутри engine — path relative to project root с `/` separators.
 
-## Project path policy
+`ProjectPathResolver`:
 
-Worker Actions use project-root-relative paths. Reads may inspect any file inside the project root, but writes are rejected for protected paths (`node_modules`, `.git`, `.nodus`) and for directories excluded by the project scan configuration.
+- принимает decorated/absolute/file URL references и приводит их к project-relative path;
+- запрещает выход за project root;
+- для existing operations проверяет реальное существование файла;
+- может исправить неверный prefix через project index только при одном однозначном match;
+- для create target требует безопасный existing parent;
+- блокирует writes в `node_modules`, `.git` и project excludes.
+
+`.nodus` сейчас временно исключён из write-policy enforcement, потому что Research cache/index всё ещё сохраняются через общий Project write API. Это не целевая security policy: planned internal-storage boundary должен снова сделать `.nodus` недоступным model Actions.

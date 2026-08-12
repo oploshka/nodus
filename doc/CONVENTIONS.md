@@ -58,6 +58,6 @@ Do not create a nested `Type` directory for every subsystem. Internal interfaces
 
 ## Documentation placement
 
-Keep project documentation under `doc`. The repository root keeps `README.md` as the entry point and documentation index.
+The repository root keeps only `README.md` as the entry point/index. Cross-project architecture, roadmap, conventions and handoff documents belong under `doc`.
 
-Layer documentation may be grouped under `doc/App`, `doc/Engine`, `doc/Model`, `doc/Test`, and `doc/Benchmark`; it does not need to live beside source code.
+Layer-specific documentation may live beside the layer it describes (for example `src/app/APPLICATION.md`, `src/engine/ENGINE.md`, `src/engine/Worker/WORKER.md`, `src/model/MODEL.md`). This is intentional: important local contracts should be discoverable next to the code. Do not rename every local document to `README.md`.

@@ -52,7 +52,12 @@ export class Project {
   }
 
   public async resolveTargetPath(path: string): Promise<string> {
-    const resolved = await this.pathResolver.resolveTarget(path, this.configuration.exclude ?? []);
+    // Temporary compatibility: .nodus is excluded from project scanning but still
+    // contains Nodus-owned runtime state (Research cache, project index, logs).
+    // A separate internal-storage boundary is planned; until then do not treat
+    // .nodus as a model write-policy exclusion here.
+    const writeExclude = (this.configuration.exclude ?? []).filter((item) => item.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '') !== '.nodus');
+    const resolved = await this.pathResolver.resolveTarget(path, writeExclude);
     this.logPathCorrection(path, resolved);
     return resolved;
   }

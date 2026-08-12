@@ -169,4 +169,8 @@ Worker не выдаёт весь набор tools модели автомати
 
 ## Language boundary
 
-Model calls may receive user tasks in any language. Engine-side callers currently provide language hints so internal Nodus structures can stay in a stable machine-facing language while user-facing summaries and project-authored text use their configured languages. The model transport itself does not own this policy.
+Nodus distinguishes three language concerns: project-authored text, internal machine-facing data and user-facing responses. The configuration names them `project`, `nodus` and `response`.
+
+Current callers still add some language guidance directly to Planner/Worker/Research/Determine prompts. This works but duplicates policy. The planned model-layer behavior is to apply the internal language centrally when composing every machine-facing request, with English as the default `nodus` language. Callers should then describe *what* they need without repeating the same language rule.
+
+The user task itself is not pre-translated by a separate model call. Identifiers, paths and code symbols must be preserved exactly. Project/response language may differ from the internal Nodus language.

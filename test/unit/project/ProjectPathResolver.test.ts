@@ -96,17 +96,16 @@ describe('ProjectPathResolver', () => {
     }
   });
 
-  it('blocks writes to protected directories even when project exclude rules omit them', async () => {
+  it('blocks hard-protected directories but does not hard-block .nodus inside the resolver', async () => {
     const fixture = await TestProject.create('path-protected', {
       'node_modules/pkg/index.js': 'module.exports = {};\n',
       '.git/config': '[core]\n',
-      '.nodus/cache.json': '{}\n',
     });
     try {
       const resolver = new ProjectPathResolver(fixture.root);
       await expect(resolver.resolveTarget('node_modules/pkg/index.js')).rejects.toThrow('not writable by Nodus');
       await expect(resolver.resolveTarget('.git/config')).rejects.toThrow('not writable by Nodus');
-      await expect(resolver.resolveTarget('.nodus/cache.json')).rejects.toThrow('not writable by Nodus');
+      await expect(resolver.resolveTarget('.nodus/cache.json')).resolves.toBe('.nodus/cache.json');
     } finally {
       await fixture.dispose();
     }

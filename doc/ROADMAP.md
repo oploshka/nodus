@@ -1,38 +1,54 @@
 # Nodus 0.3 roadmap
 
-Roadmap фиксирует только текущие архитектурные решения и ближайшие проверки. Старые v0.2 orchestration-костыли не считаются обязательным compatibility contract.
+Roadmap фиксирует текущее состояние spike и ближайшие архитектурные работы. Старые v0.2 abstractions не являются compatibility contract.
 
-## Готово в текущем spike
+## Уже собрано
 
-- [x] Три верхних слоя: `app / engine / model`.
-- [x] `app` оставлен composition root / DI + CLI boundary.
-- [x] `Engine.run()` сведен к координации task loop.
-- [x] High-level Planner отделён от Worker execution planning.
-- [x] Worker lifecycle переписан как `attempt -> missing-information -> Research -> attempt`; старый DefaultWorker удалён.
-- [x] Research вынесен в bounded service с source-hash cache invalidation.
-- [x] Первый vertical slice `/status`: Worker сначала пытается выполнить задачу, затем запрашивает только недостающие факты и повторяет попытку.
-- [x] Vitest + Nodus-specific `test/framework`.
-- [x] Один timestamped test log на scenario run.
-- [x] Восстановлен самостоятельный `model` layer: adapter/request/prompt/profile/tools.
-- [x] Добавлен `ModelRunner` как единая точка runtime-вызовов LLM.
-- [x] Response parsing перенесён в `model/Response`; engine получает typed JS objects, а не raw model text.
-- [x] Полезные model tools возвращены под `src/model/Tool`.
-- [x] Зафиксирован новый `ModelRunner` contract: message/data/guidance + request/response formats + schema + per-call settings.
-- [x] `diffFile()` добавлен как первый thin specialized facade; отдельный `type` пока не вводится.
-- [x] Восстановлен raw-agent benchmark как отдельная контрольная группа.
-- [x] Добавлена design-документация `src/model/RESPONSE-FORMATS.md`.
+- [x] Три верхних слоя `app / engine / model`.
+- [x] `Engine.run()` как coordinator global task lifecycle.
+- [x] Semantic Planner с `goal + constraints + decompositionType`.
+- [x] Fixed Planner decomposition reasons: coherent/independent/dependency/separate-deliverable.
+- [x] `Determine` как bounded option-selection service.
+- [x] Worker statuses `completed / not-completed / failed`.
+- [x] `CodeWorker`, `DocumentationWorker`, `AgentWorker`; default Worker отсутствует.
+- [x] Worker Actions как executable capabilities, а не prompt descriptions.
+- [x] `CodeWorker -> ChangeCodeAction -> ResearchAction -> retry` lifecycle.
+- [x] Multi-file coherent edits в `ChangeCodeAction`.
+- [x] Local diff recovery конкретного edit без полного replanning всей задачи.
+- [x] Bounded Research + persistent source-hash cache invalidation.
+- [x] `ProjectPathResolver`: root-relative canonical paths, dirty/absolute/file URL parsing, existence check и unambiguous index repair.
+- [x] Write policy для hard-protected `node_modules/.git` и project excludes.
+- [x] `ModelRunner`, common response schema, `ModelCaller`, `diffFile()` facade.
+- [x] Config languages `project / nodus / response`.
+- [x] Human console progress + full timestamped file logs.
+- [x] Multiline CLI input и explicit completed/not-completed/failed output.
+- [x] Vitest unit/integration/model/e2e layout + Nodus scenario framework.
+- [x] Deterministic integration scenarios `/status` и `runtime.maxPlanSteps`.
+- [x] Raw-agent benchmark как контрольная группа.
 
-## Следующее
+## Ближайшие работы
 
-- [ ] На реальном `/status` проверить новый ModelRunner contract (request/response/schema/diffFile) с локальной 14B.
-- [x] Добавлены два selectable Worker: `CodeWorker` и `DocumentationWorker`; отдельного default Worker больше нет.
-- [ ] Прогнать несколько разных задач и проверить границу специализации Worker.
-- [ ] Проверить внутренний `WorkerAttempt` contract на реальной локальной модели.
-- [ ] Уточнить Research evidence dependencies: cache сейчас может зависеть от всех прочитанных candidate files, а не только от реально использованных источников.
-- [ ] Решить, нужен ли project-wide persistent ResearchStore по умолчанию или task-local overlay поверх project cache.
-- [ ] Добавить отдельный Validation layer только после появления понятного validation contract.
-- [ ] Определить минимальный публичный API Engine по реальным потребностям app; пока гарантирован только `run()`.
-- [ ] Добавить настоящий model scenario на том же Scenario contract, что deterministic integration test.
+- [ ] **Разделить Nodus internal storage и model-editable project paths.** Сейчас `.nodus` временно разрешён write resolver'ом, чтобы Research cache/index могли сохраняться через общий Project API. Нужен отдельный internal storage API; после этого model Actions снова блокируют `.nodus`.
+- [ ] **Централизовать language policy в model layer.** Internal Nodus language по умолчанию English; `project` и `response` остаются отдельными configurable hints. Не дублировать правило языка в каждом Action/Service prompt.
+- [ ] Повторить live `runtime.maxPlanSteps` после стабилизации path/storage boundary и проверить полный Action lifecycle на локальной 14B.
+- [ ] Реализовать настоящий Engine/Worker continuation для `not-completed` (`/continue` не должен становиться новой user task).
+- [ ] Определить минимальный API user interaction/control points: approval, correction, interrupt, required/timeout/none.
+- [ ] Разделить AgentWorker `completed` и «нужен пользовательский input».
+- [ ] Уточнить Research evidence dependencies и cache precision.
+- [ ] Решить project-wide persistent ResearchStore vs task-local overlay поверх project cache.
+- [ ] Добавлять новые Actions (`RunCommandAction`, documentation и др.) только по реальным задачам.
+- [ ] Добавить Validation layer только после появления понятного validation contract.
+- [ ] Определить минимальный публичный API Engine по реальным потребностям app; пока гарантирован `run()`.
+- [ ] Продолжить накопление execution samples для task clustering/Worker statistics/Determine optimization.
+
+## Interaction ideas (зафиксированы, не реализованы)
+
+- proposal before apply;
+- user approve/reject/correct по stable interaction id/tags;
+- user interrupt активного run;
+- `required`, `timeout`, `none` wait modes;
+- timeout fallback `continue | pause | cancel`;
+- конфигурируемая policy, а не CLI-specific logic внутри Worker.
 
 ## Не переносим автоматически из v0.2
 
@@ -41,5 +57,3 @@ Roadmap фиксирует только текущие архитектурны�
 - старый `RecoveryController`;
 - `OperationProfile/OperationRegistry` как orchestration abstraction;
 - старый `ModelController` целиком.
-
-Полезные низкоуровневые идеи из старого model layer переносятся отдельно. Его orchestration-роли теперь должны принадлежать `ModelRunner`, Engine или Worker, а не одному центральному controller.

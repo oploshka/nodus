@@ -3,14 +3,14 @@ import { fileURLToPath } from 'node:url';
 import { basename, dirname, isAbsolute, posix, relative, resolve, sep } from 'node:path';
 import type { ProjectIndex } from '@engine/Project/ProjectIndex.js';
 
-const ALWAYS_WRITE_BLOCKED = ['node_modules', '.git', '.nodus'] as const;
+const ALWAYS_WRITE_BLOCKED = ['node_modules', '.git'] as const;
 
 /**
  * Converts untrusted/model-provided file references into canonical project paths.
  * Public results are always project-root-relative and use `/` separators.
  *
  * Read resolution only constrains the path representation to the project root.
- * Write resolution additionally applies the project's ignore/protected-path policy.
+ * Write resolution additionally applies the project's ignore/protected-path policy. Nodus-owned `.nodus` storage is temporarily exempted by Project until internal storage is split from model-editable project writes.
  */
 export class ProjectPathResolver {
   public constructor(private readonly root: string) {}
@@ -74,10 +74,7 @@ export class ProjectPathResolver {
       .filter(Boolean);
 
     const rule = blocked.find((item) => this.matchesRule(normalized, item));
-
-    // TODO: fix
-    console.log(rule);
-    // if (rule) throw new Error(`Project path is not writable by Nodus: ${normalized} (blocked by ${rule})`);
+    if (rule) throw new Error(`Project path is not writable by Nodus: ${normalized} (blocked by ${rule})`);
   }
 
   private async toProjectPath(input: string): Promise<string> {

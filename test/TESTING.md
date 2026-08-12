@@ -102,3 +102,17 @@ Integration scenario не должен парсить raw model output само�
 `Planner -> Determine -> Worker attempt -> Research -> Worker retry -> multi-file edit -> completed`.
 
 The purpose is not to test model intelligence. It pins the response contracts, routing order and hand-off boundaries so architecture changes fail close to the broken signature instead of only during a live Kobold run.
+
+## Current regression targets
+
+The deterministic scenarios are expected to catch boundary regressions before a live local-model run. Current high-value contracts include:
+
+- Planner returns semantic steps with `constraints` and `decompositionType`;
+- Determine chooses only from supplied Worker options;
+- CodeWorker executes explicit Actions;
+- Research is requested only after the primary Action reports concrete missing information;
+- Research cache invalidates when a source hash changes;
+- project paths stay project-root-relative and invalid prefixes are only repaired when unambiguous;
+- model-generated writes cannot target hard-protected/ignored project locations.
+
+`.nodus` is temporarily exempted from the write-policy path because internal Research/index storage still uses the same Project write API. This is an intentional temporary compromise tracked in `doc/ROADMAP.md`, not the desired long-term model-edit policy.
