@@ -19,9 +19,20 @@
 
 The temporary `/scan` command remains app-level administration and is not part of `Engine.run()` orchestration.
 
+
+## Language configuration
+
+The application accepts three independent language hints:
+
+- `language.project` — preferred language for human-authored project text such as documentation and comments;
+- `language.nodus` — machine-facing language for Planner goals, Worker questions, Research answers and other internal orchestration data;
+- `language.response` — language for user-facing summaries, errors, interactions and console labels.
+
+The current recommended/default internal Nodus language is English because project identifiers and source-code search terms are usually English. The user task itself may be written in any language.
+
 ## Logging
 
-Concrete logger implementations live in `app/Logging`. Engine owns only the shared logging contract in `engine/Type`.
+Concrete logger implementations live in `app/Logging`. Engine owns only the shared logging contract in `engine/Type`. `ConsoleLogger` renders compact human progress (`Engine / Planner / Worker / Research / AI`), while `FileLogger` keeps the full diagnostic event payload including model exchange data.
 ## CLI input
 
 Interactive CLI input is multiline: `Enter` inserts a new line, while `Ctrl+Enter` or `Ctrl+D` submits the buffered task. `Ctrl+C` cancels the current input. After `Engine.run()` returns, CLI always prints an explicit terminal task status (`completed`, `not-completed`, or `failed`) so a blinking prompt is not confused with active execution.

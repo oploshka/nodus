@@ -4,6 +4,7 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Worker, WorkerResult } from '@engine/Worker/Worker.js';
 import type { AgentRunner } from '@model/Runner/AgentRunner.js';
 import type { Tool, ToolContext } from '@model/Tool/Tool.js';
+import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 
 /** General-purpose bounded agent loop. Specialized workers may outperform it. */
 export class AgentWorker implements Worker {
@@ -16,6 +17,7 @@ export class AgentWorker implements Worker {
     private readonly context: ToolContext,
     private readonly logger: EngineLogger,
     private readonly maxRounds = 12,
+    private readonly language: LanguageConfiguration = { project: 'en', nodus: 'en', response: 'en' },
   ) {}
 
   public canHandle(_step: PlanStep): boolean { return true; }
@@ -27,6 +29,9 @@ export class AgentWorker implements Worker {
           `Original task: ${task.description}`,
           `Current task: ${step.goal}`,
           step.constraints.length > 0 ? `Constraints:\n- ${step.constraints.join('\n- ')}` : '',
+          `Internal working language: ${this.language.nodus}.`,
+          `Project human-authored text language: ${this.language.project}.`,
+          `Final user-facing response language: ${this.language.response}.`,
         ].filter(Boolean).join('\n\n'),
         tools: this.tools,
         context: this.context,

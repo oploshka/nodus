@@ -34,6 +34,7 @@ export class ConfigurationLoader {
         model: parsed.model.model,
       },
       ...(parsed.runtime ? { runtime: { ...parsed.runtime } } : {}),
+      ...(parsed.language ? { language: { ...parsed.language } } : {}),
     };
   }
 }

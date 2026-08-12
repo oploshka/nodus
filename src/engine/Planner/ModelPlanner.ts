@@ -48,6 +48,7 @@ export class ModelPlanner implements Planner {
   public constructor(
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
+    private readonly nodusLanguage = 'en',
   ) {}
 
   public async plan(task: Task): Promise<Plan> {
@@ -58,6 +59,7 @@ export class ModelPlanner implements Planner {
         format: ModelRequestFormat.Text,
         guidance: [
           'You are the high-level Planner inside Nodus.',
+          `The user task may be in any language. Write all plan goals, constraints and other internal fields in ${this.nodusLanguage}. Preserve code identifiers and paths exactly.`,
           'Create only steps that directly contribute to the user-requested outcome.',
           'Do not invent analysis, documentation, safety limits, configuration semantics, or other requirements the user did not ask for.',
           'Do not add research/understand/discover steps merely because implementation details are unknown; the Worker resolves missing project knowledge while executing.',

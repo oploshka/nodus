@@ -166,3 +166,7 @@ Adapter ничего не знает про Planner, Worker, Research, response 
 `model/Tool` содержит model capabilities: filesystem, search, git, terminal и registry.
 
 Worker не выдаёт весь набор tools модели автоматически. Capability должна быть явно разрешена конкретному execution flow.
+
+## Language boundary
+
+Model calls may receive user tasks in any language. Engine-side callers currently provide language hints so internal Nodus structures can stay in a stable machine-facing language while user-facing summaries and project-authored text use their configured languages. The model transport itself does not own this policy.

@@ -38,5 +38,12 @@
     "executionPath": ".nodus/log/executions",
     "modelPayload": true,
     "clearOnStart": true
+  },
+
+
+  "language": {
+    "project": "en",
+    "nodus": "en",
+    "response": "ru"
   }
 }

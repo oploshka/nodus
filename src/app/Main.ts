@@ -22,7 +22,7 @@ async function main(args: string[]): Promise<void> {
   if (options.clearLogs) await rm(logDirectory, { recursive: true, force: true });
 
   const logPath = resolve(logDirectory, `${fileTimestamp()}-nodus.log`);
-  const logger = new CompositeLogger([new ConsoleLogger(), new FileLogger(logPath)]);
+  const logger = new CompositeLogger([new ConsoleLogger(configuration.language?.response), new FileLogger(logPath)]);
   logger.info('app.startup', {
     projectId: configuration.project.id,
     clearCache: options.clearCache,

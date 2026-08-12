@@ -18,6 +18,7 @@ export class BoundedModelResearchResolver implements ResearchResolver {
     private readonly project: Project,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
+    private readonly nodusLanguage = 'en',
     private readonly maxFiles = 5,
     private readonly maxCharsPerFile = 12_000,
   ) {}
@@ -48,6 +49,7 @@ export class BoundedModelResearchResolver implements ResearchResolver {
         format: ModelRequestFormat.Text,
         guidance: [
           'You answer one bounded question about an existing codebase.',
+          `The question may originate from a user task in any language. Return the internal research answer in ${this.nodusLanguage}. Preserve code identifiers, paths and symbols exactly.`,
           'Use only the supplied files. Do not propose edits and do not broaden the task.',
           'Return concise implementation facts, concrete access paths and existing project rules when supported.',
           'If the files do not support an answer, say what is unknown.',

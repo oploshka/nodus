@@ -22,6 +22,7 @@ import { GitTool } from '@model/Tool/Git/GitTool.js';
 import { SearchTool } from '@model/Tool/Search/SearchTool.js';
 import { TerminalTool } from '@model/Tool/Terminal/TerminalTool.js';
 import type { Worker } from '@engine/Worker/Worker.js';
+import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 
 export interface BootstrapOverrides {
   logger?: EngineLogger;
@@ -35,7 +36,8 @@ export class Bootstrap {
     configuration: AppConfiguration,
     overrides: BootstrapOverrides = {},
   ): Promise<Engine> {
-    const logger = overrides.logger ?? new ConsoleLogger();
+    const language = resolveLanguageConfiguration(configuration);
+    const logger = overrides.logger ?? new ConsoleLogger(language.response);
     const adapter = overrides.model ?? new OpenAICompatibleModelAdapter(
       configuration.model.endpoint,
       configuration.model.apiKey,
@@ -50,7 +52,7 @@ export class Bootstrap {
     await researchStore.open();
     const research = new Research(
       researchStore,
-      new BoundedModelResearchResolver(project, model, logger),
+      new BoundedModelResearchResolver(project, model, logger, language.nodus),
       project,
       logger,
     );
@@ -59,6 +61,7 @@ export class Bootstrap {
       new ModelProjectChangeAttempt(project, model, logger, {
         purpose: 'Implement the requested software/project behavior change.',
         guidance: 'Prefer existing project APIs and conventions. Change source code only when required by the task.',
+        language,
       }),
       research,
       logger,
@@ -70,6 +73,7 @@ export class Bootstrap {
       new ModelProjectChangeAttempt(project, model, logger, {
         purpose: 'Implement the requested human-facing documentation change.',
         guidance: 'Prefer documentation files and explanatory text. Do not modify runtime code unless the task explicitly requires it.',
+        language,
       }),
       research,
       logger,
@@ -86,15 +90,24 @@ export class Bootstrap {
         { projectRoot: project.root, exclude: project.configuration.exclude ?? [] },
         logger,
         configuration.runtime?.maxAgentRounds,
+        language,
       ));
     }
 
     return new Engine(
       project,
-      new ModelPlanner(model, logger),
+      new ModelPlanner(model, logger, language.nodus),
       workers,
-      new ModelDetermine(model, logger),
+      new ModelDetermine(model, logger, language.nodus),
       logger,
     );
   }
+}
+
+function resolveLanguageConfiguration(configuration: AppConfiguration): LanguageConfiguration {
+  return {
+    project: configuration.language?.project ?? 'en',
+    nodus: configuration.language?.nodus ?? 'en',
+    response: configuration.language?.response ?? 'en',
+  };
 }

@@ -7,6 +7,7 @@ import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
+import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 
 interface ChangeDecision {
   outcome: 'ready' | 'missing-information' | 'already-completed' | 'failed';
@@ -19,6 +20,7 @@ interface ChangeDecision {
 export interface ProjectChangeAttemptProfile {
   purpose: string;
   guidance: string;
+  language: LanguageConfiguration;
 }
 
 const decisionSchema: ModelResponseSchema = {
@@ -87,6 +89,9 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
         format: ModelRequestFormat.Json,
         guidance: [
           this.profile.guidance,
+          `Use ${this.profile.language.nodus} for machine-facing fields such as questions and edit instructions. Preserve code identifiers and paths exactly.`,
+          `Use ${this.profile.language.response} only for user-facing summary/reason fields.`,
+          `When creating human-authored project text (documentation/comments), prefer the project language: ${this.profile.language.project}.`,
           'Start from execution: if the supplied information is sufficient, return the concrete edits immediately.',
           'If safe execution requires project facts that are not supplied, do not guess. Return only the smallest set of specific bounded questions needed for the next execution attempt.',
           'Return at most 3 questions. Prefer one precise question when it can unblock the task.',
@@ -161,6 +166,8 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
             format: ModelRequestFormat.Json,
             guidance: [
               this.profile.guidance,
+              `Use ${this.profile.language.nodus} for internal reasoning/instructions and preserve code identifiers exactly.`,
+              `Use ${this.profile.language.project} for new human-authored project text unless the task explicitly requests another language.`,
               'Edit exactly the authoritative file supplied in DATA.',
               'Treat authoritativeSource.content as the current source of truth; do not rely on line numbers or source from an earlier edit attempt.',
               editAttempt === 1

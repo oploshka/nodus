@@ -14,6 +14,7 @@ export class ModelDetermine implements Determine {
   public constructor(
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
+    private readonly nodusLanguage = 'en',
   ) {}
 
   public async option<T>(request: DetermineRequest<T>): Promise<T> {
@@ -40,6 +41,7 @@ export class ModelDetermine implements Determine {
         },
         format: ModelRequestFormat.Json,
         guidance: [
+          `Reason about the supplied goal using ${this.nodusLanguage} as the internal Nodus language. Preserve identifiers exactly.`,
           'Choose exactly one option from the supplied list.',
           'Do not solve the goal yourself.',
           'Do not invent options that are not supplied.',

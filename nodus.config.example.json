@@ -22,5 +22,10 @@
     "maxWorkerAttempts": 4,
     "maxResearchRequests": 4,
     "maxAgentRounds": 12
+  },
+  "language": {
+    "project": "en",
+    "nodus": "en",
+    "response": "ru"
   }
 }
