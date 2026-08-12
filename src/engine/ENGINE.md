@@ -45,7 +45,7 @@ Research отвечает на bounded question о проекте и храни�
 
 ExecutionPlanner планирует один следующий action-level step из текущего ExecutionState и видит только зарегистрированные actions. Планирование локально-инкрементальное: результат research может определить вход следующего edit action. Worker дополнительно ограничивает число iterations и usage каждого action, поэтому модель не получает свободный agent loop.
 
-Подробный контракт Worker находится в `worker/WORKER.md`, Planner — в `planner/PLANNER.md`.
+Подробный контракт Worker находится в `Worker/WORKER.md`, Planner — в `Planner/PLANNER.md`.
 
 Текущие actions:
 

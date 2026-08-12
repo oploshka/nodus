@@ -1,6 +1,6 @@
-import type { ModelRequestFormat } from './ModelRequestFormat.js';
-import type { ModelResponseFormat } from '../Response/ModelResponseFormat.js';
-import type { ModelResponseSchema } from '../Response/ModelResponseSchema.js';
+import type { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
+import type { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
+import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 
 export interface ModelRunRequest {
   /** What the model is asked to do. */

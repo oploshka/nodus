@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ModelResponseSchemaError, validateResponseSchema, type ModelResponseSchema } from '../../../src/model/Response/ModelResponseSchema.js';
-import { RawResponseFormatHandler } from '../../../src/model/Response/format/RawResponseFormatHandler.js';
+import { ModelResponseSchemaError, validateResponseSchema, type ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
+import { RawResponseFormatHandler } from '@model/Response/Format/RawResponseFormatHandler.js';
 
 const schema: ModelResponseSchema = {
   fields: {

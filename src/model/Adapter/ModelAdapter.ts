@@ -1,4 +1,4 @@
-import type { ModelRequest } from '../Request/ModelRequest.js';
+import type { ModelRequest } from '@model/Request/ModelRequest.js';
 
 export interface RawModelResponse {
   content: string;

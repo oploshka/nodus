@@ -1,12 +1,12 @@
-import type { EngineLogger } from './EngineLogger.js';
-import type { Planner } from './planner/Planner.js';
-import type { Project } from './project/Project.js';
-import { Task } from './task/Task.js';
-import { TaskRun } from './task/TaskRun.js';
-import type { DefaultWorker } from './worker/DefaultWorker.js';
+import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import type { Planner } from '@engine/Planner/Planner.js';
+import type { Project } from '@engine/Project/Project.js';
+import { Task } from '@engine/Task/Task.js';
+import { TaskRun } from '@engine/Task/TaskRun.js';
+import type { DefaultWorker } from '@engine/Worker/DefaultWorker.js';
 
 /**
- * Coordinator only. It owns the run loop, but not planning/research/action logic.
+ * Coordinator only. It owns the run loop, but not planning/Research/action logic.
  */
 export class Engine {
   public constructor(

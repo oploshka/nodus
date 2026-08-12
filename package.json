@@ -5,20 +5,21 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:model": "vitest run --project model --passWithNoTests",
     "test:e2e": "vitest run --project e2e --passWithNoTests",
-    "dev": "node dist/app/Main.js",
+    "dev": "tsx src/app/Main.ts",
     "benchmark:raw-agent": "tsx benchmark/RawAgentBenchmark.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.8.3",
     "vitest": "^4.1.10",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "tsc-alias": "^1.8.16"
   }
 }

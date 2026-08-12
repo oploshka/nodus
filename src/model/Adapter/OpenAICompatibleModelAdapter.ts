@@ -1,5 +1,5 @@
-import type { ModelAdapter, RawModelResponse } from './ModelAdapter.js';
-import type { ModelRequest } from '../Request/ModelRequest.js';
+import type { ModelAdapter, RawModelResponse } from '@model/Adapter/ModelAdapter.js';
+import type { ModelRequest } from '@model/Request/ModelRequest.js';
 
 interface OpenAICompatibleResponse {
   choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;

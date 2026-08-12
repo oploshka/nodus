@@ -1,4 +1,4 @@
-import type { Tool, ToolDefinition } from './Tool.js';
+import type { Tool, ToolDefinition } from '@model/Tool/Tool.js';
 
 export class ToolRegistry {
   private readonly tools = new Map<string, Tool>();

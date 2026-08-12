@@ -1,7 +1,7 @@
 // FileSystemTool.ts
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
-import type { Tool, ToolContext, ToolResult } from '../Tool.js';
+import type { Tool, ToolContext, ToolResult } from '@model/Tool/Tool.js';
 
 export class FileSystemTool implements Tool {
   public readonly definition = {

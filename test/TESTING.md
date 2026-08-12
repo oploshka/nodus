@@ -11,7 +11,7 @@ Vitest подключён как npm dev dependency и отвечает за с�
 - `unit` — быстрые изолированные тесты;
 - `integration` — deterministic vertical slices со scripted model adapter;
 - `model` — те же Nodus scenarios с реальной моделью;
-- `e2e` — запуск через app/config/CLI boundary.
+- `e2e` — запуск через app/Config/CLI boundary.
 
 Model/e2e projects запускаются без file-level parallelism, чтобы локальные модели не конкурировали за один endpoint.
 

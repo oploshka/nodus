@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { ModelAdapter } from '../../../src/model/Adapter/ModelAdapter.js';
-import { ModelRequestFormat } from '../../../src/model/Request/ModelRequestFormat.js';
-import { ModelResponseFormat } from '../../../src/model/Response/ModelResponseFormat.js';
-import type { ModelResponseSchema } from '../../../src/model/Response/ModelResponseSchema.js';
-import { ModelRunner } from '../../../src/model/Runner/ModelRunner.js';
-import { callModel } from '../../../src/model/Runner/ModelCaller.js';
+import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
+import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
+import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
+import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
+import { ModelRunner } from '@model/Runner/ModelRunner.js';
+import { callModel } from '@model/Runner/ModelCaller.js';
 
 class SingleResponseAdapter implements ModelAdapter {
   public requests: Parameters<ModelAdapter['complete']>[0][] = [];

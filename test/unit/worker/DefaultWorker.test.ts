@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { NullLogger } from '../../../src/app/logging/Logger.js';
-import { Task } from '../../../src/engine/task/Task.js';
-import { DefaultWorker } from '../../../src/engine/worker/DefaultWorker.js';
-import type { ExecutionPlanner, ExecutionStep } from '../../../src/engine/worker/ExecutionPlanner.js';
-import type { ExecutionAction } from '../../../src/engine/worker/action/ExecutionAction.js';
+import { NullLogger } from '@app/Logging/Logger.js';
+import { Task } from '@engine/Task/Task.js';
+import { DefaultWorker } from '@engine/Worker/DefaultWorker.js';
+import type { ExecutionPlanner, ExecutionStep } from '@engine/Worker/ExecutionPlanner.js';
+import type { ExecutionAction } from '@engine/Worker/Action/ExecutionAction.js';
 
 class SequenceExecutionPlanner implements ExecutionPlanner {
   public constructor(private readonly decisions: ExecutionStep[]) {}

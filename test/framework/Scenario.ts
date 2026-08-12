@@ -1,11 +1,12 @@
-import type { ModelConfiguration, RuntimeConfiguration } from '../../src/app/config/Configuration.js';
+import type { WorkerConfiguration } from '@engine/Type/EngineConfiguration.js';
+import type { ModelConfiguration } from '@model/Type/ModelConfiguration.js';
 
 export interface ScenarioDefinition {
   id: string;
   task: string;
   files: Record<string, string>;
   modelResponses: string[];
-  runtime?: RuntimeConfiguration;
+  runtime?: WorkerConfiguration;
   model?: Partial<ModelConfiguration>;
 }
 

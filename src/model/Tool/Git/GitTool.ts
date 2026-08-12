@@ -1,7 +1,7 @@
 // GitTool.ts
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { Tool, ToolContext, ToolResult } from '../Tool.js';
+import type { Tool, ToolContext, ToolResult } from '@model/Tool/Tool.js';
 
 const execFileAsync = promisify(execFile);
 

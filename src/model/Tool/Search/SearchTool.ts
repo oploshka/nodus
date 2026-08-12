@@ -1,7 +1,7 @@
 // SearchTool.ts
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
-import type { Tool, ToolContext, ToolResult } from '../Tool.js';
+import type { Tool, ToolContext, ToolResult } from '@model/Tool/Tool.js';
 
 interface SearchMatch {
   path: string;

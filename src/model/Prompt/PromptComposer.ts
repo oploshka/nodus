@@ -1,5 +1,5 @@
-import type { PromptSettings } from '../Profile/ModelCallProfile.js';
-import { COMMON_SYSTEM_PROMPT } from './CommonSystemPrompt.js';
+import type { PromptSettings } from '@model/Profile/ModelCallProfile.js';
+import { COMMON_SYSTEM_PROMPT } from '@model/Prompt/CommonSystemPrompt.js';
 
 export interface PromptComposeOverrides {
   rules?: string[];

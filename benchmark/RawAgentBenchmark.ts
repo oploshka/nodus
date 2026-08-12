@@ -1,8 +1,8 @@
-import { ConfigurationLoader } from '../src/app/config/ConfigurationLoader.js';
-import { FileSystemTool } from '../src/model/Tool/FileSystem/FileSystemTool.js';
-import { SearchTool } from '../src/model/Tool/Search/SearchTool.js';
-import { TerminalTool } from '../src/model/Tool/Terminal/TerminalTool.js';
-import type { Tool, ToolContext } from '../src/model/Tool/Tool.js';
+import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
+import { FileSystemTool } from '@model/Tool/FileSystem/FileSystemTool.js';
+import { SearchTool } from '@model/Tool/Search/SearchTool.js';
+import { TerminalTool } from '@model/Tool/Terminal/TerminalTool.js';
+import type { Tool, ToolContext } from '@model/Tool/Tool.js';
 
 const DEFAULT_TASK = `Добавь команду /status в CLI. Команда должна выводить текущий ID проекта, ID текущего conversation и количество файлов в индексе проекта, если индекс доступен. Используй существующие API и структуры проекта, не дублируй уже существующую логику получения этих данных. Не изменяй ничего, что не требуется для этой задачи.`;
 

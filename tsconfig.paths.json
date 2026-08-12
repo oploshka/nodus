@@ -5,38 +5,20 @@
       "node"
     ],
     "paths": {
-      "@core/*": [
-        "src/core/*"
+      "@app/*": [
+        "src/app/*"
       ],
-      "@project/*": [
-        "src/project/*"
-      ],
-      "@operation/*": [
-        "src/operation/*"
-      ],
-      "@context/*": [
-        "src/context/*"
-      ],
-      "@agent/*": [
-        "src/agent/*"
+      "@engine/*": [
+        "src/engine/*"
       ],
       "@model/*": [
         "src/model/*"
       ],
-      "@cli/*": [
-        "src/cli/*"
-      ],
       "@test/*": [
         "test/*"
       ],
-      "@planner/*": [
-        "src/planner/*"
-      ],
-      "@research/*": [
-        "src/research/*"
-      ],
-      "@execution/*": [
-        "src/execution/*"
+      "@bench/*": [
+        "benchmark/*"
       ]
     }
   }

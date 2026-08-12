@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { EngineLogger } from '../../src/engine/EngineLogger.js';
+import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 
 export interface TestLoggerOptions {
   directory?: string;

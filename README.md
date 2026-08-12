@@ -6,20 +6,21 @@ Nodus — экспериментальный runtime для управляемо
 
 Основной код намеренно собран в три верхних слоя:
 
-- `src/app` — composition root: конфигурация, DI, CLI, logger implementations и запуск Engine;
-- `src/engine` — ядро Nodus: task lifecycle, project, Planner, Research и DefaultWorker;
+- `src/app` — process/composition layer: startup input, DI, CLI and concrete logging;
+- `src/engine` — ядро Nodus: task lifecycle, Project, Planner, Research и DefaultWorker;
 - `src/model` — единая граница с LLM: adapters, `ModelRunner`, prompts, request/response formats, единая object-schema и model tools.
 
 Подробнее:
 
 - [`src/app/APPLICATION.md`](src/app/APPLICATION.md)
 - [`src/engine/ENGINE.md`](src/engine/ENGINE.md)
-- [`src/engine/planner/PLANNER.md`](src/engine/planner/PLANNER.md)
-- [`src/engine/worker/WORKER.md`](src/engine/worker/WORKER.md)
+- [`src/engine/Planner/PLANNER.md`](src/engine/Planner/PLANNER.md)
+- [`src/engine/Worker/WORKER.md`](src/engine/Worker/WORKER.md)
 - [`src/model/MODEL.md`](src/model/MODEL.md)
 - [`src/model/RESPONSE-FORMATS.md`](src/model/RESPONSE-FORMATS.md)
 - [`test/TESTING.md`](test/TESTING.md)
 - [`ROADMAP.md`](ROADMAP.md)
+- [`CONVENTIONS.md`](CONVENTIONS.md)
 
 ## Текущий runtime
 

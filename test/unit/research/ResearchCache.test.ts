@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { NullLogger } from '../../../src/app/logging/Logger.js';
-import { Project } from '../../../src/engine/project/Project.js';
-import { Research } from '../../../src/engine/research/Research.js';
-import { ResearchStore } from '../../../src/engine/research/ResearchStore.js';
-import type { ResearchResolver } from '../../../src/engine/research/ResearchTypes.js';
-import { TestProject } from '../../framework/TestProject.js';
+import { NullLogger } from '@app/Logging/Logger.js';
+import { Project } from '@engine/Project/Project.js';
+import { Research } from '@engine/Research/Research.js';
+import { ResearchStore } from '@engine/Research/ResearchStore.js';
+import type { ResearchResolver } from '@engine/Research/ResearchTypes.js';
+import { TestProject } from '@test/framework/TestProject.js';
 
 class CountingResolver implements ResearchResolver {
   public calls = 0;

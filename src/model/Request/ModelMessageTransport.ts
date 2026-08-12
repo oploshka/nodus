@@ -1,4 +1,4 @@
-import type { ModelMessage } from './ModelRequest.js';
+import type { ModelMessage } from '@model/Request/ModelRequest.js';
 
 export type ModelMessageLayout = 'collapsed-user' | 'layered';
 

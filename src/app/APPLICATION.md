@@ -1,29 +1,24 @@
 # Application layer
 
-`app` — composition root Nodus. Его задача: собрать зависимости, применить конфигурацию, подключить внешние реализации и запустить Engine.
+`app` is the process/composition layer. It reads external startup input, creates concrete services and starts Engine. It does not own task reasoning.
 
-## Ответственность
+## Startup
 
-`app` может:
+`Main.ts` owns process-level input. The current CLI startup path is:
 
-- загрузить и нормализовать конфигурацию;
-- создать logger implementation;
-- создать model adapter и `ModelRunner`;
-- создать Project/Research/Planner/Worker/Engine и связать их через constructor DI;
-- принять ввод CLI и вызвать публичный API Engine.
+1. parse command-line arguments;
+2. load external configuration;
+3. create app-level implementations such as the logger;
+4. create/open the shared Project instance needed by the CLI administrative `/scan` command;
+5. ask `Bootstrap.createEngine(...)` to compose and return Engine;
+6. start CLI with the ready Engine.
 
-`app` не должен:
+`ConfigurationLoader` only reads/minimally validates external configuration and resolves the project root relative to the config file. Runtime defaults are intentionally not injected by the loader.
 
-- решать, как разбить пользовательскую задачу;
-- выбирать ExecutionAction;
-- выполнять Research;
-- редактировать проект как часть task reasoning;
-- содержать retry/recovery policy Worker.
+`Bootstrap` is the Engine composition root. It creates/wires model, Research, Planner and Worker dependencies and returns only `Engine`. Optional overrides exist for alternative startup configurations and tests.
 
-DI односторонний: app создаёт объекты и передаёт зависимости в constructors. Engine и model не должны обращаться к глобальному service locator.
+The temporary `/scan` command remains app-level administration and is not part of `Engine.runTask()` orchestration.
 
 ## Logging
 
-Реализации logger находятся в `app/logging`, потому что выбор sink/output — часть запуска приложения. Сам минимальный logging port (`EngineLogger`) определён в engine, чтобы engine не зависел от app.
-
-Reporting для пользователя следует держать отдельно от технического logging, когда он появится.
+Concrete logger implementations live in `app/Logging`. Engine owns only the shared logging contract in `engine/Type`.

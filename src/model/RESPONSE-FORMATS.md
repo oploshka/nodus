@@ -71,7 +71,7 @@ summary Change prepared
 или структурированное значение в одной строке:
 
 ```text
-input {"path":"src/cli/Cli.ts"}
+input {"path":"src/Cli/Cli.ts"}
 ```
 
 Raw handler знает только общий синтаксис `field value`. Он не знает Planner/Worker/Research semantics. Repeated fields становятся массивом.

@@ -1,16 +1,16 @@
-import type { ModelAdapter } from '../Adapter/ModelAdapter.js';
-import type { ModelConfiguration } from '../Configuration/ModelConfiguration.js';
-import type { ModelMessage, ModelRequest } from '../Request/ModelRequest.js';
-import { transportMessages } from '../Request/ModelMessageTransport.js';
-import { ModelRequestFormat, serializeRequestData } from '../Request/ModelRequestFormat.js';
-import type { ModelRunInput, ModelRunRequest, ModelRunSettings } from '../Request/ModelRun.js';
-import { ModelResponseFormat } from '../Response/ModelResponseFormat.js';
-import { responseSchemaInstructions, validateResponseSchema, type ModelResponseSchema } from '../Response/ModelResponseSchema.js';
-import type { ModelResponseFormatHandler } from '../Response/format/ModelResponseFormatHandler.js';
-import { TextResponseFormatHandler } from '../Response/format/TextResponseFormatHandler.js';
-import { RawResponseFormatHandler } from '../Response/format/RawResponseFormatHandler.js';
-import { JsonResponseFormatHandler } from '../Response/format/JsonResponseFormatHandler.js';
-import { DiffResponseFormatHandler, type UnifiedDiffHunk } from '../Response/format/DiffResponseFormatHandler.js';
+import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
+import type { ModelConfiguration } from '@model/Type/ModelConfiguration.js';
+import type { ModelMessage, ModelRequest } from '@model/Request/ModelRequest.js';
+import { transportMessages } from '@model/Request/ModelMessageTransport.js';
+import { ModelRequestFormat, serializeRequestData } from '@model/Request/ModelRequestFormat.js';
+import type { ModelRunInput, ModelRunRequest, ModelRunSettings } from '@model/Request/ModelRun.js';
+import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
+import { responseSchemaInstructions, validateResponseSchema, type ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
+import type { ModelResponseFormatHandler } from '@model/Response/Format/ModelResponseFormatHandler.js';
+import { TextResponseFormatHandler } from '@model/Response/Format/TextResponseFormatHandler.js';
+import { RawResponseFormatHandler } from '@model/Response/Format/RawResponseFormatHandler.js';
+import { JsonResponseFormatHandler } from '@model/Response/Format/JsonResponseFormatHandler.js';
+import { DiffResponseFormatHandler, type UnifiedDiffHunk } from '@model/Response/Format/DiffResponseFormatHandler.js';
 
 export interface ModelExchangeMessage {
   role: 'system' | 'user' | 'assistant';
@@ -150,7 +150,7 @@ export class ModelRunner {
   }
 
   private resolveMaxTokens(requested: number | undefined): number | undefined {
-    if (requested === undefined) return this.configuration.maxTokens;
+    if (requested === undefined) return this.configuration.maxTokens ?? 4096;
     if (this.configuration.maxTokens === undefined) return requested;
     return Math.min(requested, this.configuration.maxTokens);
   }
