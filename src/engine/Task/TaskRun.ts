@@ -4,8 +4,11 @@ import type { Task } from '@engine/Task/Task.js';
 
 export interface StepRunResult {
   stepId: string;
+  workerId: string;
   result: WorkerResult;
 }
+
+export type TaskRunStatus = 'completed' | 'needs-subtask' | 'blocked' | 'failed';
 
 export class TaskRun {
   public readonly startedAt = new Date().toISOString();
@@ -17,11 +20,15 @@ export class TaskRun {
     public readonly plan: Plan,
   ) {}
 
-  public add(stepId: string, result: WorkerResult): void { this.steps.push({ stepId, result }); }
+  public add(stepId: string, workerId: string, result: WorkerResult): void {
+    this.steps.push({ stepId, workerId, result });
+  }
 
   public finish(): void { this.finishedAt = new Date().toISOString(); }
 
-  public get status(): 'completed' | 'failed' {
-    return this.steps.some((step) => step.result.status === 'failed') ? 'failed' : 'completed';
+  public get status(): TaskRunStatus {
+    const last = this.steps.at(-1)?.result.status;
+    if (last && last !== 'completed') return last;
+    return this.steps.length === this.plan.steps.length ? 'completed' : 'blocked';
   }
 }

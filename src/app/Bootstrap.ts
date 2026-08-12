@@ -11,6 +11,7 @@ import { DefaultWorker } from '@engine/Worker/DefaultWorker.js';
 import { EditFileAction } from '@engine/Worker/Action/EditFileAction.js';
 import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { ModelExecutionPlanner } from '@engine/Worker/ModelExecutionPlanner.js';
+import { FirstMatchWorkerSelector } from '@engine/Worker/WorkerSelector.js';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter.js';
 import { ModelRunner } from '@model/Runner/ModelRunner.js';
@@ -59,6 +60,6 @@ export class Bootstrap {
       configuration.runtime?.maxWorkerIterations,
     );
 
-    return new Engine(project, planner, [worker], logger);
+    return new Engine(project, planner, [worker], new FirstMatchWorkerSelector(), logger);
   }
 }

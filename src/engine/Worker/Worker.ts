@@ -4,12 +4,11 @@ import type { ExecutionState } from '@engine/Worker/ExecutionState.js';
 
 export type WorkerResult =
   | { status: 'completed'; summary: string; state: ExecutionState }
+  | { status: 'needs-subtask'; task: string; reason?: string; state: ExecutionState }
+  | { status: 'blocked'; reason: string; state: ExecutionState }
   | { status: 'failed'; error: string; state: ExecutionState };
 
-/**
- * Engine-facing Worker contract. Engine treats workers as execution options and
- * only cares whether a worker can handle a PlanStep and what status it returns.
- */
+/** Engine-facing contract for one available execution option. */
 export interface Worker {
   readonly id: string;
   readonly description: string;
