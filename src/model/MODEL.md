@@ -1,62 +1,91 @@
 # Model layer
 
-`model` — единая граница между Nodus и LLM/capabilities, связанных с моделью.
+`model` — граница между engine и LLM/provider transport.
+
+Engine не должен знать про OpenAI/Kobold wire response, markdown fences, parsing protocol или сериализацию входных данных.
 
 ## ModelRunner
 
-`ModelRunner` — единственная runtime-точка, через которую engine должен вызывать модель.
+`ModelRunner` — основная runtime-точка вызова модели.
 
-Его контракт:
+Вызов описывает контракт, а не готовые `messages`:
 
-1. получить логические messages + выбранный `ModelResponseFormatter`;
-2. применить model defaults и message transport layout;
-3. вызвать `ModelAdapter`;
-4. получить raw text от provider;
-5. распарсить raw text выбранным formatter;
-6. вернуть вызывающему коду JavaScript object + usage metadata.
+```ts
+model.run({
+  request: {
+    message: 'Choose the next action.',
+    data: state,
+    format: ModelRequestFormat.Json,
+    guidance: 'Use only available actions.',
+  },
+  response: {
+    format: ModelResponseFormat.Raw,
+    schema: executionPlannerSchema,
+  },
+  settings: {
+    temperature: 0.1,
+    maxTokens: 1024,
+  },
+});
+```
 
-Engine не должен разбирать `response.content` самостоятельно.
+Смысл полей:
+
+- `message` — что модель должна сделать;
+- `data` — данные, над которыми выполняется работа;
+- `request.format` — как представить `data` модели;
+- `guidance` — рекомендации/ограничения по выполнению;
+- `response.format` — wire-форма ответа модели;
+- `response.schema` — какие данные ожидает вызывающая сторона;
+- `settings` — override настроек конкретного вызова.
+
+`settings` дополняет/переопределяет defaults из `ModelConfiguration`, а не заменяет конфигурацию provider целиком.
+
+## Response влияет на request
+
+Response contract двусторонний.
+
+До вызова модели `ModelRunner` использует `response.format` и `response.schema`, чтобы добавить инструкции об ожидаемом ответе. После вызова тот же contract используется для parsing и schema decoding.
+
+Наружу из model layer всегда возвращается JavaScript object.
+
+## Specialized methods
+
+Специализированные методы допустимы как тонкие facade над `run()`.
+
+Первый реальный пример — `ModelRunner.diffFile(...)`. Он автоматически выбирает `ModelResponseFormat.Diff` и schema конкретного файла, но использует тот же transport/settings/parsing pipeline.
+
+Пока специализированный вызов отличается только сборкой `ModelRun`, новый runner не нужен. Отдельный runner имеет смысл только если появляется другой lifecycle: tool loop, streaming, multi-turn conversation и т.п.
+
+Отдельный `type` в `ModelRun` сейчас не добавлен: intent уже выражается вызываемым методом и/или response contract. Его стоит добавить только если появится реальная неоднозначность маршрутизации.
 
 ## Adapter
 
-`ModelAdapter` отвечает только за provider transport. `OpenAICompatibleModelAdapter` работает с `/chat/completions` и ничего не знает про Planner, Worker или response protocols.
+`ModelAdapter` отвечает только за provider transport. `OpenAICompatibleModelAdapter` отправляет `ModelRequest` в `/chat/completions` и возвращает raw provider response.
 
-Такое разделение позволяет тестам подменять adapter queue/fake реализацией, сохраняя настоящий `ModelRunner` и formatters.
+Adapter ничего не знает про Planner, Worker, Research, response schemas или diff application.
 
-## Response formatters
+## Request formats
 
-`model/Response` содержит форматирование/парсинг wire response.
+`ModelRequestFormat` отвечает только за представление `request.data` модели. Это не provider wire format.
 
-Сейчас:
+Сейчас есть:
 
-- `PlannerResponseFormatter` -> `{ steps: [...] }`;
-- `ExecutionPlannerResponseFormatter` -> `{ type: 'action' | 'completed' | 'failed', ... }`;
-- `EditFileResponseFormatter` -> typed patch/write/delete object;
-- `TextResponseFormatter` -> `{ text }`.
+- `Text`;
+- `Json`.
 
-Модель по-прежнему может возвращать простой RAW protocol, если он надёжнее для локальной модели. Требование — не заставить LLM генерировать JSON, а не выпускать raw text за пределы model layer.
+Специализированные представления данных позже могут появиться как отдельные adapters/builders, но не должны бесконечно раздувать базовый enum.
 
-## Prompt / Profile / Request
+## Response formats and schemas
 
-В model возвращены независимые части старого слоя:
+Формат и schema разделены намеренно.
 
-- logical request types;
-- message transport (`collapsed-user | layered`);
-- common prompt composer;
-- model call/profile types.
+Формат отвечает за wire representation (`Text`, `Raw`, `Json`, `Diff`). Schema описывает ожидаемые данные и преобразует уже разобранное wire value в типизированный JS object.
 
-Старый `ModelController` намеренно не переносится целиком: он смешивал transport, context, operation orchestration и parsing. Эти обязанности теперь разделены.
+Подробные правила: `RESPONSE-FORMATS.md`.
 
 ## Tools
 
-`model/Tool` содержит model capabilities:
+`model/Tool` содержит model capabilities: filesystem, search, git, terminal и registry.
 
-- `FileSystemTool`;
-- `SearchTool`;
-- `GitTool`;
-- `TerminalTool`;
-- `ToolRegistry`.
-
-Они возвращены как независимые низкоуровневые возможности, но текущий DefaultWorker не выдаёт их модели автоматически. Доступ к tools должен быть явной capability/policy конкретного execution flow.
-
-Старый `ToolExecutor`, привязанный к v0.2 Execution context, не переносится автоматически.
+DefaultWorker не выдаёт весь набор tools модели автоматически. Capability должна быть явно разрешена конкретным execution flow.

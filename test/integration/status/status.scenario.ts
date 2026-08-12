@@ -42,10 +42,6 @@ export const statusScenario = scenario({
       'INPUT {"path":"src/cli/Cli.ts","instruction":"Add /status to the existing command list and dispatch pattern. Print configuration.project.id, conversation.id, and nodus.projectSession.index?.files.length when available. Do not scan or refresh."}',
     ].join('\n'),
     [
-      'STATUS completed',
-      'ACTION patch',
-      'PATH src/cli/Cli.ts',
-      'DIFF',
       '--- a/src/cli/Cli.ts',
       '+++ b/src/cli/Cli.ts',
       '@@ -1,6 +1,7 @@',

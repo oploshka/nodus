@@ -67,3 +67,12 @@ npm run test:integration
 npm run test:model
 npm run test:e2e
 ```
+
+## ModelRunner contract tests
+
+Unit tests model layer должны отдельно проверять две вещи:
+
+1. `ModelRunner.run()` корректно собирает request из `message/data/guidance`, добавляет response-format/schema instructions и применяет per-call settings;
+2. специализированные facade вроде `diffFile()` остаются тонкими wrappers над тем же pipeline и возвращают типизированный JS object.
+
+Integration scenario не должен парсить raw model output самостоятельно: scripted responses проходят через настоящий `ModelRunner` и те же response handlers/schemas, что real-model run.

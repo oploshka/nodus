@@ -17,10 +17,14 @@ Roadmap фиксирует только текущие архитектурны�
 - [x] Добавлен `ModelRunner` как единая точка runtime-вызовов LLM.
 - [x] Response parsing перенесён в `model/Response`; engine получает typed JS objects, а не raw model text.
 - [x] Полезные model tools возвращены под `src/model/Tool`.
+- [x] Зафиксирован новый `ModelRunner` contract: message/data/guidance + request/response formats + schema + per-call settings.
+- [x] `diffFile()` добавлен как первый thin specialized facade; отдельный `type` пока не вводится.
+- [x] Восстановлен raw-agent benchmark как отдельная контрольная группа.
+- [x] Добавлена design-документация `src/model/RESPONSE-FORMATS.md`.
 
 ## Следующее
 
-- [ ] На реальном `/status` проверить новую цепочку ModelRunner/formatters с локальной 14B.
+- [ ] На реальном `/status` проверить новый ModelRunner contract (request/response/schema/diffFile) с локальной 14B.
 - [ ] Разобрать границу `ExecutionPlanner` / `ExecutionAction` на втором сценарии, не добавляя новые action-типы заранее.
 - [ ] Решить ownership обновления `ExecutionState` после получения `ActionResult`.
 - [ ] Уточнить Research evidence dependencies: cache сейчас может зависеть от всех прочитанных candidate files, а не только от реально использованных источников.

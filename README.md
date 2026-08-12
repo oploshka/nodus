@@ -8,13 +8,14 @@ Nodus — экспериментальный runtime для управляемо
 
 - `src/app` — composition root: конфигурация, DI, CLI, logger implementations и запуск Engine;
 - `src/engine` — ядро Nodus: task lifecycle, project, Planner, Research и DefaultWorker;
-- `src/model` — единая граница с LLM: adapters, `ModelRunner`, prompts, response formatters и model tools.
+- `src/model` — единая граница с LLM: adapters, `ModelRunner`, prompts, request/response formats, schemas и model tools.
 
 Подробнее:
 
 - [`src/app/APPLICATION.md`](src/app/APPLICATION.md)
 - [`src/engine/ENGINE.md`](src/engine/ENGINE.md)
 - [`src/model/MODEL.md`](src/model/MODEL.md)
+- [`src/model/RESPONSE-FORMATS.md`](src/model/RESPONSE-FORMATS.md)
 - [`test/TESTING.md`](test/TESTING.md)
 - [`ROADMAP.md`](ROADMAP.md)
 
@@ -38,14 +39,9 @@ Validation намеренно ещё не реализована как отде
 
 Все runtime-вызовы модели проходят через `ModelRunner`.
 
-Adapter отвечает только за транспорт и возвращает raw text. `ModelRunner` передаёт raw response выбранному `ModelResponseFormatter`, а наружу из model layer возвращается JavaScript object.
+Adapter отвечает только за provider transport. `ModelRunner` принимает `message/data/guidance`, request format, response format + schema и per-call settings; наружу из model layer всегда возвращается JavaScript object. Для unified diff уже есть специализированный facade `ModelRunner.diffFile(...)`.
 
-Сейчас форматтеры есть для:
-
-- high-level Planner;
-- ExecutionPlanner;
-- edit-file response;
-- plain research answer.
+Сейчас model layer поддерживает `Text / Raw / Json / Diff` response formats и отдельные response schemas. Planner/ExecutionPlanner используют RAW + schema, Research — Text + schema, а edit-file идёт через `ModelRunner.diffFile()` и обычный unified diff.
 
 Model-specific tools (`file-system`, `search`, `git`, `terminal`) снова находятся в `src/model/Tool`. Они пока не выдаются DefaultWorker автоматически: набор доступных capabilities должен задаваться явно.
 
@@ -77,3 +73,13 @@ npm run test:e2e
 ```
 
 Каждый scenario run может использовать подменяемый logger. `TestFileLogger` пишет один timestamped `.log` на запуск; туда же через model harness попадают model request/response.
+
+## Benchmark
+
+Raw-agent control group сохранён отдельно от тестов:
+
+```bash
+npm run benchmark:raw-agent -- nodus.config.json
+```
+
+Описание: [`benchmark/RAW-AGENT.md`](benchmark/RAW-AGENT.md).

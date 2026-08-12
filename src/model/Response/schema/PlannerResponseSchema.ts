@@ -1,4 +1,4 @@
-import { ModelResponseFormatError, type ModelResponseFormatter } from './ModelResponseFormatter.js';
+import { ModelResponseFormatError, type ModelResponseSchema } from '../ModelResponseSchema.js';
 
 export interface PlannerStepResponse {
   id: string;
@@ -11,12 +11,12 @@ export interface PlannerModelResponse {
   steps: PlannerStepResponse[];
 }
 
-export class PlannerResponseFormatter implements ModelResponseFormatter<PlannerModelResponse> {
+export class PlannerResponseSchema implements ModelResponseSchema<PlannerModelResponse> {
   public readonly id = 'planner';
 
   public instructions(): string {
     return [
-      'Return protocol:',
+      'Expected raw schema:',
       'STEP <id>',
       'GOAL <one-line semantic goal>',
       'CONSTRAINT <one-line constraint>  (repeat as needed)',
@@ -26,8 +26,9 @@ export class PlannerResponseFormatter implements ModelResponseFormatter<PlannerM
     ].join('\n');
   }
 
-  public parse(content: string): PlannerModelResponse {
-    const lines = content.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean);
+  public decode(value: unknown): PlannerModelResponse {
+    if (typeof value !== 'string') this.fail('Expected raw text', value);
+    const lines = value.split('\n').map((line) => line.trim()).filter(Boolean);
     const steps: PlannerStepResponse[] = [];
     let current: PlannerStepResponse | undefined;
 
@@ -46,9 +47,11 @@ export class PlannerResponseFormatter implements ModelResponseFormatter<PlannerM
     if (current) steps.push(current);
 
     const valid = steps.filter((step) => step.id && step.goal).slice(0, 8);
-    if (valid.length === 0) {
-      throw new ModelResponseFormatError(this.id, 'Planner returned no valid steps', content.slice(0, 500));
-    }
+    if (valid.length === 0) this.fail('Planner returned no valid steps', value);
     return { steps: valid };
+  }
+
+  private fail(message: string, value: unknown): never {
+    throw new ModelResponseFormatError(this.id, message, String(value).slice(0, 500));
   }
 }

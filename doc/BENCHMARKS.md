@@ -17,3 +17,16 @@
 - изменённые файлы.
 
 Model benchmarks следует запускать последовательно (`concurrency=1`).
+
+
+## Raw-agent control group
+
+`benchmark/RawAgentBenchmark.ts` намеренно обходит Engine/Planner/Research/Worker orchestration и запускает свободный tool loop на той же model/project configuration. Это контрольная группа для сравнения с Nodus, а не correctness test.
+
+Запуск:
+
+```bash
+npm run benchmark:raw-agent -- nodus.config.json
+```
+
+Подробности transport/tool loop находятся в `benchmark/RAW-AGENT.md`.

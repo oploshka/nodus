@@ -12,11 +12,13 @@
     "test:integration": "vitest run --project integration",
     "test:model": "vitest run --project model --passWithNoTests",
     "test:e2e": "vitest run --project e2e --passWithNoTests",
-    "dev": "node dist/app/Main.js"
+    "dev": "node dist/app/Main.js",
+    "benchmark:raw-agent": "tsx benchmark/RawAgentBenchmark.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.8.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "tsx": "^4.19.2"
   }
 }

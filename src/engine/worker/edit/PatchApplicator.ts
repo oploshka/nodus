@@ -1,4 +1,4 @@
-import type { UnifiedDiffHunk } from '../../../model/Response/EditFileResponseFormatter.js';
+import type { UnifiedDiffHunk } from '../../../model/Response/format/DiffResponseFormatHandler.js';
 
 export class PatchApplicator {
   public apply(content: string, hunks: UnifiedDiffHunk[], path: string): string {

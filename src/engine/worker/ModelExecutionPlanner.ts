@@ -1,11 +1,13 @@
 import type { ModelRunner } from '../../model/Runner/ModelRunner.js';
-import { ExecutionPlannerResponseFormatter } from '../../model/Response/ExecutionPlannerResponseFormatter.js';
+import { ModelRequestFormat } from '../../model/Request/ModelRequestFormat.js';
+import { ModelResponseFormat } from '../../model/Response/ModelResponseFormat.js';
+import { ExecutionPlannerResponseSchema } from '../../model/Response/schema/ExecutionPlannerResponseSchema.js';
 import type { ExecutionAction } from './action/ExecutionAction.js';
 import type { ExecutionDecision, ExecutionPlanner } from './ExecutionPlanner.js';
 import type { ExecutionState } from './ExecutionState.js';
 
 export class ModelExecutionPlanner implements ExecutionPlanner {
-  private readonly formatter = new ExecutionPlannerResponseFormatter();
+  private readonly schema = new ExecutionPlannerResponseSchema();
 
   public constructor(private readonly model: ModelRunner) {}
 
@@ -18,33 +20,31 @@ export class ModelExecutionPlanner implements ExecutionPlanner {
     ].filter(Boolean).join('\n')).join('\n\n');
 
     const actionList = actions.map((action) => `- ${action.id}: ${action.description}`).join('\n');
+    const data = [
+      `TASK\n${state.task.description}`,
+      `\nSTEP\n${state.step.goal}`,
+      state.step.constraints.length ? `\nCONSTRAINTS\n${state.step.constraints.map((value) => `- ${value}`).join('\n')}` : '',
+      `\nAVAILABLE ACTIONS\n${actionList}`,
+      history ? `\nACTION HISTORY\n${history}` : '\nACTION HISTORY\n<empty>',
+    ].join('\n');
+
     const response = await this.model.run({
-      maxTokens: 1024,
-      formatter: this.formatter,
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'You are ExecutionPlanner inside one Nodus worker.',
-            'Your job is to choose the next concrete action required to complete ONE semantic plan step.',
-            'You may only choose from the supplied actions.',
-            'Use research when implementation facts are missing. Do not repeatedly research facts already present in history.',
-            'Do not invent an unavailable action.',
-            '',
-            this.formatter.instructions(),
-          ].join('\n'),
-        },
-        {
-          role: 'user',
-          content: [
-            `TASK\n${state.task.description}`,
-            `\nSTEP\n${state.step.goal}`,
-            state.step.constraints.length ? `\nCONSTRAINTS\n${state.step.constraints.map((value) => `- ${value}`).join('\n')}` : '',
-            `\nAVAILABLE ACTIONS\n${actionList}`,
-            history ? `\nACTION HISTORY\n${history}` : '\nACTION HISTORY\n<empty>',
-          ].join('\n'),
-        },
-      ],
+      request: {
+        message: 'Choose the next concrete action for this one semantic plan step.',
+        data,
+        format: ModelRequestFormat.Text,
+        guidance: [
+          'You are ExecutionPlanner inside one Nodus worker.',
+          'You may only choose from the supplied actions.',
+          'Use research when implementation facts are missing. Do not repeatedly research facts already present in history.',
+          'Do not invent an unavailable action.',
+        ].join('\n'),
+      },
+      response: {
+        format: ModelResponseFormat.Raw,
+        schema: this.schema,
+      },
+      settings: { maxTokens: 1024 },
     });
 
     return response.output;

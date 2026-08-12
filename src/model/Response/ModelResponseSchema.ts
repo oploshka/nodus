@@ -1,16 +1,16 @@
-export interface ModelResponseFormatter<TOutput extends object> {
+export interface ModelResponseSchema<TOutput extends object> {
   readonly id: string;
   instructions(): string;
-  parse(content: string): TOutput;
+  decode(value: unknown): TOutput;
 }
 
 export class ModelResponseFormatError extends Error {
   public constructor(
-    public readonly formatterId: string,
+    public readonly schemaId: string,
     message: string,
     public readonly responsePreview: string,
   ) {
-    super(`[${formatterId}] ${message}`);
+    super(`[${schemaId}] ${message}`);
     this.name = 'ModelResponseFormatError';
   }
 }

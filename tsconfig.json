@@ -18,7 +18,8 @@
   },
   "include": [
     "src/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "benchmark/**/*.ts"
   ],
   "exclude": [
     "dist",

@@ -1,10 +1,12 @@
 import type { ModelRunner } from '../../model/Runner/ModelRunner.js';
-import { TextResponseFormatter } from '../../model/Response/TextResponseFormatter.js';
+import { ModelRequestFormat } from '../../model/Request/ModelRequestFormat.js';
+import { ModelResponseFormat } from '../../model/Response/ModelResponseFormat.js';
+import { TextResponseSchema } from '../../model/Response/schema/TextResponseSchema.js';
 import type { Project } from '../project/Project.js';
 import type { ResolvedResearch, ResearchResolver } from './ResearchTypes.js';
 
 export class BoundedModelResearchResolver implements ResearchResolver {
-  private readonly formatter = new TextResponseFormatter();
+  private readonly schema = new TextResponseSchema();
 
   public constructor(
     private readonly project: Project,
@@ -26,20 +28,22 @@ export class BoundedModelResearchResolver implements ResearchResolver {
     }
 
     const response = await this.model.run({
-      maxTokens: 2048,
-      formatter: this.formatter,
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'You answer one bounded question about an existing codebase.',
-            'Use only the supplied files. Do not propose edits and do not broaden the task.',
-            'Return concise implementation facts, concrete access paths and existing project rules when supported.',
-            'If the files do not support an answer, say what is unknown.',
-          ].join('\n'),
-        },
-        { role: 'user', content: `QUESTION\n${question}\n\n${sourceBlocks.join('\n\n')}` },
-      ],
+      request: {
+        message: question,
+        data: sourceBlocks.join('\n\n'),
+        format: ModelRequestFormat.Text,
+        guidance: [
+          'You answer one bounded question about an existing codebase.',
+          'Use only the supplied files. Do not propose edits and do not broaden the task.',
+          'Return concise implementation facts, concrete access paths and existing project rules when supported.',
+          'If the files do not support an answer, say what is unknown.',
+        ].join('\n'),
+      },
+      response: {
+        format: ModelResponseFormat.Text,
+        schema: this.schema,
+      },
+      settings: { maxTokens: 2048 },
     });
 
     return { answer: response.output.text, sources: paths };
