@@ -73,19 +73,20 @@ describe('ModelRunner', () => {
   it('ModelCaller logs the complete result and exposes only data', async () => {
     const adapter = new SingleResponseAdapter('{"status":"completed"}');
     const runner = new ModelRunner(adapter, { provider: 'openai-compatible', endpoint: 'unused', model: 'test' });
-    const logged: unknown[] = [];
+    const events: Array<{ event: string; value: unknown }> = [];
 
     const data = await callModel<{ status: 'action' | 'completed' | 'failed' }>(runner, {
-      info(_event, value) { logged.push(value); },
+      info(event, value) { events.push({ event, value }); },
     }, {
       request: { message: 'Finish.', format: ModelRequestFormat.Text },
       response: { format: ModelResponseFormat.Json, schema: decisionSchema },
     });
 
     expect(data).toEqual({ status: 'completed' });
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toHaveProperty('exchange');
-    expect(logged[0]).toHaveProperty('meta');
+    expect(events.map(({ event }) => event)).toEqual(['model.run.start', 'model.run']);
+    expect(events[0].value).toMatchObject({ kind: 'model', message: 'Finish.' });
+    expect(events[1].value).toHaveProperty('exchange');
+    expect(events[1].value).toHaveProperty('meta');
   });
 
 
@@ -101,10 +102,10 @@ describe('ModelRunner', () => {
       response: { format: ModelResponseFormat.Json, schema: decisionSchema },
     })).rejects.toThrow('Required field is missing');
 
-    expect(events).toHaveLength(1);
-    expect(events[0].event).toBe('model.run.error');
-    expect(events[0].value).toHaveProperty('exchange.response.0.message', '{"unexpected":true}');
-    expect(events[0].value).toHaveProperty('meta.model', 'test');
+    expect(events.map(({ event }) => event)).toEqual(['model.run.start', 'model.run.error']);
+    expect(events[0].value).toMatchObject({ kind: 'model', message: 'Finish.' });
+    expect(events[1].value).toHaveProperty('exchange.response.0.message', '{"unexpected":true}');
+    expect(events[1].value).toHaveProperty('meta.model', 'test');
   });
 
   it('diffFile stays a thin specialized facade over the same runner contract', async () => {
