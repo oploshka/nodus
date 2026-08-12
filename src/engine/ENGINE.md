@@ -6,7 +6,12 @@ For each `PlanStep`, Engine selects a compatible Worker and gives that Worker co
 
 `Determine` is an atomic Engine service used to choose the best option from a bounded list. Engine currently uses it to choose between compatible Workers, but the service itself is not Worker-specific. A single available option is returned without a model call.
 
-`Research` remains an Engine service, not a Worker type. A Worker may use Research internally, or later ask Engine/Planner for a new subtask when its current step cannot proceed with the available knowledge.
+`Research` is an atomic Engine service, not a Worker type. A Worker may call Research while trying to complete its own task; the internal attempt/research/retry loop stays inside that Worker.
 
+Only `completed` advances the global Plan. `not-completed` means the current Worker stopped with meaningful state and may be continued, reconsidered or replaced later. `failed` means the current execution path is terminal.
 
-Engine owns the global run loop and treats Workers as available execution options. Only a `completed` Worker result advances to the next PlanStep. Other statuses are preserved for later recovery/subtask orchestration.
+## Execution samples
+
+Engine logs one structured `engine.execution.sample` event per Worker execution. It contains the original task, current PlanStep, candidate workers, selected worker, result and duration. The event is intentionally storage-agnostic for now; later it can feed task clustering, Worker success statistics and better Determine decisions.
+
+Engine is also the natural control boundary between Worker execution and external/user interaction. A Worker owns local autonomy for one assigned task; Engine owns whether execution continues, changes Worker, pauses, or returns control outside. The concrete interaction protocol is intentionally not fixed yet.

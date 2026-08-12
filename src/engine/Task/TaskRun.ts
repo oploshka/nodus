@@ -8,7 +8,7 @@ export interface StepRunResult {
   result: WorkerResult;
 }
 
-export type TaskRunStatus = 'completed' | 'needs-subtask' | 'blocked' | 'failed';
+export type TaskRunStatus = 'completed' | 'not-completed' | 'failed';
 
 export class TaskRun {
   public readonly startedAt = new Date().toISOString();
@@ -29,6 +29,6 @@ export class TaskRun {
   public get status(): TaskRunStatus {
     const last = this.steps.at(-1)?.result.status;
     if (last && last !== 'completed') return last;
-    return this.steps.length === this.plan.steps.length ? 'completed' : 'blocked';
+    return this.steps.length === this.plan.steps.length ? 'completed' : 'not-completed';
   }
 }

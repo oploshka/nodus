@@ -39,9 +39,19 @@ export class Engine {
       });
       this.logger.info('engine.worker.selected', { taskId: task.id, stepId: step.id, workerId: worker.id });
 
+      const startedAt = performance.now();
       const result = await worker.run(task, step);
+      const durationMs = performance.now() - startedAt;
       run.add(step.id, worker.id, result);
       this.logger.info('engine.step.finish', { taskId: task.id, stepId: step.id, workerId: worker.id, status: result.status });
+      this.logger.info('engine.execution.sample', {
+        task: { id: task.id, description: task.description },
+        step: { id: step.id, goal: step.goal, constraints: step.constraints },
+        candidates: availableWorkers.map((candidate) => candidate.id),
+        worker: { id: worker.id, description: worker.description },
+        result,
+        durationMs,
+      });
 
       // Only a completed PlanStep advances the global plan. Other statuses are
       // intentionally preserved for the next orchestration/recovery iteration.

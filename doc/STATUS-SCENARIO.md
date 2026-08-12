@@ -9,11 +9,11 @@
 Текущая deterministic последовательность:
 
 1. Planner формирует один semantic PlanStep;
-2. ExecutionPlanner планирует следующий локальный шаг и выбирает bounded `research`;
-3. Research возвращает существующие access paths/patterns;
-4. с обновлённым ExecutionState ExecutionPlanner планирует следующий шаг и выбирает `edit-file`;
-5. ModelRunner форматирует model response в typed edit object;
-6. patch applicator применяет unified diff;
-7. после результата edit-file ExecutionPlanner возвращает `completed`, и Worker завершает PlanStep.
+2. Determine выбирает `CodeWorker` из доступных Worker;
+3. Worker сразу делает первую попытку выполнить PlanStep;
+4. попытка возвращает конкретный `missing-information`;
+5. Worker получает bounded Research-ответ и повторяет исходную задачу с накопленным knowledge;
+6. следующая попытка формирует минимальный edit и применяет unified diff;
+7. Worker возвращает Engine только итоговый `completed`.
 
-Integration test хранится в `test/integration/status`. Тот же Scenario contract должен позже использоваться real-model test, чтобы deterministic runtime и LLM сравнивались на одинаковой задаче.
+Integration test хранится в `test/integration/status`.

@@ -1,5 +1,6 @@
 import type { AppConfiguration } from '@app/Config/Configuration.js';
 import { ConsoleLogger } from '@app/Logging/Logger.js';
+import { ModelDetermine } from '@engine/Determine/ModelDetermine.js';
 import { Engine } from '@engine/Engine.js';
 import { ModelPlanner } from '@engine/Planner/ModelPlanner.js';
 import { Project } from '@engine/Project/Project.js';
@@ -7,14 +8,20 @@ import { BoundedModelResearchResolver } from '@engine/Research/BoundedModelResea
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import { DefaultWorker } from '@engine/Worker/DefaultWorker.js';
-import { EditFileAction } from '@engine/Worker/Action/EditFileAction.js';
-import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
-import { ModelExecutionPlanner } from '@engine/Worker/ModelExecutionPlanner.js';
-import { ModelDetermine } from '@engine/Determine/ModelDetermine.js';
+import { ModelProjectChangeAttempt } from '@engine/Worker/Attempt/ModelProjectChangeAttempt.js';
+import { CodeWorker } from '@engine/Worker/CodeWorker.js';
+import { DocumentationWorker } from '@engine/Worker/DocumentationWorker.js';
+import { AgentWorker } from '@engine/Worker/AgentWorker.js';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
+import { isAgentModelAdapter } from '@model/Adapter/AgentModelAdapter.js';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter.js';
+import { AgentRunner } from '@model/Runner/AgentRunner.js';
 import { ModelRunner } from '@model/Runner/ModelRunner.js';
+import { FileSystemTool } from '@model/Tool/FileSystem/FileSystemTool.js';
+import { GitTool } from '@model/Tool/Git/GitTool.js';
+import { SearchTool } from '@model/Tool/Search/SearchTool.js';
+import { TerminalTool } from '@model/Tool/Terminal/TerminalTool.js';
+import type { Worker } from '@engine/Worker/Worker.js';
 
 export interface BootstrapOverrides {
   logger?: EngineLogger;
@@ -48,20 +55,46 @@ export class Bootstrap {
       logger,
     );
 
-    const planner = new ModelPlanner(model, logger);
-    const executionPlanner = new ModelExecutionPlanner(model, logger);
-    const worker = new DefaultWorker(
-      executionPlanner,
-      [
-        new ResearchAction(research, configuration.runtime?.maxResearchActions),
-        new EditFileAction(project, model, logger, configuration.runtime?.maxEditActions),
-      ],
+    const codeWorker = new CodeWorker(
+      new ModelProjectChangeAttempt(project, model, logger, {
+        purpose: 'Implement the requested software/project behavior change.',
+        guidance: 'Prefer existing project APIs and conventions. Change source code only when required by the task.',
+      }),
+      research,
       logger,
-      configuration.runtime?.maxWorkerIterations,
+      configuration.runtime?.maxWorkerAttempts,
+      configuration.runtime?.maxResearchRequests,
     );
 
-    const determine = new ModelDetermine(model, logger);
+    const documentationWorker = new DocumentationWorker(
+      new ModelProjectChangeAttempt(project, model, logger, {
+        purpose: 'Implement the requested human-facing documentation change.',
+        guidance: 'Prefer documentation files and explanatory text. Do not modify runtime code unless the task explicitly requires it.',
+      }),
+      research,
+      logger,
+      configuration.runtime?.maxWorkerAttempts,
+      configuration.runtime?.maxResearchRequests,
+    );
 
-    return new Engine(project, planner, [worker], determine, logger);
+    const workers: Worker[] = [codeWorker, documentationWorker];
+    if (isAgentModelAdapter(adapter)) {
+      const tools = [new FileSystemTool(), new SearchTool(), new TerminalTool(), new GitTool()];
+      workers.push(new AgentWorker(
+        new AgentRunner(adapter, configuration.model),
+        tools,
+        { projectRoot: project.root, exclude: project.configuration.exclude ?? [] },
+        logger,
+        configuration.runtime?.maxAgentRounds,
+      ));
+    }
+
+    return new Engine(
+      project,
+      new ModelPlanner(model, logger),
+      workers,
+      new ModelDetermine(model, logger),
+      logger,
+    );
   }
 }

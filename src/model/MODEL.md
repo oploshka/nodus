@@ -165,4 +165,4 @@ Adapter ничего не знает про Planner, Worker, Research, response 
 
 `model/Tool` содержит model capabilities: filesystem, search, git, terminal и registry.
 
-DefaultWorker не выдаёт весь набор tools модели автоматически. Capability должна быть явно разрешена конкретному execution flow.
+Worker не выдаёт весь набор tools модели автоматически. Capability должна быть явно разрешена конкретному execution flow.

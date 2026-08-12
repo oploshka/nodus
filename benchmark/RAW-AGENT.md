@@ -21,6 +21,6 @@ Native OpenAI-style `tool_calls` are preferred. A narrow `tool-name[ARGS]{...}` 
 
 ## Role in v0.3
 
-This runner is a control group, not a Nodus test. It intentionally does not use `Engine`, `Planner`, `Research`, `DefaultWorker` or `ModelRunner` orchestration. It may reuse neutral provider configuration and the same low-level project tools so the comparison remains meaningful.
+This runner is a control group, not a Nodus test. It intentionally does not use `Engine`, `Planner`, `Research`, `Worker` or `ModelRunner` orchestration. It may reuse neutral provider configuration and the same low-level project tools so the comparison remains meaningful.
 
 Keep benchmark results separate from `test/`: tests answer whether Nodus is correct; benchmarks compare cost, latency, calls/tokens and behavior against a raw-agent baseline.

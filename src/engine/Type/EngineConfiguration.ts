@@ -9,7 +9,12 @@ export interface ProjectConfiguration {
 }
 
 export interface WorkerConfiguration {
-  maxWorkerIterations?: number;
-  maxResearchActions?: number;
-  maxEditActions?: number;
+  /** Fresh execution attempts available to one Worker.run() call. */
+  maxWorkerAttempts?: number;
+
+  /** Bounded Research questions available to one Worker.run() call. */
+  maxResearchRequests?: number;
+
+  /** Maximum model/tool rounds for AgentWorker. */
+  maxAgentRounds?: number;
 }

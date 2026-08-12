@@ -1,12 +1,10 @@
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
-import type { ExecutionState } from '@engine/Worker/ExecutionState.js';
 
 export type WorkerResult =
-  | { status: 'completed'; summary: string; state: ExecutionState }
-  | { status: 'needs-subtask'; task: string; reason?: string; state: ExecutionState }
-  | { status: 'blocked'; reason: string; state: ExecutionState }
-  | { status: 'failed'; error: string; state: ExecutionState };
+  | { status: 'completed'; summary: string }
+  | { status: 'not-completed'; reason: string; canContinue: true }
+  | { status: 'failed'; reason: string; canContinue: false };
 
 /** Engine-facing contract for one available execution option. */
 export interface Worker {

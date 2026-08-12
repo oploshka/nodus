@@ -22,7 +22,7 @@ export const statusScenario = scenario({
     'src/Project/ProjectSession.ts': "export class ProjectSession { public index?: { files: string[] }; }\n",
     'src/core/Conversation.ts': "export class Conversation { public id = 'conversation-id'; }\n",
   },
-  runtime: { maxWorkerIterations: 6, maxResearchActions: 2, maxEditActions: 2 },
+  runtime: { maxWorkerAttempts: 4, maxResearchRequests: 2 },
   modelResponses: [
     JSON.stringify({
       steps: [{
@@ -35,19 +35,20 @@ export const statusScenario = scenario({
         ],
       }],
     }),
+    JSON.stringify({ optionId: 'code' }),
     JSON.stringify({
-      status: 'action',
-      actionId: 'research',
-      input: { question: 'How are CLI commands registered and dispatched, and how can the CLI read current project id, conversation id, and existing project index file count without scan or refresh?' },
+      outcome: 'missing-information',
+      reason: 'The CLI file is known, but the existing access paths for runtime state must be confirmed before editing.',
+      questions: ['How can the CLI read current project id, conversation id, and existing project index file count without scan or refresh?'],
     }),
-    'CLI commands are listed in COMMANDS and dispatched by value checks. Use configuration.project.id, conversation.id, and nodus.projectSession.index?.files.length without scan/refresh.',
+    'Use configuration.project.id, conversation.id, and nodus.projectSession.index?.files.length without scan/refresh.',
     JSON.stringify({
-      status: 'action',
-      actionId: 'edit-file',
-      input: {
+      outcome: 'ready',
+      summary: '/status was added using existing runtime state.',
+      edits: [{
         path: 'src/Cli/Cli.ts',
         instruction: 'Add /status to the existing command list and dispatch pattern. Print configuration.project.id, conversation.id, and nodus.projectSession.index?.files.length when available. Do not scan or refresh.',
-      },
+      }],
     }),
     [
       '--- a/src/Cli/Cli.ts',
@@ -72,6 +73,5 @@ export const statusScenario = scenario({
       '+  }',
       ' }',
     ].join('\n'),
-    JSON.stringify({ status: 'completed', summary: '/status was added using existing runtime state.' }),
   ],
 });

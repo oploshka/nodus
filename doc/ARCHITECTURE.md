@@ -13,12 +13,12 @@
 ## Task path
 
 1. app вызывает `Engine.run(description)`;
-2. Engine просит Planner построить semantic Plan;
-3. каждый PlanStep получает DefaultWorker;
-4. ExecutionPlanner выбирает только зарегистрированный ExecutionAction;
-5. `research` обращается к Research cache/resolver;
-6. `edit-file` вызывает model boundary через `ModelCaller`, получает только parsed data, а полный exchange/meta уходит в logger;
-7. Worker сохраняет ActionResult в ExecutionState history;
+2. Engine просит Planner построить global Plan;
+3. для очередного PlanStep Engine через Determine выбирает подходящий Worker;
+4. Worker получает управление задачей шага и сам ведёт ограниченный внутренний цикл выполнения;
+5. Worker сначала пытается выполнить шаг, а при конкретной нехватке знаний обращается к Research и повторяет исходную задачу;
+6. Worker возвращает Engine только `completed`, `not-completed` или `failed`; внутреннее knowledge/state остаётся внутри экземпляра Worker;
+7. только `completed` двигает global Plan дальше;
 8. Engine сохраняет WorkerResult в TaskRun.
 
 Validation пока сознательно отсутствует. Completion Worker не равен доказанной корректности всей пользовательской задачи.

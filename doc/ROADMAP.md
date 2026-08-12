@@ -8,9 +8,9 @@ Roadmap фиксирует только текущие архитектурны�
 - [x] `app` оставлен composition root / DI + CLI boundary.
 - [x] `Engine.run()` сведен к координации task loop.
 - [x] High-level Planner отделён от Worker execution planning.
-- [x] `DefaultWorker` агрегирует `ExecutionPlanner + ExecutionState + ExecutionAction[]`.
+- [x] Worker lifecycle переписан как `attempt -> missing-information -> Research -> attempt`; старый DefaultWorker удалён.
 - [x] Research вынесен в bounded service с source-hash cache invalidation.
-- [x] Первый vertical slice `/status`: `research -> edit-file`.
+- [x] Первый vertical slice `/status`: Worker сначала пытается выполнить задачу, затем запрашивает только недостающие факты и повторяет попытку.
 - [x] Vitest + Nodus-specific `test/framework`.
 - [x] Один timestamped test log на scenario run.
 - [x] Восстановлен самостоятельный `model` layer: adapter/request/prompt/profile/tools.
@@ -25,9 +25,9 @@ Roadmap фиксирует только текущие архитектурны�
 ## Следующее
 
 - [ ] На реальном `/status` проверить новый ModelRunner contract (request/response/schema/diffFile) с локальной 14B.
-- [x] Уточнён текущий контракт `ExecutionPlanner`: incremental `nextStep(state, actions)`, action ids ограничены response schema, Worker владеет bounded loop.
-- [ ] Проверить границу `ExecutionPlanner` / `ExecutionAction` на втором сценарии, не добавляя новые action-типы заранее.
-- [ ] Решить ownership обновления `ExecutionState` после получения `ActionResult`.
+- [x] Добавлены два selectable Worker: `CodeWorker` и `DocumentationWorker`; отдельного default Worker больше нет.
+- [ ] Прогнать несколько разных задач и проверить границу специализации Worker.
+- [ ] Проверить внутренний `WorkerAttempt` contract на реальной локальной модели.
 - [ ] Уточнить Research evidence dependencies: cache сейчас может зависеть от всех прочитанных candidate files, а не только от реально использованных источников.
 - [ ] Решить, нужен ли project-wide persistent ResearchStore по умолчанию или task-local overlay поверх project cache.
 - [ ] Добавить отдельный Validation layer только после появления понятного validation contract.

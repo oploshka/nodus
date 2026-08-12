@@ -30,7 +30,7 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
 
       const run = await runtime.engine.run(value);
       const last = run.steps.at(-1)?.result;
-      console.log(last?.status === 'completed' ? last.summary : last?.error ?? run.status);
+      console.log(last?.status === 'completed' ? last.summary : last?.reason ?? run.status);
     }
   } finally {
     readline.close();
