@@ -1,5 +1,5 @@
 import type { Plan } from '@engine/Planner/Plan.js';
-import type { WorkerResult } from '@engine/Worker/DefaultWorker.js';
+import type { WorkerResult } from '@engine/Worker/Worker.js';
 import type { Task } from '@engine/Task/Task.js';
 
 export interface StepRunResult {

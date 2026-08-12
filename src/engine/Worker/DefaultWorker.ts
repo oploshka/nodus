@@ -4,12 +4,11 @@ import type { Task } from '@engine/Task/Task.js';
 import type { ExecutionAction } from '@engine/Worker/Action/ExecutionAction.js';
 import { createExecutionState, type ExecutionState } from '@engine/Worker/ExecutionState.js';
 import type { ExecutionPlanner } from '@engine/Worker/ExecutionPlanner.js';
+import type { Worker, WorkerResult } from '@engine/Worker/Worker.js';
 
-export type WorkerResult =
-  | { status: 'completed'; summary: string; state: ExecutionState }
-  | { status: 'failed'; error: string; state: ExecutionState };
-
-export class DefaultWorker {
+export class DefaultWorker implements Worker {
+  public readonly id = 'default';
+  public readonly description = 'General bounded worker for semantic project changes.';
   private readonly actions = new Map<string, ExecutionAction>();
 
   public constructor(
@@ -24,7 +23,9 @@ export class DefaultWorker {
     }
   }
 
-  public async execute(task: Task, step: PlanStep): Promise<WorkerResult> {
+  public canHandle(_step: PlanStep): boolean { return true; }
+
+  public async run(task: Task, step: PlanStep): Promise<WorkerResult> {
     const state = createExecutionState(task, step);
     this.logger.info('worker.start', { taskId: task.id, stepId: step.id, actions: [...this.actions.keys()] });
 

@@ -20,7 +20,7 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
       if (!value) continue;
       if (value === '/exit') break;
       if (value === '/help') {
-        console.log('/scan - refresh project index\n/exit - exit\nAny other input is sent to engine.runTask().');
+        console.log('/scan - refresh project index\n/exit - exit\nAny other input is sent to engine.run().');
         continue;
       }
       if (value === '/scan') {
@@ -28,7 +28,7 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
         continue;
       }
 
-      const run = await runtime.engine.runTask(value);
+      const run = await runtime.engine.run(value);
       const last = run.steps.at(-1)?.result;
       console.log(last?.status === 'completed' ? last.summary : last?.error ?? run.status);
     }

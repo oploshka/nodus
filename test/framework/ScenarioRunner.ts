@@ -52,7 +52,7 @@ export async function runScenario(
   logger.info('test.scenario.start', { id: definition.id, task: definition.task, root: project.root });
   try {
     const engine = await Bootstrap.createEngine(configuration, { logger, model });
-    const run = await engine.runTask(definition.task);
+    const run = await engine.run(definition.task);
     logger.info('test.scenario.finish', { id: definition.id, status: run.status });
     return {
       scenario: definition,

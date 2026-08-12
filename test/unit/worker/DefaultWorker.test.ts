@@ -36,7 +36,7 @@ describe('DefaultWorker', () => {
       4,
     );
 
-    const result = await worker.execute(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [] });
+    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [] });
     expect(result.status).toBe('completed');
     expect(calls).toEqual(['x']);
     expect(result.state.history).toHaveLength(1);
@@ -60,7 +60,7 @@ describe('DefaultWorker', () => {
       4,
     );
 
-    const result = await worker.execute(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [] });
+    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [] });
     expect(result.status).toBe('failed');
     if (result.status === 'failed') expect(result.error).toMatch(/limit exceeded/);
   });

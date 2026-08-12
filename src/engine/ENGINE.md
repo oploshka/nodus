@@ -1,59 +1,9 @@
-# Engine layer
+# Engine
 
-`engine` — ядро Nodus. Здесь живёт логика выполнения coding-задачи, но не транспорт модели и не bootstrap приложения.
+`Engine.run()` coordinates one task run. It owns the original `Task`, the global `Plan` and the list of available `Worker` options for that run.
 
-## Engine
+For each `PlanStep`, Engine selects a compatible Worker and gives that Worker control of the step. Engine does not care how the Worker reaches its result; it reacts only to the returned `WorkerResult` status.
 
-`Engine.runTask()` — координатор цикла. В текущей версии он:
+Current routing is intentionally minimal and deterministic: the first registered Worker whose `canHandle(step)` returns `true` is selected. This is a placeholder for a richer routing decision once more than one real Worker exists.
 
-1. создаёт `Task`;
-2. получает semantic `Plan` от Planner;
-3. последовательно отдаёт `PlanStep` в DefaultWorker;
-4. сохраняет результаты в `TaskRun`;
-5. завершает run после конца плана или failed step.
-
-Engine не должен принимать implementation decisions за Planner/Worker.
-
-## Planner
-
-Planner занимается только планированием пользовательской задачи:
-
-- semantic goals;
-- порядок/зависимости шагов;
-- пользовательские constraints;
-- возможный knowledge impact.
-
-Planner не должен превращаться в Research: он не обязан выяснять конкретный API, читать большой набор файлов или готовить patch. Если для самого плана позже потребуется ограниченное знание, для этого нужен отдельный bounded contract.
-
-## Research
-
-Research отвечает на bounded question о проекте и хранит переиспользуемые ответы.
-
-Текущий store записывает answer вместе с source paths и SHA-256. При повторном запросе hash каждого source проверяется; изменённый source делает entry stale.
-
-Логически полезно различать project cache и знания, реально использованные конкретным TaskRun. Это ещё не оформлено отдельной сущностью.
-
-## Worker
-
-`DefaultWorker` выполняет один semantic `PlanStep`.
-
-Он агрегирует:
-
-- `ExecutionPlanner`;
-- `ExecutionState`;
-- список разрешённых `ExecutionAction`.
-
-ExecutionPlanner планирует один следующий action-level step из текущего ExecutionState и видит только зарегистрированные actions. Планирование локально-инкрементальное: результат research может определить вход следующего edit action. Worker дополнительно ограничивает число iterations и usage каждого action, поэтому модель не получает свободный agent loop.
-
-Подробный контракт Worker находится в `Worker/WORKER.md`, Planner — в `Planner/PLANNER.md`.
-
-Текущие actions:
-
-- `research` — один bounded Research request;
-- `edit-file` — одно сфокусированное изменение одного известного файла.
-
-`edit-file` пока намеренно крупный action: внутри него находятся model proposal, response formatting, unified-diff apply и write. Не доказано, что patch/apply/commit должны становиться отдельными ExecutionAction.
-
-## Validation
-
-Validation планируется отдельной engine-подсистемой, но пока не реализуется. `ExecutionPlanner: completed` означает только завершение локальной работы Worker и не является доказательством выполнения пользовательского task contract.
+`Research` remains an Engine service, not a Worker type. A Worker may use Research internally, or later ask Engine/Planner for a new subtask when its current step cannot proceed with the available knowledge.

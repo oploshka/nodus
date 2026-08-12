@@ -59,6 +59,6 @@ export class Bootstrap {
       configuration.runtime?.maxWorkerIterations,
     );
 
-    return new Engine(project, planner, worker, logger);
+    return new Engine(project, planner, [worker], logger);
   }
 }

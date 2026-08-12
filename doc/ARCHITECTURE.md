@@ -12,7 +12,7 @@
 
 ## Task path
 
-1. app вызывает `Engine.runTask(description)`;
+1. app вызывает `Engine.run(description)`;
 2. Engine просит Planner построить semantic Plan;
 3. каждый PlanStep получает DefaultWorker;
 4. ExecutionPlanner выбирает только зарегистрированный ExecutionAction;

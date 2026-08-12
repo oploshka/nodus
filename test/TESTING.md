@@ -20,7 +20,7 @@ Model/e2e projects запускаются без file-level parallelism, что�
 Собственный framework не заменяет Vitest. Он описывает только Nodus-specific окружение:
 
 - `Scenario` — task, project fixture, runtime config и scripted responses;
-- `ScenarioRunner` — создаёт временный project, собирает app через обычный Bootstrap и вызывает `Engine.runTask()`;
+- `ScenarioRunner` — создаёт временный project, собирает app через обычный Bootstrap и вызывает `Engine.run()`;
 - `TestProject` — временное файловое окружение;
 - `QueueModelAdapter` — deterministic transport fake;
 - `LoggedModelAdapter` — wrapper реального/fake adapter для записи model traffic;

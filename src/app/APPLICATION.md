@@ -17,7 +17,7 @@
 
 `Bootstrap` is the Engine composition root. It creates/wires model, Research, Planner and Worker dependencies and returns only `Engine`. Optional overrides exist for alternative startup configurations and tests.
 
-The temporary `/scan` command remains app-level administration and is not part of `Engine.runTask()` orchestration.
+The temporary `/scan` command remains app-level administration and is not part of `Engine.run()` orchestration.
 
 ## Logging
 

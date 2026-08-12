@@ -6,7 +6,7 @@ Roadmap фиксирует только текущие архитектурны�
 
 - [x] Три верхних слоя: `app / engine / model`.
 - [x] `app` оставлен composition root / DI + CLI boundary.
-- [x] `Engine.runTask()` сведен к координации task loop.
+- [x] `Engine.run()` сведен к координации task loop.
 - [x] High-level Planner отделён от Worker execution planning.
 - [x] `DefaultWorker` агрегирует `ExecutionPlanner + ExecutionState + ExecutionAction[]`.
 - [x] Research вынесен в bounded service с source-hash cache invalidation.
@@ -31,7 +31,7 @@ Roadmap фиксирует только текущие архитектурны�
 - [ ] Уточнить Research evidence dependencies: cache сейчас может зависеть от всех прочитанных candidate files, а не только от реально использованных источников.
 - [ ] Решить, нужен ли project-wide persistent ResearchStore по умолчанию или task-local overlay поверх project cache.
 - [ ] Добавить отдельный Validation layer только после появления понятного validation contract.
-- [ ] Определить минимальный публичный API Engine по реальным потребностям app; пока гарантирован только `runTask()`.
+- [ ] Определить минимальный публичный API Engine по реальным потребностям app; пока гарантирован только `run()`.
 - [ ] Добавить настоящий model scenario на том же Scenario contract, что deterministic integration test.
 
 ## Не переносим автоматически из v0.2
