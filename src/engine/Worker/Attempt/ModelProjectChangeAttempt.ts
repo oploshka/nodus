@@ -63,6 +63,7 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
     private readonly logger: EngineLogger,
     private readonly profile: ProjectChangeAttemptProfile,
     private readonly maxEditsPerAttempt = 6,
+    private readonly maxEditAttempts = 3,
     private readonly applicator = new PatchApplicator(),
   ) {}
 
@@ -118,44 +119,84 @@ export class ModelProjectChangeAttempt implements WorkerAttempt {
 
     const changed: string[] = [];
     for (const edit of edits) {
+      const result = await this.applyEditWithRecovery(context, edit);
+      if (result.status === 'not-completed') return result;
+      if (result.changed) changed.push(edit.path);
+    }
+
+    if (changed.length === 0) return { status: 'not-completed', reason: 'Attempt produced no project changes.' };
+    return {
+      status: 'completed',
+      summary: decision.summary ?? `Changed ${changed.join(', ')}`,
+    };
+  }
+
+  private async applyEditWithRecovery(
+    context: WorkerAttemptContext,
+    edit: { path: string; instruction: string },
+  ): Promise<{ status: 'completed'; changed: boolean } | { status: 'not-completed'; reason: string }> {
+    let lastError: string | undefined;
+
+    for (let editAttempt = 1; editAttempt <= this.maxEditAttempts; editAttempt += 1) {
+      const source = await this.project.read(edit.path);
+
       try {
-        const source = await this.project.read(edit.path);
         const response = await callDiffFile(this.model, this.logger, {
           path: edit.path,
           request: {
-            message: 'Apply this concrete project edit.',
+            message: editAttempt === 1
+              ? 'Apply this concrete project edit.'
+              : 'Repair the failed edit against the current authoritative file.',
             data: {
               task: context.task.description,
               step: context.step,
               instruction: edit.instruction,
               knowledge: context.knowledge.map((item) => ({ question: item.question, status: item.status, answer: item.answer })),
               authoritativeSource: { path: edit.path, content: source },
+              recovery: editAttempt === 1 ? undefined : {
+                attempt: editAttempt,
+                previousError: lastError,
+              },
             },
             format: ModelRequestFormat.Json,
             guidance: [
               this.profile.guidance,
               'Edit exactly the authoritative file supplied in DATA.',
-              'Return the minimal unified diff for this file only.',
+              'Treat authoritativeSource.content as the current source of truth; do not rely on line numbers or source from an earlier edit attempt.',
+              editAttempt === 1
+                ? 'Return the minimal unified diff for this file only.'
+                : 'The previous patch could not be applied. Regenerate the diff from scratch against the current authoritative source and fix only this edit.',
+              'Include enough unchanged context for deterministic patch application.',
               'Do not change unrelated code or documentation.',
             ].join('\n'),
           },
         });
 
         const content = this.applicator.apply(source, response.hunks, edit.path);
-        if (content !== source) {
-          await this.project.write(edit.path, content);
-          changed.push(edit.path);
+        if (content === source) return { status: 'completed', changed: false };
+
+        await this.project.write(edit.path, content);
+        if (editAttempt > 1) {
+          this.logger.info('worker.edit.recovered', {
+            path: edit.path,
+            editAttempt,
+          });
         }
+        return { status: 'completed', changed: true };
       } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        throw new Error(`Edit attempt failed for ${edit.path}: ${reason}`);
+        lastError = error instanceof Error ? error.message : String(error);
+        this.logger.warn('worker.edit.error', {
+          path: edit.path,
+          editAttempt,
+          maxEditAttempts: this.maxEditAttempts,
+          error: lastError,
+        });
       }
     }
 
-    if (changed.length === 0) throw new Error('Attempt produced no project changes.');
     return {
-      status: 'completed',
-      summary: decision.summary ?? `Changed ${changed.join(', ')}`,
+      status: 'not-completed',
+      reason: `Edit recovery limit reached (${this.maxEditAttempts}) for ${edit.path}. Last error: ${lastError ?? 'unknown edit error'}`,
     };
   }
 

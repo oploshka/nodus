@@ -75,6 +75,10 @@ export abstract class IterativeWorker implements Worker {
         return { status: 'failed', reason: result.reason, canContinue: false };
       }
 
+      if (result.status === 'not-completed') {
+        return { status: 'not-completed', reason: result.reason, canContinue: true };
+      }
+
       const knownQuestions = new Set(session.knowledge.map((item) => item.question.trim()));
       const questions = Array.from(new Set(result.questions.map((question) => question.trim()).filter(Boolean)))
         .filter((question) => !knownQuestions.has(question));

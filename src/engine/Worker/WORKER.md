@@ -24,7 +24,23 @@ attempt task
 
 The loop is bounded. Reaching the attempt or research budget returns `not-completed`, not `failed`.
 
-`WorkerAttempt` is the internal contract for one bounded execution attempt. `missing-information` never reaches Engine; it is consumed by the Worker lifecycle.
+`WorkerAttempt` is the internal contract for one bounded execution attempt. `missing-information` never reaches Engine; it is consumed by the Worker lifecycle. An attempt may also return `not-completed` when its local execution/recovery budget is exhausted; the Worker forwards that state without re-planning the whole task automatically.
+
+## Edit recovery
+
+A project-change attempt keeps a successful `ready` proposal while applying its edits. A failed patch is repaired locally against the current authoritative file instead of restarting the whole Worker attempt:
+
+```text
+ready edits
+-> apply edit A
+-> apply edit B fails
+   -> reread current B
+   -> regenerate only B diff
+   -> retry B
+-> continue remaining edits
+```
+
+This matters because earlier edits may already have changed the project. Re-running the complete proposal after one patch failure would mix old assumptions with a partially modified working tree. Local edit recovery is bounded; exhausting it returns `not-completed` with `canContinue: true`.
 
 ## Current workers
 

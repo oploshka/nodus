@@ -17,6 +17,7 @@ export interface WorkerAttemptContext {
 export type WorkerAttemptResult =
   | { status: 'completed'; summary: string }
   | { status: 'missing-information'; questions: string[]; reason?: string }
+  | { status: 'not-completed'; reason: string }
   | { status: 'failed'; reason: string };
 
 export interface WorkerAttempt {
