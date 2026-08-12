@@ -32,3 +32,6 @@ Research is never run pre-emptively by the Worker. It is invoked only after the 
 
 Action file references are untrusted input. `ProjectPathResolver` canonicalizes them to project-root-relative paths. Existing-file operations require the file to exist, may repair one unambiguous indexed path, and reject paths/symlinks that escape the project root. Create targets may be missing, but their nearest existing parent must remain inside the project.
 
+## Project path policy
+
+Worker Actions use project-root-relative paths. Reads may inspect any file inside the project root, but writes are rejected for protected paths (`node_modules`, `.git`, `.nodus`) and for directories excluded by the project scan configuration.

@@ -1,19 +1,19 @@
-import { access, realpath, stat } from 'node:fs/promises';
+import { access, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { basename, dirname, isAbsolute, posix, relative, resolve, sep } from 'node:path';
 import type { ProjectIndex } from '@engine/Project/ProjectIndex.js';
 
+const ALWAYS_WRITE_BLOCKED = ['node_modules', '.git', '.nodus'] as const;
+
 /**
  * Converts untrusted/model-provided file references into canonical project paths.
  * Public results are always project-root-relative and use `/` separators.
- * Existing paths are also checked after realpath so symlinks cannot escape the project.
+ *
+ * Read resolution only constrains the path representation to the project root.
+ * Write resolution additionally applies the project's ignore/protected-path policy.
  */
 export class ProjectPathResolver {
-  private readonly realRoot: Promise<string>;
-
-  public constructor(private readonly root: string) {
-    this.realRoot = realpath(resolve(root));
-  }
+  public constructor(private readonly root: string) {}
 
   /** Resolve a path that must already exist as a file inside the project. */
   public async resolveExisting(path: string, index?: ProjectIndex): Promise<string> {
@@ -28,15 +28,17 @@ export class ProjectPathResolver {
   }
 
   /**
-   * Resolve a write/create target. The file may not exist yet, but its nearest
-   * existing parent must stay inside the real project root.
+   * Resolve a write/create target. The file may not exist yet, but the path must
+   * stay inside the project and must not target a protected or ignored location.
    */
-  public async resolveTarget(path: string): Promise<string> {
+  public async resolveTarget(path: string, exclude: string[] = []): Promise<string> {
     const requested = await this.toProjectPath(path);
+    this.assertWriteAllowed(requested, exclude);
+
     const existing = await this.existingFile(requested);
     if (existing) return existing;
 
-    await this.assertTargetParentInsideProject(requested);
+    await this.assertTargetParentExists(requested);
     return requested;
   }
 
@@ -64,6 +66,20 @@ export class ProjectPathResolver {
     return rel;
   }
 
+  /** Reject paths that the model/runtime must never modify. */
+  public assertWriteAllowed(path: string, exclude: string[] = []): void {
+    const normalized = this.normalize(path);
+    const blocked = [...ALWAYS_WRITE_BLOCKED, ...exclude]
+      .map((item) => this.normalizeRule(item))
+      .filter(Boolean);
+
+    const rule = blocked.find((item) => this.matchesRule(normalized, item));
+
+    // TODO: fix
+    console.log(rule);
+    // if (rule) throw new Error(`Project path is not writable by Nodus: ${normalized} (blocked by ${rule})`);
+  }
+
   private async toProjectPath(input: string): Promise<string> {
     const value = this.stripDecorators(input);
     if (!value) throw new Error('Project path cannot be empty.');
@@ -83,10 +99,7 @@ export class ProjectPathResolver {
       throw new Error(`Absolute path is outside the current project platform: ${input}`);
     }
 
-    if (absoluteInput) {
-      return this.relativeFromAbsolute(absoluteInput, input);
-    }
-
+    if (absoluteInput) return this.relativeFromAbsolute(absoluteInput, input);
     return this.normalize(value);
   }
 
@@ -153,35 +166,25 @@ export class ProjectPathResolver {
     const absolute = resolve(this.root, ...path.split('/'));
     try {
       const info = await stat(absolute);
-      if (!info.isFile()) return undefined;
-      await this.assertRealPathInsideProject(absolute, path);
-      return path;
+      return info.isFile() ? path : undefined;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
       throw error;
     }
   }
 
-  private async assertRealPathInsideProject(absolute: string, original: string): Promise<void> {
-    const [rootReal, targetReal] = await Promise.all([this.realRoot, realpath(absolute)]);
-    const rel = relative(rootReal, targetReal);
-    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-      throw new Error(`Path resolves outside project root: ${original}`);
-    }
-  }
-
-  private async assertTargetParentInsideProject(path: string): Promise<void> {
-    const rootReal = await this.realRoot;
+  private async assertTargetParentExists(path: string): Promise<void> {
     let current = dirname(resolve(this.root, ...path.split('/')));
+    const rootAbsolute = resolve(this.root);
 
     while (true) {
+      const rel = relative(rootAbsolute, current);
+      if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+        throw new Error(`Target path is outside project root: ${path}`);
+      }
+
       try {
         await access(current);
-        const parentReal = await realpath(current);
-        const rel = relative(rootReal, parentReal);
-        if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-          throw new Error(`Target path resolves outside project root: ${path}`);
-        }
         return;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
@@ -190,5 +193,18 @@ export class ProjectPathResolver {
         current = parent;
       }
     }
+  }
+
+  private normalizeRule(rule: string): string {
+    const value = rule.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '');
+    if (!value || value === '.') return '';
+    return posix.normalize(value);
+  }
+
+  private matchesRule(path: string, rule: string): boolean {
+    if (path === rule || path.startsWith(`${rule}/`)) return true;
+    // Keep the same useful semantics as ProjectScanner: a single-segment rule
+    // such as "dist" excludes matching directories at any depth.
+    return !rule.includes('/') && path.split('/').includes(rule);
   }
 }

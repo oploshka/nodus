@@ -52,7 +52,7 @@ export class Project {
   }
 
   public async resolveTargetPath(path: string): Promise<string> {
-    const resolved = await this.pathResolver.resolveTarget(path);
+    const resolved = await this.pathResolver.resolveTarget(path, this.configuration.exclude ?? []);
     this.logPathCorrection(path, resolved);
     return resolved;
   }

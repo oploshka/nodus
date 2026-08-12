@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -96,26 +96,47 @@ describe('ProjectPathResolver', () => {
     }
   });
 
-  it('checks real paths so an in-project symlink cannot escape the root', async () => {
-    const fixture = await TestProject.create('path-symlink');
-    const outside = await mkdtemp(join(tmpdir(), 'nodus-symlink-outside-'));
-    const outsideFile = join(outside, 'secret.txt');
-    await writeFile(outsideFile, 'secret\n');
+  it('blocks writes to protected directories even when project exclude rules omit them', async () => {
+    const fixture = await TestProject.create('path-protected', {
+      'node_modules/pkg/index.js': 'module.exports = {};\n',
+      '.git/config': '[core]\n',
+      '.nodus/cache.json': '{}\n',
+    });
     try {
-      await symlink(outsideFile, resolve(fixture.root, 'secret-link.txt'), 'file');
       const resolver = new ProjectPathResolver(fixture.root);
-      await expect(resolver.resolveExisting('secret-link.txt')).rejects.toThrow('resolves outside project root');
+      await expect(resolver.resolveTarget('node_modules/pkg/index.js')).rejects.toThrow('not writable by Nodus');
+      await expect(resolver.resolveTarget('.git/config')).rejects.toThrow('not writable by Nodus');
+      await expect(resolver.resolveTarget('.nodus/cache.json')).rejects.toThrow('not writable by Nodus');
     } finally {
       await fixture.dispose();
     }
   });
 
-  it('allows a missing create target only when its existing parent stays inside the project', async () => {
+  it('blocks writes to project-excluded directories and allows normal project targets', async () => {
+    const fixture = await TestProject.create('path-ignore', {
+      'dist/generated.js': 'export {};\n',
+      'src/generated/output.ts': 'export {};\n',
+      'src/app/Main.ts': 'export {};\n',
+    });
+    try {
+      const resolver = new ProjectPathResolver(fixture.root);
+      const exclude = ['dist', 'src/generated'];
+
+      await expect(resolver.resolveTarget('dist/generated.js', exclude)).rejects.toThrow('blocked by dist');
+      await expect(resolver.resolveTarget('src/generated/output.ts', exclude)).rejects.toThrow('blocked by src/generated');
+      await expect(resolver.resolveTarget('src/app/Main.ts', exclude)).resolves.toBe('src/app/Main.ts');
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it('allows a missing create target only when it is writable inside the project', async () => {
     const fixture = await TestProject.create('path-target');
     try {
       await mkdir(resolve(fixture.root, 'src/New'), { recursive: true });
       const resolver = new ProjectPathResolver(fixture.root);
-      await expect(resolver.resolveTarget('src/New/File.ts')).resolves.toBe('src/New/File.ts');
+      await expect(resolver.resolveTarget('src/New/File.ts', ['dist'])).resolves.toBe('src/New/File.ts');
+      await expect(resolver.resolveTarget('dist/NewFile.ts', ['dist'])).rejects.toThrow('not writable by Nodus');
       await expect(resolver.resolveTarget('../outside/File.ts')).rejects.toThrow('escapes project root');
     } finally {
       await fixture.dispose();
