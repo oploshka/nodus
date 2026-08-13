@@ -12,3 +12,17 @@
 8. **Planner bounded research.** Возможно понадобится 1–2 факта для самой semantic decomposition, но это не должно превращать Planner в implementation research.
 9. **Validation.** Отдельный слой нужен позже; текущий Worker completed не равен validated task.
 10. **Experience data.** Execution samples потенциально могут улучшать Determine и показывать, какие типы задач стоит оптимизировать специализированными Worker/Actions.
+
+
+## Идея для проработки: Worker Workspace и commit через Engine
+
+Не внедрять сразу. Нужно отдельно проверить контракты и failure semantics.
+
+- Worker не изменяет реальный Project напрямую; он работает с виртуальным overlay файлов.
+- Все его ChangeCode Actions читают и пишут через один Workspace/ProjectView.
+- Research внутри Worker обязан видеть уже виртуально изменённые файлы.
+- Если Worker/PlanStep не завершён, его buffered изменения не должны влиять на реальный Project.
+- Более сильный вариант: Engine применяет накопленные изменения только после успешного завершения **всех** PlanStep всей пользовательской задачи.
+- Базовый вариант хранения overlay — память. `.nodus/fileCache` пока только гипотеза для persistence/resume/spill и не должен добавляться без реальной необходимости.
+- Persistent Research cache нельзя бездумно заполнять ответами, полученными из незакоммиченного Workspace; нужна worker-local cache или workspace version/id.
+- Перед реализацией определить conflict detection, commit/rollback, user approval и поведение при внешнем изменении файлов во время run.

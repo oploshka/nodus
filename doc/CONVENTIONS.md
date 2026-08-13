@@ -61,3 +61,12 @@ Do not create a nested `Type` directory for every subsystem. Internal interfaces
 The repository root keeps only `README.md` as the entry point/index. Cross-project architecture, roadmap, conventions and handoff documents belong under `doc`.
 
 Layer-specific documentation may live beside the layer it describes (for example `src/app/APPLICATION.md`, `src/engine/ENGINE.md`, `src/engine/Worker/WORKER.md`, `src/model/MODEL.md`). This is intentional: important local contracts should be discoverable next to the code. Do not rename every local document to `README.md`.
+
+
+## Язык документации и архитектурных решений
+
+Все новые архитектурные идеи, решения, roadmap/handoff записи и поясняющая документация проекта фиксируются **на русском языке**. Это правило относится именно к человеческой проектной документации и обсуждению архитектуры.
+
+Идентификаторы кода, имена файлов/типов/API, значения протокольных полей и machine-facing internal prompts могут оставаться на английском, когда это соответствует коду или runtime language policy. Не переводить идентификаторы ради документации.
+
+Если существующий документ частично написан на английском, его не требуется одномоментно переписывать целиком; при актуализации соответствующего раздела предпочтительно переводить его на русский и дальше вести на русском.

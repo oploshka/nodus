@@ -45,13 +45,13 @@ Roadmap фиксирует текущее состояние spike и ближа
 - [ ] Определить минимальный публичный API Engine по реальным потребностям app; пока гарантирован `run()`.
 - [ ] Продолжить накопление execution samples для task clustering/Worker statistics/Determine optimization.
 
-## Interaction ideas (зафиксированы, не реализованы)
+## Идеи взаимодействия (зафиксированы, не реализованы)
 
-- proposal before apply;
-- user approve/reject/correct по stable interaction id/tags;
-- user interrupt активного run;
-- `required`, `timeout`, `none` wait modes;
-- timeout fallback `continue | pause | cancel`;
+- предложение изменений перед применением;
+- подтверждение/отклонение/коррекция пользователем по стабильному interaction id/tags;
+- прерывание активного run пользователем;
+- режимы ожидания `required`, `timeout`, `none`;
+- fallback по timeout: `continue | pause | cancel`;
 - конфигурируемая policy, а не CLI-specific logic внутри Worker.
 
 ## Не переносим автоматически из v0.2
@@ -63,9 +63,44 @@ Roadmap фиксирует текущее состояние spike и ближа
 - старый `ModelController` целиком.
 
 
-## Editing strategy experiments
+## Эксперименты со стратегиями редактирования
 
-- Live-test `ChangeCodeRangeReplaceAction` with small guarded ranges (`startLine/endLine + expected + replacement`) as the primary CodeWorker strategy.
-- Keep `ChangeCodeReplaceAction` and `ChangeCodeDiffAction` for comparison.
-- Keep `ChangeCodeEditAction` as the implemented full-file strategy and decide later how Worker routing/fallback should select it.
-- Code-changing Actions must prepare the whole coherent change-set in memory before committing files.
+- Live-test `ChangeCodeRangeReplaceAction` с маленькими guarded ranges (`startLine/endLine + expected + replacement`) как основной стратегией `CodeWorker`.
+- Сохранить `ChangeCodeReplaceAction` и `ChangeCodeDiffAction` для сравнения.
+- Сохранить `ChangeCodeEditAction` как реализованную full-file стратегию и позже решить, как Worker должен выбирать её или fallback-ить на неё.
+- Code-changing Actions должны сначала полностью готовить coherent change-set в памяти и только после этого изменять файлы.
+
+## Идея: изолированный Workspace Worker (требует отдельной проработки)
+
+Идея пока **не считается утверждённой архитектурой** и не должна внедряться без отдельного прохода по контрактам Engine/Worker/Research/Project.
+
+Предполагаемая граница:
+
+```text
+Engine владеет реальным Project
+  -> создаёт Worker Workspace / ProjectView
+Worker выполняет PlanStep только поверх Workspace
+  -> ChangeCode меняет виртуальное состояние
+  -> Research читает то же виртуальное состояние
+WorkerResult возвращает итоговый ChangeSet
+Engine применяет изменения к реальному Project только после успешного завершения всей задачи
+```
+
+Ключевой смысл: незавершённый Worker или промежуточный успешно выполненный PlanStep не должны оставлять частично применённые изменения в реальном проекте. В идеальном варианте Engine коммитит накопленные изменения только после того, как успешно завершены **все** шаги пользовательской задачи.
+
+Для Worker нужен единый `ProjectView`, который сначала смотрит в его локальные изменения, а затем в базовый Project. Поэтому последующий Research должен видеть файлы уже такими, какими Worker считает их после своих виртуальных правок.
+
+Варианты хранения виртуальных файлов пока открыты:
+
+- **in-memory overlay** (`Map<ProjectPath, content>`) — основной простой кандидат; дешёвый, быстрый и автоматически исчезает при завершении процесса;
+- `.nodus/fileCache` — возможный более поздний вариант для больших файлов, долгих/возобновляемых run или восстановления после перезапуска;
+- гибрид: память как primary storage, disk cache только как explicit spill/persistence mechanism.
+
+Пока предпочтение — **не вводить `.nodus/fileCache` заранее**. Сначала проверить, хватает ли in-memory overlay на реальных задачах. Disk cache добавлять только при появлении измеримой необходимости (resume после restart, большой объём buffered data, ограничение памяти и т.п.).
+
+Research требует отдельного правила кэширования:
+
+- Research по неизменённому base Project может использовать persistent `ResearchCache`;
+- Research, ответ которого зависит от виртуально изменённых файлов Workspace, не должен сразу становиться глобальным знанием о реальном Project; такое знание должно оставаться worker-local до commit или иметь отдельную workspace identity/version.
+
+Также нужно отдельно решить commit semantics Engine: atomic-ish применение всего task-level ChangeSet, конфликт с внешними изменениями файлов во время долгого run, rollback/temporary files и взаимодействие с будущим user approval.

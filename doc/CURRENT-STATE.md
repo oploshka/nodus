@@ -99,7 +99,7 @@ Schema единая object-schema; operation-specific schema classes не исп
 
 `ModelRunner.diffFile(...)` — thin specialized facade над общим runner contract.
 
-## Languages
+## Языки
 
 Конфиг уже содержит три понятия:
 
@@ -152,7 +152,7 @@ Vitest projects:
 
 Их задача — фиксировать архитектурный проход и signatures, а не интеллект модели.
 
-## Planned work / known issues
+## Планируемые работы / известные проблемы
 
 1. **Internal storage boundary.** Сейчас `.nodus` одновременно находится в project excludes и используется Nodus для Research cache/index/logs. Временно `.nodus` исключён из write-policy check, чтобы internal cache снова работал. Нужно разделить model-editable project paths и Nodus-owned internal storage отдельным API/storage boundary. После этого `.nodus` снова должен быть недоступен model Actions.
 2. **Central language policy.** Перенести default internal language enforcement в model layer. `nodus` default — English; project/response меняются по config/use case.
@@ -163,7 +163,8 @@ Vitest projects:
 7. **Action routing.** После live-проверки replace решить, как Worker выбирает/fallback-ит между `ChangeCodeRangeReplaceAction`, `ChangeCodeReplaceAction`, `ChangeCodeDiffAction` и `ChangeCodeEditAction`; затем добавлять `RunCommandAction` и другие capabilities только по реальным сценариям.
 8. **AgentWorker semantics.** Различать настоящий completed от ответа модели вида «нужен пользовательский контекст».
 9. **Experience data.** Продолжать логировать task/worker/action outcomes для будущего task clustering и более дешёвого Determine.
+10. **Worker Workspace / task-level commit (идея, не утверждена).** Рассмотреть модель, где Worker работает только с виртуальным `ProjectView`/Workspace, ChangeCode меняет buffered файлы, Research видит эти buffered версии, а Engine применяет итоговый ChangeSet к реальному Project только после успешного завершения всех PlanStep пользовательской задачи. Первый кандидат хранения — in-memory overlay; `.nodus/fileCache` рассматривать только при реальной необходимости persistence/spill/resume. Persistent Research cache поверх виртуального Workspace требует отдельной semantics/versioning.
 
-## Last observed test/debug state
+## Последнее наблюдаемое состояние тестов/debug
 
-Before the project write-policy change, unit and integration suites were green. The next integration run failed because Research successfully resolved answers but persistence of `.nodus/research-cache.json` was blocked by the new write policy. The temporary `.nodus` exemption in this snapshot addresses that specific regression; `npx tsc --noEmit`, unit and integration should be re-run locally to confirm the snapshot.
+До изменения project write-policy unit и integration suites были зелёными. Следующий integration run упал потому, что Research успешно получил ответы, но сохранение `.nodus/research-cache.json` было заблокировано новой write-policy. В этом snapshot для `.nodus` оставлено временное исключение; локально нужно повторно прогнать `npx tsc --noEmit`, unit и integration.
