@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import { FileLogger } from '@app/Logging/Logger.js';
@@ -36,6 +36,8 @@ interface BenchmarkCase {
 
 interface ForwardedCallMetric {
   durationMs: number;
+  request: string;
+  response: string;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
@@ -355,6 +357,8 @@ class BenchmarkAdapter implements ModelAdapter {
     const response = await this.delegate.complete(request);
     this.forwarded.push({
       durationMs: performance.now() - startedAt,
+      request: user,
+      response: response.content,
       promptTokens: response.usage?.prompt_tokens,
       completionTokens: response.usage?.completion_tokens,
       totalTokens: response.usage?.total_tokens,
@@ -368,8 +372,12 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const configuration = await ConfigurationLoader.load(args.configPath);
   const timestamp = safeTimestamp(new Date());
-  const logDir = resolve('benchmark/model-capabilities/logs');
-  await mkdir(logDir, { recursive: true });
+  const runDir = resolve('benchmark/model-capabilities/runs', timestamp);
+  await mkdir(runDir, { recursive: true });
+  const benchmarkLogPath = join(runDir, 'benchmark.log');
+  const editsLogPath = join(runDir, 'edits.log');
+  await writeFile(benchmarkLogPath, '', 'utf8');
+  await writeFile(editsLogPath, '', 'utf8');
 
   const strategies = args.strategies.length > 0
     ? args.strategies
@@ -383,7 +391,7 @@ async function main(): Promise<void> {
   for (let repeat = 1; repeat <= args.repeat; repeat += 1) {
     for (const strategy of strategies) {
       for (const benchmarkCase of CASES) {
-        const result = await runCase(configuration, strategy, benchmarkCase, timestamp, repeat, logDir);
+        const result = await runCase(configuration, strategy, benchmarkCase, timestamp, repeat, benchmarkLogPath, editsLogPath);
         results.push(result);
         const mark = result.correct && result.status === 'completed' ? '✓' : '✗';
         console.log(
@@ -394,7 +402,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const summaryPath = join(logDir, `${timestamp}_summary.json`);
+  const summaryPath = join(runDir, 'summary.json');
   await writeFile(summaryPath, JSON.stringify({
     timestamp,
     model: configuration.model.model,
@@ -402,10 +410,12 @@ async function main(): Promise<void> {
     repeat: args.repeat,
     strategies,
     results,
+    artifacts: { benchmarkLog: benchmarkLogPath, editsLog: editsLogPath, summary: summaryPath },
     aggregate: aggregate(results),
   }, null, 2), 'utf8');
 
-  console.log(`\n[Benchmark] summary: ${summaryPath}`);
+  console.log(`\n[Benchmark] run: ${runDir}`);
+  console.log(`[Benchmark] summary: ${summaryPath}`);
   for (const item of aggregate(results)) {
     console.log(
       `[Benchmark] ${item.strategy}: ${item.correct}/${item.total} correct · ` +
@@ -420,11 +430,10 @@ async function runCase(
   benchmarkCase: BenchmarkCase,
   timestamp: string,
   repeat: number,
-  logDir: string,
+  benchmarkLogPath: string,
+  editsLogPath: string,
 ): Promise<CaseResult> {
-  const suffix = repeat > 1 ? `_r${repeat}` : '';
-  const logPath = join(logDir, `${timestamp}_${strategy}_${benchmarkCase.id}${suffix}.log`);
-  const logger = new FileLogger(logPath);
+  const logger = new FileLogger(benchmarkLogPath);
   const project = new InMemoryBenchmarkProject(`model-capability-${benchmarkCase.id}`, benchmarkCase.files, logger);
 
   try {
@@ -484,13 +493,91 @@ async function runCase(
       completionTokens: sum(metrics.map((item) => item.completionTokens)),
       totalTokens: sum(metrics.map((item) => item.totalTokens)),
       ...(run.status === 'completed' ? {} : { reason: run.reason }),
-      logPath,
+      logPath: benchmarkLogPath,
     };
     logger.info('benchmark.case.finish', result);
+    await appendEditDiagnostics(editsLogPath, strategy, benchmarkCase, repeat, adapter.forwarded, project, result);
     return result;
   } finally {
-    // Project state exists only in memory; only timestamped benchmark logs are persisted.
+    // Project state exists only in memory; only the three run artifacts are persisted.
   }
+}
+
+
+async function appendEditDiagnostics(
+  editsLogPath: string,
+  strategy: StrategyId,
+  benchmarkCase: BenchmarkCase,
+  repeat: number,
+  calls: ForwardedCallMetric[],
+  project: InMemoryBenchmarkProject,
+  result: CaseResult,
+): Promise<void> {
+  const sections: string[] = [];
+  sections.push(`=== ${strategy} / ${benchmarkCase.id}${repeat > 1 ? ` / repeat ${repeat}` : ''} ===`);
+  sections.push(`status: ${result.status}`);
+  sections.push(`correct: ${result.correct}`);
+  if (result.reason) sections.push(`reason: ${result.reason}`);
+
+  calls.forEach((call, index) => {
+    sections.push('', `MODEL PROPOSAL ${index + 1}`, call.response);
+  });
+
+  sections.push('', 'APPLY / RESULT');
+  for (const [path, original] of Object.entries(benchmarkCase.files)) {
+    const actual = project.content(path);
+    const expected = benchmarkCase.expected[path] ?? original;
+    sections.push(`file: ${path}`);
+    if (actual === undefined) {
+      sections.push('actual: <missing>');
+      continue;
+    }
+    sections.push(`changed: ${actual !== original}`);
+    sections.push(`matches expected: ${actual === expected}`);
+    if (actual !== original) {
+      sections.push('SOURCE -> ACTUAL');
+      sections.push(compactLineDiff(original, actual));
+    }
+    if (actual !== expected) {
+      sections.push('EXPECTED -> ACTUAL');
+      sections.push(compactLineDiff(expected, actual));
+    }
+  }
+
+  sections.push('', 'METRICS');
+  sections.push(`durationMs: ${Math.round(result.durationMs)}`);
+  sections.push(`modelCalls: ${result.modelCalls}`);
+  sections.push(`tokens: prompt=${result.promptTokens} completion=${result.completionTokens} total=${result.totalTokens}`);
+  sections.push('', '');
+  await appendFile(editsLogPath, sections.join('\n'), 'utf8');
+}
+
+function compactLineDiff(before: string, after: string): string {
+  const left = before.split('\n');
+  const right = after.split('\n');
+  let prefix = 0;
+  while (prefix < left.length && prefix < right.length && left[prefix] === right[prefix]) prefix += 1;
+
+  let leftSuffix = left.length - 1;
+  let rightSuffix = right.length - 1;
+  while (leftSuffix >= prefix && rightSuffix >= prefix && left[leftSuffix] === right[rightSuffix]) {
+    leftSuffix -= 1;
+    rightSuffix -= 1;
+  }
+
+  if (prefix === left.length && prefix === right.length) return '(no difference)';
+  const contextStart = Math.max(0, prefix - 2);
+  const contextEndLeft = Math.min(left.length - 1, leftSuffix + 2);
+  const contextEndRight = Math.min(right.length - 1, rightSuffix + 2);
+  const output: string[] = [`@@ near line ${prefix + 1} @@`];
+
+  for (let index = contextStart; index < prefix; index += 1) output.push(`  ${left[index]}`);
+  for (let index = prefix; index <= leftSuffix; index += 1) output.push(`- ${left[index]}`);
+  for (let index = prefix; index <= rightSuffix; index += 1) output.push(`+ ${right[index]}`);
+
+  const sharedTail = Math.min(contextEndLeft - leftSuffix, contextEndRight - rightSuffix);
+  for (let offset = 1; offset <= sharedTail; offset += 1) output.push(`  ${left[leftSuffix + offset]}`);
+  return output.join('\n');
 }
 
 function createAction(
