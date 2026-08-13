@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { ProjectPathResolver } from '@engine/Project/ProjectPathResolver.js';
 import type { ProjectIndex } from '@engine/Project/ProjectIndex.js';
-import { TestProject } from '@test/framework/TestProject.js';
+import { TestProject } from '../../../target/testFramework/TestProject.js';
 
 function index(root: string, paths: string[]): ProjectIndex {
   return {

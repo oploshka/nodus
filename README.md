@@ -41,7 +41,7 @@ npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
 - [Model tests](test/model/MODEL_TESTS.md)
 - [E2E tests](test/e2e/E2E_TESTS.md)
 - [Benchmarks](doc/BENCHMARKS.md)
-- [Raw-agent benchmark](benchmark/RAW-AGENT.md)
+- [Raw-agent benchmark](target/benchmark/RAW-AGENT.md)
 
 ### Исторические/сценарные заметки
 

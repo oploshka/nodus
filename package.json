@@ -13,8 +13,8 @@
     "test:model": "vitest run --project model --passWithNoTests",
     "test:e2e": "vitest run --project e2e --passWithNoTests",
     "dev": "tsx src/app/Main.ts",
-    "benchmark:raw-agent": "tsx benchmark/RawAgentBenchmark.ts",
-    "benchmark:model-capabilities": "tsx benchmark/model-capabilities/ModelCapabilityBenchmark.ts"
+    "benchmark:raw-agent": "tsx target/benchmark/RawAgentBenchmark.ts",
+    "benchmark:model-capabilities": "tsx target/benchmark/model-capabilities/ModelCapabilityBenchmark.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

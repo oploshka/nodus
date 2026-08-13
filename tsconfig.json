@@ -20,7 +20,7 @@
   "include": [
     "src/**/*.ts",
     "test/**/*.ts",
-    "benchmark/**/*.ts"
+    "lab/benchmark/**/*.ts"
   ],
   "exclude": [
     "dist",

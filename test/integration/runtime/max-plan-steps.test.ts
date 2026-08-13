@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { QueueModelAdapter } from '@test/framework/ModelHarness.js';
-import { runScenario } from '@test/framework/ScenarioRunner.js';
+import { QueueModelAdapter } from '../../../target/testFramework/ModelHarness.js';
+import { runScenario } from '../../../target/testFramework/ScenarioRunner.js';
 import { maxPlanStepsScenario } from '@test/integration/runtime/max-plan-steps.scenario.js';
 
 describe('runtime maxPlanSteps vertical slice', () => {

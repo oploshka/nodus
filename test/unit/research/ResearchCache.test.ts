@@ -4,7 +4,7 @@ import { Project } from '@engine/Project/Project.js';
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { ResearchResolveOptions, ResearchResolver, ResolvedResearch } from '@engine/Research/ResearchTypes.js';
-import { TestProject } from '@test/framework/TestProject.js';
+import { TestProject } from '../../../target/testFramework/TestProject.js';
 
 class CountingResolver implements ResearchResolver {
   public calls = 0;

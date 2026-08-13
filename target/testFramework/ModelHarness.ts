@@ -1,6 +1,6 @@
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { ModelAdapter, RawModelResponse } from '@model/Adapter/ModelAdapter.js';
-import type { ModelRequest } from '@model/Request/ModelRequest.js';
+import type { EngineLogger } from 'src/engine/Type/EngineLogger.js';
+import type { ModelAdapter, RawModelResponse } from 'src/model/Adapter/ModelAdapter.js';
+import type { ModelRequest } from 'src/model/Request/ModelRequest.js';
 
 /** Deterministic model used by unit/integration scenarios. */
 export class QueueModelAdapter implements ModelAdapter {

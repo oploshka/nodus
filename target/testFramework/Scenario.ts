@@ -1,5 +1,5 @@
-import type { WorkerConfiguration } from '@engine/Type/EngineConfiguration.js';
-import type { ModelConfiguration } from '@model/Type/ModelConfiguration.js';
+import type { WorkerConfiguration } from 'src/engine/Type/EngineConfiguration.js';
+import type { ModelConfiguration } from 'src/model/Type/ModelConfiguration.js';
 
 export interface ScenarioDefinition {
   id: string;
