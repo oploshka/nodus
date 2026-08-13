@@ -6,9 +6,12 @@ import type { ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAct
 import type { ChangeCodeActionData, ChangeCodeActionInput, ResearchActionRequest } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
+import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
+import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
 
 class SequenceChangeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
   public readonly id = 'change-code';
+  public readonly presentation = new ActionPresentation({ name: { en: 'Test change' } });
   public readonly description = 'test change action';
   public readonly knowledgeSizes: number[] = [];
 
@@ -24,6 +27,7 @@ class SequenceChangeAction implements WorkerAction<ChangeCodeActionInput, Change
 
 class ScriptedResearchAction implements WorkerAction<ResearchActionInput, ResearchAnswer> {
   public readonly id = 'research';
+  public readonly presentation = new ResearchPresentation();
   public readonly description = 'test research action';
   public readonly asked: string[] = [];
 

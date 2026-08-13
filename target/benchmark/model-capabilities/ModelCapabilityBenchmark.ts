@@ -15,6 +15,7 @@ import { FullFileEditStrategy } from '@engine/Edit/Strategy/FullFileEditStrategy
 import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
+import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
 import type { WorkerResult } from '@engine/Worker/Worker.js';
 import { Task } from '@engine/Task/Task.js';
 import type { ModelAdapter, RawModelResponse } from '@model/Adapter/ModelAdapter.js';
@@ -616,6 +617,7 @@ function createEditStrategy(
 function unavailableResearch(): WorkerAction<any, any, any> {
   return {
     id: 'research',
+    presentation: new ResearchPresentation(),
     description: 'Research is disabled in model capability benchmarks because all edit intent is injected.',
     async run() {
       return { status: 'failed', reason: 'Research is disabled in this benchmark.', canContinue: false };

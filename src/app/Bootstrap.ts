@@ -109,7 +109,7 @@ export class Bootstrap {
 
     return new Engine(
       project,
-      new ModelPlanner(model, logger, language.nodus, configuration.runtime?.maxPlanSteps),
+      new ModelPlanner(model, logger, language.nodus),
       workers,
       new ModelDetermine(model, logger, language.nodus),
       new ProjectEditor(project, logger, [

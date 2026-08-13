@@ -79,12 +79,13 @@ export class ConsoleLogger implements EngineLogger {
     ].join('\n');
   }
 
-  private presentation(value: unknown): Presentation<unknown> | undefined {
-    if (!value || typeof value !== 'object') return undefined;
+  private presentation(value: unknown): Presentation<unknown> {
+    if (!value || typeof value !== 'object') throw new Error('Console event is missing a valid presentation');
     const candidate = value as Partial<Presentation<unknown>>;
-    return typeof candidate.role === 'string' && typeof candidate.color === 'string' && typeof candidate.format === 'function'
-      ? candidate as Presentation<unknown>
-      : undefined;
+    if (typeof candidate.role !== 'string' || typeof candidate.color !== 'string' || typeof candidate.format !== 'function') {
+      throw new Error('Console event contains an invalid presentation');
+    }
+    return candidate as Presentation<unknown>;
   }
 
   private format(event: string, data: unknown): string {
@@ -478,5 +479,3 @@ function compactText(value: string, max: number): string {
   return singleLine.length <= max ? singleLine : `${singleLine.slice(0, max - 1)}…`;
 }
 function levelLabel(event: string): string { return `[${event}]`; }
-
-
