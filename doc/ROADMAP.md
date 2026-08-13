@@ -104,3 +104,9 @@ Research требует отдельного правила кэшировани
 - Research, ответ которого зависит от виртуально изменённых файлов Workspace, не должен сразу становиться глобальным знанием о реальном Project; такое знание должно оставаться worker-local до commit или иметь отдельную workspace identity/version.
 
 Также нужно отдельно решить commit semantics Engine: atomic-ish применение всего task-level ChangeSet, конфликт с внешними изменениями файлов во время долгого run, rollback/temporary files и взаимодействие с будущим user approval.
+
+## Model capability benchmark
+
+- [x] Добавить отдельный `benchmark/model-capabilities`, который запускает реальные `CodeWorker` + ChangeCode Actions с заранее подсунутым edit intent, чтобы отдельно измерять механику `replace` / `range-replace` / `diff` / `edit` без Planner/Research шума.
+- [ ] Собрать baseline для используемых моделей: correctness, schema/apply failures, duration, model calls и token cost по каждой edit-стратегии.
+- [ ] На основании benchmark определить минимальный capability threshold для модели, пригодной как основной `CodeWorker`.
