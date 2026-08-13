@@ -57,12 +57,13 @@ export class ConsoleLogger implements EngineLogger {
     return this.colorsEnabled ? `${ANSI.gray}${text}${RESET}` : text;
   }
 
-  private renderPresentation(presentation: Presentation<unknown>, message: PresentedMessage, indent: number): string {
+  private renderPresentation(presentation: Presentation<unknown> | undefined, message: PresentedMessage, indent: number): string {
+    if (!presentation) return '';
     const label = this.label(presentation.role, presentation.color);
     const prefix = ' '.repeat(indent);
     const details = message.details ?? [];
     return [
-      `${prefix}${label} ${message.text}`,
+      message.showRole === false ? `${prefix}${this.muted(message.text)}` : `${prefix}${label} ${message.text}`,
       ...details.map((detail) => this.muted(`${' '.repeat(indent + 2)}${detail}`)),
     ].join('\n');
   }
@@ -226,6 +227,7 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
       const actionId = stringValue(record.actionId);
       const attempt = numberValue(record.attempt);
       const question = compactText(stringValue(record.question), 220);
+      const targets = Array.isArray(record.targets) ? record.targets.map(stringValue).filter(Boolean) : [];
 
       if (actionId === 'research') {
         this.modelIndent = 6;
@@ -233,7 +235,7 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
         const maxRequests = numberValue(record.maxRequests);
         const position = requestIndex > 0 ? `${requestIndex}${maxRequests > 0 ? `/${maxRequests}` : ''}` : '';
         const presentation = this.presentation(record.actionPresentation);
-        const message = presentation?.format({ type: 'question', index: requestIndex, max: maxRequests, question }, this.responseLanguage);
+        const message = presentation?.format({ type: 'question', index: requestIndex, max: maxRequests, question, targets }, this.responseLanguage);
         return message ? this.renderPresentation(presentation, message, 4) : '';
       }
 
@@ -338,8 +340,10 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
       const taskId = stringValue(record.taskId);
       if (taskId) this.plans.delete(taskId);
       const status = stringValue(record.status);
+      const reason = stringValue(record.reason);
+      const canContinue = record.canContinue === true;
       const presentation = this.presentation(record.presentation);
-      const message = presentation?.format({ type: 'task-finish', status }, this.responseLanguage);
+      const message = presentation?.format({ type: 'task-finish', status, reason, canContinue }, this.responseLanguage);
       return message ? this.renderPresentation(presentation, message, 0) : '';
     }
 

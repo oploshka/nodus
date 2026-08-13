@@ -19,9 +19,9 @@ export class EditPresentation implements Presentation<EditPresentationEvent> {
     const ru = responseLanguage.toLowerCase().startsWith('ru');
     switch (event.type) {
       case 'change-set-prepare': return { text: ru ? `Подготавливаю change-set · изменений: ${event.edits}` : `Preparing change-set · edits: ${event.edits}` };
-      case 'file-prepare': return { text: ru ? `Подготавливаю изменения: ${event.path}` : `Preparing changes: ${event.path}` };
-      case 'file-prepared': return { text: `${ru ? 'Изменения подготовлены' : 'Changes prepared'}: ${event.path}${event.operations ? ` · ${ru ? 'операций' : 'operations'}: ${event.operations}` : ''}` };
-      case 'file-failed': return { text: `${ru ? 'Не удалось подготовить изменения' : 'Failed to prepare changes'}: ${event.path} · ${event.reason}` };
+      case 'file-prepare': return { text: event.path, showRole: false };
+      case 'file-prepared': return { text: `${ru ? '✓ Подготовлено' : '✓ Prepared'}${event.operations ? ` · ${ru ? 'операций' : 'operations'}: ${event.operations}` : ''}`, showRole: false };
+      case 'file-failed': return { text: `${ru ? '✗ Не удалось подготовить' : '✗ Failed to prepare'} · ${event.reason}`, showRole: false };
       case 'change-set-failed': return { text: `${ru ? 'Change-set не подготовлен' : 'Change-set preparation failed'}${event.path ? ` · ${event.path}` : ''}` };
       case 'commit-start': return { text: ru ? `Применяю change-set · файлов: ${event.files}` : `Applying change-set · files: ${event.files}` };
       case 'commit-finish': return { text: ru ? `Change-set применён · файлов: ${event.files}` : `Change-set applied · files: ${event.files}` };

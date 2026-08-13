@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Project } from '@engine/Project/Project.js';
-import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
+import type { ResearchAnswer, ResearchTarget } from '@engine/Research/ResearchTypes.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { ActionModelOptions, ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
@@ -17,7 +17,7 @@ interface ChangeDecision {
   outcome: 'ready' | 'missing-information' | 'already-completed' | 'failed';
   summary?: string;
   reason?: string;
-  questions?: string[];
+  researchRequests?: Array<{ question: string; targets?: string[] }>;
   edits?: Array<{ path: string; instruction: string }>;
 }
 
@@ -42,7 +42,18 @@ const decisionSchema: ModelResponseSchema = {
     },
     summary: { type: 'string', optional: true },
     reason: { type: 'string', optional: true },
-    questions: { type: 'array', items: { type: 'string' }, optional: true },
+    researchRequests: {
+      type: 'array',
+      optional: true,
+      description: 'Only concrete project facts that block execution now. Keep the question separate from known target files.',
+      items: {
+        type: 'object',
+        fields: {
+          question: { type: 'string', description: 'The bounded fact to learn. Do not embed a file list into the prose when targets are known.' },
+          targets: { type: 'array', items: { type: 'string' }, optional: true, description: 'Known project-root-relative files to inspect first.' },
+        },
+      },
+    },
     edits: {
       type: 'array',
       optional: true,
@@ -69,6 +80,7 @@ export interface ChangeCodeActionData {
 
 export interface ResearchActionRequest {
   question: string;
+  targets?: ResearchTarget[];
 }
 
 export type ChangeCodeEdit = { path: string; instruction: string };
@@ -128,8 +140,10 @@ export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionI
           `Use ${this.profile.language.response} only for user-facing summary/reason fields.`,
           `When creating human-authored project text (documentation/comments), prefer the project language: ${this.profile.language.project}.`,
           'Start from execution: if the supplied information is sufficient, return the concrete edits immediately.',
-          'If safe execution requires project facts that are not supplied, do not guess. Return only the smallest set of specific bounded questions needed for the next execution attempt.',
-          'Return at most 3 questions. Prefer one precise question when it can unblock the task.',
+          'If safe execution requires project facts that are not supplied, do not guess. Return only the smallest set of specific bounded researchRequests needed for the next execution attempt.',
+          'Keep location and intent separate: when you already know which project files should answer a question, put those project-root-relative paths in researchRequests[].targets and keep researchRequests[].question focused on what must be learned.',
+          'Do not mention target file lists inside the question text when the same paths are present in targets.',
+          'Return at most 3 researchRequests. Prefer one precise request when it can unblock the task.',
           'Do not ask documentation, policy, best-practice, or hypothetical questions unless the user task explicitly requires them.',
           'Do not ask broad questions such as "understand the project". Ask only concrete project facts that block execution now.',
           'Every edit.path must be relative to the project root; never resolve it relative to another source file.',
@@ -151,13 +165,22 @@ export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionI
     }
 
     if (decision.outcome === 'missing-information') {
-      const questions = (decision.questions ?? []).map((question) => question.trim()).filter(Boolean).slice(0, 3);
-      if (questions.length === 0) throw new Error('Attempt reported missing information without concrete questions.');
+      const researchRequests = (decision.researchRequests ?? [])
+        .map((request) => ({
+          question: request.question.trim(),
+          targets: (request.targets ?? [])
+            .map((path) => path.trim())
+            .filter(Boolean)
+            .map((path) => ({ type: 'file' as const, path })),
+        }))
+        .filter((request) => request.question)
+        .slice(0, 3);
+      if (researchRequests.length === 0) throw new Error('Attempt reported missing information without concrete research requests.');
       return {
         status: 'not-completed',
         reason: decision.reason ?? 'Concrete project knowledge is required before the change can be applied safely.',
         canContinue: true,
-        requests: questions.map((question) => ({ actionId: 'research', input: { question } })),
+        requests: researchRequests.map((input) => ({ actionId: 'research', input })),
       };
     }
 

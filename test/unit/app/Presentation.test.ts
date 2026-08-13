@@ -40,9 +40,13 @@ describe('runtime presentations', () => {
     expect(new PlannerPresentation().format({ type: 'start' }, 'ru').text).toBe('Строю план');
     expect(new DeterminePresentation().format({ type: 'finish', workerName: 'Code' }, 'ru').text).toBe('Исполнитель выбран: Code');
     expect(new ResearchPresentation().format({ type: 'resolved', sources: 3 }, 'ru').text).toBe('Ответ найден · источников: 3');
+    expect(new ResearchPresentation().format({ type: 'question', index: 1, max: 3, question: 'Как устроен runtime?', targets: ['Configuration.ts', 'ConfigurationLoader.ts'] }, 'ru')).toEqual({
+      text: 'Вопрос 1/3',
+      details: ['Configuration.ts, ConfigurationLoader.ts', '→ Как устроен runtime?'],
+    });
     expect(new EditPresentation().format({ type: 'commit-finish', files: 2 }, 'ru').text).toBe('Change-set применён · файлов: 2');
     expect(new ModelPresentation().format({ type: 'finish', meta: { durationMs: 2200, totalTokens: 120, promptTokens: 100, completionTokens: 20 } }, 'ru').text)
-      .toBe('Ответ получен · 2.2s · 120 tok · 100→20');
+      .toBe('Ответ получен · 2.2s · 100 → 20 = 120 tok');
   });
 
 });

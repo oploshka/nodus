@@ -2,7 +2,6 @@ import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import type { Engine } from '@engine/Engine.js';
-import type { TaskRun } from '@engine/Task/TaskRun.js';
 
 export interface CliRuntime {
   engine: Engine;
@@ -32,8 +31,7 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
     }
 
     try {
-      const run = await runtime.engine.run(value);
-      printRunResult(run);
+      await runtime.engine.run(value);
     } catch (error) {
       console.error(`\n✗ Задача завершилась ошибкой: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -114,21 +112,3 @@ async function readCliInput(): Promise<CliInputResult> {
   });
 }
 
-function printRunResult(run: TaskRun): void {
-  const last = run.steps.at(-1)?.result;
-
-  if (run.status === 'completed') {
-    console.log(`\n✓ Задача завершена${last?.status === 'completed' && last.summary ? `: ${last.summary}` : '.'}`);
-    return;
-  }
-
-  if (run.status === 'not-completed') {
-    const reason = last?.status === 'not-completed' ? last.reason : 'Выполнение остановлено до завершения всех шагов.';
-    console.log(`\n! Задача не завершена: ${reason}`);
-    if (last?.status === 'not-completed' && last.canContinue) console.log('  Выполнение можно продолжить.');
-    return;
-  }
-
-  const reason = last?.status === 'failed' ? last.reason : 'Неизвестная ошибка выполнения.';
-  console.log(`\n✗ Задача завершилась ошибкой: ${reason}`);
-}

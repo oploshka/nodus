@@ -40,7 +40,7 @@ export const statusScenario = scenario({
     JSON.stringify({
       outcome: 'missing-information',
       reason: 'The CLI file is known, but the existing access paths for runtime state must be confirmed before editing.',
-      questions: ['How can the CLI read current project id, conversation id, and existing project index file count without scan or refresh?'],
+      researchRequests: [{ question: 'How can the CLI read current project id, conversation id, and existing project index file count without scan or refresh?' }],
     }),
     'Use configuration.project.id, conversation.id, and nodus.projectSession.index?.files.length without scan/refresh.',
     JSON.stringify({

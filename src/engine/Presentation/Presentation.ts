@@ -13,6 +13,7 @@ export type PresentationColor =
 export interface PresentedMessage {
   text: string;
   details?: string[];
+  showRole?: boolean;
 }
 
 /**

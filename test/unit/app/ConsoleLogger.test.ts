@@ -52,14 +52,14 @@ describe('ConsoleLogger orchestration output', () => {
     expect(output).not.toContain('secret task text');
     expect(output).toContain('  [Planner] Строю план');
     expect(output).toContain('    [Model] Обрабатываю...');
-    expect(output).toContain('    [Model] Ответ получен · 1.3s · 42 tok · 30→12');
+    expect(output).toContain('    [Model] Ответ получен · 1.3s · 30 → 12 = 42 tok');
     expect(output).toContain('  [Planner] План получен · 1 шаг(а)');
     expect(output).toContain('[Engine] Шаг 1/1\n  Do work');
     expect(output).toContain('  [Determine] Выбираю исполнителя');
     expect(output).toContain('  [Determine] Исполнитель выбран: Code');
     expect(output).toContain('  [Worker] Code');
     expect(output).toContain('    [Action] Изменение кода · попытка 1 · метод: range-replace');
-    expect(output).toContain('      [Model] Ответ получен · 2.5s · 120 tok · 100→20 · length');
+    expect(output).toContain('      [Model] Ответ получен · 2.5s · 100 → 20 = 120 tok · length');
     expect(output).not.toContain('Split this user request');
     expect(output).not.toContain('change-code-range-replace');
   });
@@ -72,9 +72,9 @@ describe('ConsoleLogger orchestration output', () => {
     const modelPresentation = new ModelPresentation();
 
     logger.info('worker.action.start', {
-      workerId: 'code', actionId: 'research', actionName: 'Research', actionPresentation: researchPresentation, requestIndex: 1, maxRequests: 4, question: 'Where is maxPlanSteps defined?',
+      workerId: 'code', actionId: 'research', actionName: 'Research', actionPresentation: researchPresentation, requestIndex: 1, maxRequests: 4, question: 'Where is maxPlanSteps defined?', targets: ['src/engine/Planner/ModelPlanner.ts'],
     });
-    logger.info('research.miss', { question: 'Where is maxPlanSteps defined?', presentation: researchPresentation });
+    logger.info('research.miss', { question: 'Where is maxPlanSteps defined?', targets: ['src/engine/Planner/ModelPlanner.ts'], presentation: researchPresentation });
     logger.info('model.run.start', { kind: 'model', presentation: modelPresentation });
     logger.info('model.run', { meta: { durationMs: 1000, promptTokens: 90, completionTokens: 10, totalTokens: 100, finishReason: 'stop' }, presentation: modelPresentation });
     logger.info('research.resolved', { sources: ['a.ts', 'b.ts'], presentation: researchPresentation });
@@ -82,7 +82,8 @@ describe('ConsoleLogger orchestration output', () => {
 
     const output = lines.join('\n');
     expect(output).toContain('    [Research] Вопрос 1/4');
-    expect(output).toContain('      Where is maxPlanSteps defined?');
+    expect(output).toContain('      src/engine/Planner/ModelPlanner.ts');
+    expect(output).toContain('      → Where is maxPlanSteps defined?');
     expect(output).toContain('      [Model] Обрабатываю...');
     expect(output).toContain('    [Research] Ответ найден · источников: 2');
     expect(output).not.toContain('[Action] research');

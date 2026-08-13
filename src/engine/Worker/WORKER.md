@@ -56,7 +56,7 @@ For insertion the model replaces one stable existing line with that same line pl
 
 ## Research lifecycle
 
-Research is not speculative preprocessing. The primary Action starts by attempting the task. Only a `not-completed` result containing explicit `research` requests causes the Worker to run `ResearchAction`; answers are added to the Worker session and the primary Action is retried.
+Research is not speculative preprocessing. The primary Action starts by attempting the task. Only a `not-completed` result containing explicit `research` requests causes the Worker to run `ResearchAction`; answers are added to the Worker session and the primary Action is retried. A Research request keeps intent and location separate: `question` says what fact is needed, while optional `targets` names known project-root-relative files to inspect first.
 
 Research itself owns cache lookup and source-hash invalidation.
 

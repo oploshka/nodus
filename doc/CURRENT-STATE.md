@@ -51,7 +51,7 @@ change-code -> research (по запросу action) -> change-code retry
 
 Также сохранены предыдущий `ChangeCodeReplaceAction`, `ChangeCodeDiffAction` и реализован `ChangeCodeEditAction`, который возвращает полный resulting file. Все code-change стратегии теперь используют общий buffered change-set: сначала весь coherent change готовится в памяти, и только затем файлы коммитятся. Routing/fallback между стратегиями пока не включён.
 
-`ResearchAction` вызывается только когда основной Action явно вернул конкретные missing-information requests. Research не запускается превентивно.
+`ResearchAction` вызывается только когда основной Action явно вернул конкретные missing-information requests. Research не запускается превентивно. Если Action уже знает конкретные файлы, request передаёт их отдельно в `targets`; текст `question` описывает только требуемый факт.
 
 Worker возвращает Engine:
 
@@ -68,7 +68,7 @@ Research — bounded service с persistent cache. Cache entry хранит sourc
 Текущий принцип:
 
 ```text
-Research.ask(question)
+Research.ask({ question, targets? })
   -> cache lookup
   -> validate source hashes
   -> hit: return cached answer

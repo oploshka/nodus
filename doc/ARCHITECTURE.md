@@ -45,7 +45,7 @@ CodeWorker
 
 ## Research boundary
 
-Research отвечает на один bounded project question. Он владеет cache lookup, source-hash invalidation и persistence. Research не является Worker и не запускается заранее «на всякий случай».
+Research отвечает на один bounded project question. Он владеет cache lookup, source-hash invalidation и persistence. Research не является Worker и не запускается заранее «на всякий случай». Research request структурирован как `{ question, targets? }`: известные файлы не смешиваются с естественным языком вопроса.
 
 ## Project path boundary
 

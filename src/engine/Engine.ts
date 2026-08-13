@@ -64,7 +64,10 @@ export class Engine {
     }
 
     run.finish();
-    this.logger.info('engine.task.finish', { taskId: task.id, status: run.status, presentation: this.presentation });
+    const lastResult = run.steps.at(-1)?.result;
+    const reason = lastResult?.status === 'not-completed' || lastResult?.status === 'failed' ? lastResult.reason : undefined;
+    const canContinue = lastResult?.status === 'not-completed' ? lastResult.canContinue : false;
+    this.logger.info('engine.task.finish', { taskId: task.id, status: run.status, reason, canContinue, presentation: this.presentation });
     return run;
   }
 }

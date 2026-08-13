@@ -4,7 +4,7 @@ export type EnginePresentationEvent =
   | { type: 'task-start' }
   | { type: 'step-start'; position: string; goal: string }
   | { type: 'step-finish'; position: string; status: string }
-  | { type: 'task-finish'; status: string };
+  | { type: 'task-finish'; status: string; reason?: string; canContinue?: boolean };
 
 /** Root runtime presentation. Engine lifecycle stays visually dominant. */
 export class EnginePresentation implements Presentation<EnginePresentationEvent> {
@@ -23,7 +23,20 @@ export class EnginePresentation implements Presentation<EnginePresentationEvent>
     if (event.type === 'step-finish') {
       return { text: `${russian ? 'Шаг' : 'Step'} ${event.position}: ${humanStatus(event.status, russian)}` };
     }
-    return { text: `${russian ? 'Итог' : 'Result'}: ${humanStatus(event.status, russian)}` };
+    if (event.status === 'completed') return { text: russian ? 'Задача завершена' : 'Task completed' };
+    if (event.status === 'not-completed') {
+      return {
+        text: russian ? 'Задача не завершена' : 'Task not completed',
+        details: [
+          ...(event.reason ? [`${russian ? 'Причина' : 'Reason'}: ${event.reason}`] : []),
+          ...(event.canContinue ? [russian ? 'Выполнение можно продолжить.' : 'Execution can continue.'] : []),
+        ],
+      };
+    }
+    return {
+      text: russian ? 'Задача завершилась ошибкой' : 'Task failed',
+      details: event.reason ? [`${russian ? 'Причина' : 'Reason'}: ${event.reason}`] : undefined,
+    };
   }
 }
 

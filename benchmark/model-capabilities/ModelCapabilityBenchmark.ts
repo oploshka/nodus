@@ -11,6 +11,7 @@ import { ChangeCodeEditAction } from '@engine/Worker/Action/ChangeCodeEditAction
 import { ChangeCodeRangeReplaceAction } from '@engine/Worker/Action/ChangeCodeRangeReplaceAction.js';
 import { ChangeCodeReplaceAction } from '@engine/Worker/Action/ChangeCodeReplaceAction.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
+import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import type { WorkerResult } from '@engine/Worker/Worker.js';
 import { Task } from '@engine/Task/Task.js';
@@ -595,6 +596,7 @@ function createAction(
 function unavailableResearch(): WorkerAction<any, any, any> {
   return {
     id: 'research',
+    presentation: new ResearchPresentation(),
     description: 'Research is disabled in model capability benchmarks because all edit intent is injected.',
     async run() {
       return { status: 'failed', reason: 'Research is disabled in this benchmark.', canContinue: false };

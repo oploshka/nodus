@@ -20,8 +20,12 @@ export class ModelPresentation implements Presentation<ModelPresentationEvent> {
     const meta = event.meta ?? {};
     const parts: string[] = [];
     if (typeof meta.durationMs === 'number') parts.push(`${(meta.durationMs / 1000).toFixed(1)}s`);
-    if (typeof meta.totalTokens === 'number') parts.push(`${meta.totalTokens} tok`);
-    if (typeof meta.promptTokens === 'number' || typeof meta.completionTokens === 'number') parts.push(`${meta.promptTokens ?? '?'}→${meta.completionTokens ?? '?'}`);
+    if (typeof meta.promptTokens === 'number' || typeof meta.completionTokens === 'number') {
+      const total = typeof meta.totalTokens === 'number' ? ` = ${meta.totalTokens} tok` : '';
+      parts.push(`${meta.promptTokens ?? '?'} → ${meta.completionTokens ?? '?'}${total}`);
+    } else if (typeof meta.totalTokens === 'number') {
+      parts.push(`${meta.totalTokens} tok`);
+    }
     if (meta.finishReason && meta.finishReason !== 'stop') parts.push(meta.finishReason);
     return { text: `${russian ? 'Ответ получен' : 'Response received'}${parts.length ? ` · ${parts.join(' · ')}` : ''}` };
   }
