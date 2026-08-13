@@ -60,6 +60,45 @@ empty prompt exits the CLI. `/exit` remains available as an explicit command.
 
 ## Console output
 
-The console is a human progress view, not the diagnostic log. Component labels are kept in English (`[Engine]`, `[Planner]`, `[Model]`, `[Research]`, `[Worker]`) and are colored when the terminal supports ANSI colors. The explanatory text follows `language.response`.
+Консоль — это человекочитаемое представление хода выполнения, а не диагностический лог. Полные model request/response, payload событий и технические детали остаются в `.nodus/logs/*-nodus.log`.
 
-`[Model] request ...` is printed before the model call starts so a long inference does not look like a frozen CLI. Full request/response payloads remain in the timestamped `.nodus/logs/*-nodus.log` file.
+Основной принцип вывода: **владелец операции сообщает её смысл, `[Model]` сообщает только факт обработки и стоимость вызова**. Модель не должна выглядеть владельцем Plan, выбора Worker или результата Action только потому, что соответствующий компонент использовал model call.
+
+Компонентные labels остаются на английском (`[Engine]`, `[Planner]`, `[Determine]`, `[Worker]`, `[Action]`, `[Research]`, `[Edit]`, `[Model]`). Поясняющий текст следует `language.response`. При поддержке ANSI labels окрашиваются, а вторичный текст (например пункты плана) выводится приглушённым серым.
+
+Ожидаемая причинная структура:
+
+```text
+[Engine] Задача получена
+[Planner] Строю план
+  [Model] Обрабатываю...
+  [Model] Ответ получен · 57.6s · 996 tok
+[Planner] План получен · 2 шага
+  1. First semantic goal...
+  2. Second semantic goal...
+
+[Engine] Шаг 1/2: First semantic goal...
+[Determine] Выбираю исполнителя
+  [Model] Обрабатываю...
+  [Model] Ответ получен · 3.2s · 343 tok
+[Determine] Исполнитель выбран: code
+[Worker] code: начало
+[Action] change-code-range-replace · попытка 1
+  [Model] Обрабатываю...
+  [Model] Ответ получен · 44.5s · 1144 tok
+```
+
+Правила:
+
+- `engine.task.start` не повторяет пользовательский текст задачи: он уже виден в CLI input;
+- Planner явно сообщает начало планирования до долгого model call;
+- generic `[Model] request: <prompt>` не выводится в консоль; точный prompt доступен в file log;
+- `[Model]` не интерпретирует payload как `план`, `выбор`, `изменения готовы` и т. п.; это ответственность вызывающего компонента;
+- `[Determine]` отвечает за выбор Worker и сообщает выбранный `workerId`; `[Engine]` не дублирует эту строку;
+- `[Action]` показывает выбранную Action и номер попытки; `[Worker]` показывает lifecycle Worker;
+- `[Research]` и `[Edit]` остаются отдельными bounded operations и показывают полезный progress без model transport payload;
+- пункты Plan печатаются один раз после получения Plan; повтор goal при `Engine` step start допустим, потому что обозначает текущий исполняемый шаг;
+- долгий model call должен быть виден сразу через `[Model] Обрабатываю...`; переписывание этой строки in-place не требуется;
+- финальный task summary должен строиться из уже накопленных runtime events/results без дополнительного model call. Детальная task metrics aggregation — отдельная доработка.
+
+Эта схема намеренно показывает происхождение решений: `Engine -> Planner -> Model`, `Engine -> Determine -> Model`, `Worker -> Action -> Model/Research/Edit`, не смешивая semantic ownership с model transport.

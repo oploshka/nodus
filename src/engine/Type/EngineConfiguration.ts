@@ -9,6 +9,8 @@ export interface ProjectConfiguration {
 }
 
 export interface WorkerConfiguration {
+  /** Maximum steps allowed in a Planner plan. */
+  maxPlanSteps?: number;
   /** Fresh execution attempts available to one Worker.run() call. */
   maxWorkerAttempts?: number;
 

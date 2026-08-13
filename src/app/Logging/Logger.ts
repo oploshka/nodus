@@ -48,12 +48,18 @@ export class ConsoleLogger implements EngineLogger {
     return this.colorsEnabled ? `${ANSI[color]}${label}${RESET}` : label;
   }
 
+  private muted(text: string): string {
+    return this.colorsEnabled ? `${ANSI.gray}${text}${RESET}` : text;
+  }
+
   private format(event: string, data: unknown): string {
     const record = isRecord(data) ? data : {};
     const app = this.label('App', 'gray');
     const engine = this.label('Engine', 'cyan');
     const planner = this.label('Planner', 'magenta');
     const model = this.label('Model', 'blue');
+    const determine = this.label('Determine', 'blue');
+    const action = this.label('Action', 'green');
     const research = this.label('Research', 'yellow');
     const worker = this.label('Worker', 'green');
     const edit = this.label('Edit', 'yellow');
@@ -69,8 +75,22 @@ export class ConsoleLogger implements EngineLogger {
     if (event === 'app.exit') return this.russian ? `${app} Завершено.` : `${app} Exited.`;
 
     if (event === 'engine.task.start') {
-      const description = stringValue(record.description);
-      return this.russian ? `\n${engine} Новая задача\n  ${description}` : `\n${engine} New task\n  ${description}`;
+      return this.russian ? `\n${engine} Задача получена` : `\n${engine} Task received`;
+    }
+
+    if (event === 'planner.plan.start') {
+      return this.russian ? `${planner} Строю план` : `${planner} Building plan`;
+    }
+
+    if (event === 'planner.plan.finish') return '';
+
+    if (event === 'determine.start') {
+      return this.russian ? `${determine} Выбираю исполнителя` : `${determine} Selecting worker`;
+    }
+
+    if (event === 'determine.finish') {
+      const optionId = stringValue(record.optionId);
+      return this.russian ? `${determine} Исполнитель выбран: ${optionId}` : `${determine} Worker selected: ${optionId}`;
     }
 
     if (event === 'engine.plan') {
@@ -80,8 +100,8 @@ export class ConsoleLogger implements EngineLogger {
         goal: stringValue(step.goal),
       })) : [];
       if (taskId) this.plans.set(taskId, steps);
-      const title = this.russian ? `${planner} План: ${steps.length} шаг(а)` : `${planner} Plan: ${steps.length} step(s)`;
-      return [title, ...steps.map((step, index) => `  ${index + 1}. ${step.goal}`)].join('\n');
+      const title = this.russian ? `${planner} План получен · ${steps.length} шаг(а)` : `${planner} Plan received · ${steps.length} step(s)`;
+      return [title, ...steps.map((step, index) => this.muted(`  ${index + 1}. ${step.goal}`))].join('\n');
     }
 
     if (event === 'engine.step.start') {
@@ -93,10 +113,7 @@ export class ConsoleLogger implements EngineLogger {
       return this.russian ? `\n${engine} Шаг ${position}: ${goal}` : `\n${engine} Step ${position}: ${goal}`;
     }
 
-    if (event === 'engine.worker.selected') {
-      const workerId = stringValue(record.workerId);
-      return this.russian ? `${engine} Исполнитель: ${workerId}` : `${engine} Worker: ${workerId}`;
-    }
+    if (event === 'engine.worker.selected') return '';
 
     if (event === 'worker.start') {
       const workerId = stringValue(record.workerId);
@@ -150,29 +167,27 @@ export class ConsoleLogger implements EngineLogger {
     if (event.startsWith('worker.edit.model.')) return '';
 
     if (event === 'worker.action.start') {
-      const workerId = stringValue(record.workerId);
       const actionId = stringValue(record.actionId);
       const attempt = numberValue(record.attempt);
       const question = compactText(stringValue(record.question), 180);
       const suffix = attempt ? (this.russian ? ` · попытка ${attempt}` : ` · attempt ${attempt}`) : '';
       if (actionId === 'research' && question) {
         return this.russian
-          ? `${worker} ${workerId}: action research${suffix}\n  ${question}`
-          : `${worker} ${workerId}: action research${suffix}\n  ${question}`;
+          ? `${action} research${suffix}\n  ${this.muted(question)}`
+          : `${action} research${suffix}\n  ${this.muted(question)}`;
       }
-      return `${worker} ${workerId}: action ${actionId}${suffix}`;
+      return `${action} ${actionId}${suffix}`;
     }
 
     if (event === 'worker.action.finish') {
-      const workerId = stringValue(record.workerId);
       const actionId = stringValue(record.actionId);
       const attempt = numberValue(record.attempt);
       const result = isRecord(record.result) ? record.result : {};
       const status = stringValue(result.status);
       const requests = Array.isArray(result.requests) ? result.requests.length : 0;
       let text = this.russian
-        ? `${worker} ${workerId}: ${actionId} · ${humanStatus(status, true)}`
-        : `${worker} ${workerId}: ${actionId} · ${humanStatus(status, false)}`;
+        ? `${action} ${actionId} · ${humanStatus(status, true)}`
+        : `${action} ${actionId} · ${humanStatus(status, false)}`;
       if (attempt) text += this.russian ? ` · попытка ${attempt}` : ` · attempt ${attempt}`;
       if (requests) text += this.russian ? ` · запросов: ${requests}` : ` · requests: ${requests}`;
       return text;
@@ -248,20 +263,16 @@ export class ConsoleLogger implements EngineLogger {
     }
 
     if (event === 'model.run.start') {
-      const kind = stringValue(record.kind);
-      const path = stringValue(record.path);
-      const message = compactText(stringValue(record.message), 120);
-      if (kind === 'diff') return `${model} diff request${path ? `: ${path}` : ''}`;
-      return `${model} request${message ? `: ${message}` : ''}`;
+      return `  ${model} ${this.russian ? 'Обрабатываю...' : 'Processing...'}`;
     }
 
     if (event === 'model.run' || event === 'model.run.error') {
       const meta = isRecord(record.meta) ? record.meta : {};
       const seconds = typeof meta.durationMs === 'number' ? `${(meta.durationMs / 1000).toFixed(1)}s` : undefined;
       const tokens = typeof meta.totalTokens === 'number' ? `${meta.totalTokens} tok` : undefined;
-      const summary = summarizeModelData(record.data, this.russian);
-      const parts = [summary, seconds, tokens].filter(Boolean);
-      return `${model} ${parts.join(' · ') || (this.russian ? 'ответ получен' : 'response received')}`;
+      const parts = [seconds, tokens].filter(Boolean);
+      const received = this.russian ? 'Ответ получен' : 'Response received';
+      return `  ${model} ${received}${parts.length ? ` · ${parts.join(' · ')}` : ''}`;
     }
 
     if (event === 'worker.agent.finish') {
@@ -355,18 +366,4 @@ function humanStatus(status: string, russian: boolean): string {
   if (status === 'missing-information') return 'не хватает информации';
   if (status === 'ready') return 'готово';
   return status || 'неизвестно';
-}
-
-function summarizeModelData(data: unknown, russian: boolean): string {
-  if (!isRecord(data)) return russian ? 'ответ модели' : 'model response';
-  if (Array.isArray(data.steps)) return russian ? `план: ${data.steps.length} шаг(а)` : `plan: ${data.steps.length} step(s)`;
-  if (typeof data.optionId === 'string') return russian ? `выбор: ${data.optionId}` : `selected: ${data.optionId}`;
-  if (typeof data.outcome === 'string') {
-    if (data.outcome === 'missing-information' && Array.isArray(data.questions)) return russian ? `нужны данные: ${data.questions.length}` : `missing information: ${data.questions.length}`;
-    if (data.outcome === 'ready' && Array.isArray(data.edits)) return russian ? `изменения готовы: ${data.edits.length}` : `edits ready: ${data.edits.length}`;
-    return `outcome: ${data.outcome}`;
-  }
-  if (typeof data.path === 'string' && Array.isArray(data.hunks)) return `diff: ${data.path} · hunks: ${data.hunks.length}`;
-  if (typeof data.text === 'string') return russian ? 'ответ модели' : 'model answer';
-  return russian ? 'ответ модели' : 'model response';
 }

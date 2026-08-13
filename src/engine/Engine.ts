@@ -20,6 +20,7 @@ export class Engine {
     const task = new Task(description, this.project.id);
     this.logger.info('engine.task.start', { taskId: task.id, description });
 
+    this.logger.info('planner.plan.start', { taskId: task.id });
     const plan = await this.planner.plan(task);
     this.logger.info('engine.plan', { taskId: task.id, steps: plan.steps });
 
@@ -29,6 +30,7 @@ export class Engine {
       this.logger.info('engine.step.start', { taskId: task.id, step });
 
       const availableWorkers = this.workers.filter((worker) => worker.canHandle(step));
+      this.logger.info('determine.start', { taskId: task.id, stepId: step.id, options: availableWorkers.length });
       const worker = await this.determine.option({
         goal: step.goal,
         options: availableWorkers.map((worker) => ({
@@ -37,6 +39,7 @@ export class Engine {
           value: worker,
         })),
       });
+      this.logger.info('determine.finish', { taskId: task.id, stepId: step.id, optionId: worker.id });
       this.logger.info('engine.worker.selected', { taskId: task.id, stepId: step.id, workerId: worker.id });
 
       const startedAt = performance.now();

@@ -59,6 +59,7 @@ export class ModelPlanner implements Planner {
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly nodusLanguage = 'en',
+    private readonly maxPlanSteps?: number,
   ) {}
 
   public async plan(task: Task): Promise<Plan> {
@@ -89,7 +90,7 @@ export class ModelPlanner implements Planner {
     });
 
     return {
-      steps: response.steps.slice(0, 8).map((step, index) => ({
+      steps: response.steps.slice(0, this.maxPlanSteps ?? 8).map((step, index) => ({
         // Step identity belongs to Nodus runtime, not to the model response.
         id: `step-${index + 1}`,
         goal: step.goal,
