@@ -11,6 +11,8 @@ npm install
 npm run test:unit
 npm run test:integration
 npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
+# disposable target project
+npm run dev:project
 ```
 
 Для локальной модели example config ожидает OpenAI-compatible endpoint. Полный runtime log создаётся в `.nodus/logs/` и предназначен для разбора model request/response и execution trace.
@@ -37,6 +39,8 @@ npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
 
 ### Тестирование и benchmark
 
+- [Target workspace](target/README.md)
+- [Test framework](target/test-framework/README.md)
 - [Testing](test/TESTING.md)
 - [Model tests](test/model/MODEL_TESTS.md)
 - [E2E tests](test/e2e/E2E_TESTS.md)

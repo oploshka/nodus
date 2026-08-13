@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { QueueModelAdapter } from '../../../target/testFramework/ModelHarness.js';
-import { runScenario } from '../../../target/testFramework/ScenarioRunner.js';
+import { QueueModelAdapter } from '@test-framework/ModelHarness.js';
+import { runScenario } from '@test-framework/ScenarioRunner.js';
 import { statusScenario } from '@test/integration/status/status.scenario.js';
 
 describe('/status vertical slice', () => {

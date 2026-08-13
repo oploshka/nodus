@@ -1,4 +1,4 @@
-import { scenario } from '../../../target/testFramework/Scenario.js';
+import { scenario } from '@test-framework/Scenario.js';
 
 export const maxPlanStepsScenario = scenario({
   id: 'max-plan-steps',

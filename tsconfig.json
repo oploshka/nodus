@@ -20,7 +20,9 @@
   "include": [
     "src/**/*.ts",
     "test/**/*.ts",
-    "lab/benchmark/**/*.ts"
+    "target/benchmark/**/*.ts",
+    "target/test-framework/**/*.ts",
+    "target/mock/**/*.ts"
   ],
   "exclude": [
     "dist",

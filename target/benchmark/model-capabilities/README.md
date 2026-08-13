@@ -33,12 +33,12 @@ npm run benchmark:model-capabilities -- nodus.config.json --repeat 3
 
 ## Логи
 
-Логи пишутся в `benchmark/model-capabilities/logs/` и содержат timestamp запуска в имени:
+Артефакты каждого прогона пишутся в `target/benchmark/model-capabilities/runs/<timestamp>/`:
 
 ```text
-2026-08-13T01-42-17.123Z_range-replace_single-line.log
-2026-08-13T01-42-17.123Z_edit_large-file-small-edit.log
-2026-08-13T01-42-17.123Z_summary.json
+benchmark.log
+edits.log
+summary.json
 ```
 
 `summary.json` хранит per-case status/correctness/duration/model-call/token metrics и aggregate по стратегии.

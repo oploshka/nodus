@@ -21,7 +21,7 @@ Model benchmarks следует запускать последовательн�
 
 ## Raw-agent control group
 
-`benchmark/RawAgentBenchmark.ts` намеренно обходит Engine/Planner/Research/Worker orchestration и запускает свободный tool loop на той же model/project configuration. Это контрольная группа для сравнения с Nodus, а не correctness test.
+`target/benchmark/RawAgentBenchmark.ts` намеренно обходит Engine/Planner/Research/Worker orchestration и запускает свободный tool loop на той же model/project configuration. Это контрольная группа для сравнения с Nodus, а не correctness test.
 
 Запуск:
 
@@ -29,11 +29,11 @@ Model benchmarks следует запускать последовательн�
 npm run benchmark:raw-agent -- nodus.config.json
 ```
 
-Подробности transport/tool loop находятся в `doc/Benchmark/RAW-AGENT.md`.
+Подробности transport/tool loop находятся в `target/benchmark/RAW-AGENT.md`.
 
 ## Raw-agent control
 
-`benchmark/RawAgentBenchmark.ts` intentionally bypasses Engine/Planner/Research/Worker orchestration and remains a control group for comparing the same model and project tools against Nodus. Benchmark code is not a Vitest suite: correctness/regression belongs to `test/`, while timing/token/tool-call comparisons belong here.
+`target/benchmark/RawAgentBenchmark.ts` intentionally bypasses Engine/Planner/Research/Worker orchestration and remains a control group for comparing the same model and project tools against Nodus. Benchmark code is not a Vitest suite: correctness/regression belongs to `test/`, while timing/token/tool-call comparisons belong here.
 
 ## TODO: стоимость языка внутренних запросов
 

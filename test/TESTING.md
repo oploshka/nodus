@@ -15,7 +15,7 @@ Vitest подключён как npm dev dependency и отвечает за с�
 
 Model/e2e projects запускаются без file-level parallelism, чтобы локальные модели не конкурировали за один endpoint.
 
-## test/framework
+## Target test framework
 
 Собственный framework не заменяет Vitest. Он описывает только Nodus-specific окружение:
 

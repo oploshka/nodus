@@ -14,7 +14,8 @@
     "test:e2e": "vitest run --project e2e --passWithNoTests",
     "dev": "tsx src/app/Main.ts",
     "benchmark:raw-agent": "tsx target/benchmark/RawAgentBenchmark.ts",
-    "benchmark:model-capabilities": "tsx target/benchmark/model-capabilities/ModelCapabilityBenchmark.ts"
+    "benchmark:model-capabilities": "tsx target/benchmark/model-capabilities/ModelCapabilityBenchmark.ts",
+    "dev:project": "tsx src/app/Main.ts nodus.todo.config.example.json"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

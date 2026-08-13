@@ -10,7 +10,11 @@ export default defineConfig({
       '@engine': `${root}src/engine`,
       '@model': `${root}src/model`,
       '@test': `${root}test`,
-      '@bench': `${root}benchmark`,
+      '@target': `${root}target`,
+      '@benchmark': `${root}target/benchmark`,
+      '@mock': `${root}target/mock`,
+      '@project': `${root}target/project`,
+      '@test-framework': `${root}target/test-framework`,
     },
   },
   test: {

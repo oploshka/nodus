@@ -106,6 +106,6 @@ Research требует отдельного правила кэшировани
 
 ## Model capability benchmark
 
-- [x] Добавить отдельный `benchmark/model-capabilities`, который запускает реальные `CodeWorker` + ChangeCode Actions с заранее подсунутым edit intent, чтобы отдельно измерять механику `replace` / `range-replace` / `diff` / `edit` без Planner/Research шума.
+- [x] Добавить отдельный `target/benchmark/model-capabilities`, который запускает реальные `CodeWorker` + ChangeCode Actions с заранее подсунутым edit intent, чтобы отдельно измерять механику `replace` / `range-replace` / `diff` / `edit` без Planner/Research шума.
 - [ ] Собрать baseline для используемых моделей: correctness, schema/apply failures, duration, model calls и token cost по каждой edit-стратегии.
 - [ ] На основании benchmark определить минимальный capability threshold для модели, пригодной как основной `CodeWorker`.

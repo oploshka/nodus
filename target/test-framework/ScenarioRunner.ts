@@ -1,16 +1,16 @@
-import { Bootstrap } from 'src/app/Bootstrap.js';
-import type { AppConfiguration } from 'src/app/Config/Configuration.js';
-import type { TaskRun } from 'src/engine/Task/TaskRun.js';
-import type { ModelAdapter } from 'src/model/Adapter/ModelAdapter.js';
-import type { ScenarioDefinition } from 'target/testFramework/Scenario.js';
-import { LoggedModelAdapter, QueueModelAdapter } from 'target/testFramework/ModelHarness.js';
-import { TestFileLogger } from 'target/testFramework/TestLogger.js';
-import { TestProject } from 'target/testFramework/TestProject.js';
+import { Bootstrap } from '@app/Bootstrap.js';
+import type { AppConfiguration } from '@app/Config/Configuration.js';
+import type { TaskRun } from '@engine/Task/TaskRun.js';
+import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
+import type { ScenarioDefinition } from '@test-framework/Scenario.js';
+import { LoggedModelAdapter, QueueModelAdapter } from '@test-framework/ModelHarness.js';
+import { TestFileLogger } from '@test-framework/TestLogger.js';
+import { TestProject } from '@test-framework/TestProject.js';
 
 export interface ScenarioRun {
   scenario: ScenarioDefinition;
   project: TestProject;
-  engine: import('src/engine/Engine.js').Engine;
+  engine: import('@engine/Engine.js').Engine;
   run: TaskRun;
   model: ModelAdapter;
   logger: TestFileLogger;

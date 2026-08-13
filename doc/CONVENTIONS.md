@@ -10,7 +10,11 @@ Use project aliases for imports across code modules instead of long relative pat
 - `@engine/*` → `src/engine/*`
 - `@model/*` → `src/model/*`
 - `@test/*` → `test/*`
-- `@bench/*` → `benchmark/*`
+- `@target/*` → `target/*`
+- `@benchmark/*` → `target/benchmark/*`
+- `@mock/*` → `target/mock/*`
+- `@project/*` → `target/project/*`
+- `@test-framework/*` → `target/test-framework/*`
 
 Relative imports are acceptable only for truly local implementation details when they improve readability. Do not use `../../..` to cross architectural/module boundaries.
 
@@ -21,7 +25,7 @@ Top-level technical/category directories use lowercase names, for example:
 - `src`
 - `test`
 - `doc`
-- `benchmark`
+- `target`
 
 The aliased architecture roots under `src` also remain lowercase:
 
@@ -47,7 +51,7 @@ Technical/category directories may stay lowercase when that meaning is intention
 - `test/integration`
 - `test/model`
 - `test/e2e`
-- `test/framework`
+- `target/test-framework`
 - `test/logs`
 
 ## Types
