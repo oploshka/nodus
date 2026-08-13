@@ -3,7 +3,7 @@ import {
   ChangeCodeAction,
   type ChangeCodeActionInput,
   type ChangeCodeActionProfile,
-  type ChangeCodeApplyResult,
+  type ChangeCodePrepareResult,
   type ChangeCodeEdit,
 } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
@@ -30,13 +30,11 @@ export class ChangeCodeDiffAction extends ChangeCodeAction {
     super(project, model, logger, profile, defaultModelSettings, maxEditsPerAttempt);
   }
 
-  protected async applyEdit(context: ChangeCodeActionInput, edit: ChangeCodeEdit): Promise<ChangeCodeApplyResult> {
+  protected async prepareEdit(context: ChangeCodeActionInput, edit: ChangeCodeEdit, source: string): Promise<ChangeCodePrepareResult> {
     let lastError: string | undefined;
-    const path = await this.project.resolvePath(edit.path);
+    const path = edit.path;
 
     for (let editAttempt = 1; editAttempt <= this.maxEditAttempts; editAttempt += 1) {
-      const source = await this.project.read(path);
-
       try {
         const response = await callDiffFile(this.model, this.logger, {
           path,
@@ -69,10 +67,8 @@ export class ChangeCodeDiffAction extends ChangeCodeAction {
         });
 
         const content = this.applicator.apply(source, response.hunks, path);
-        if (content === source) return { status: 'completed', changed: false, path };
-        await this.project.write(path, content);
         if (editAttempt > 1) this.logger.info('worker.edit.recovered', { strategy: 'diff', path, editAttempt });
-        return { status: 'completed', changed: true, path };
+        return { status: 'completed', path, content };
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
         this.logger.warn('worker.edit.error', {

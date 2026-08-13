@@ -61,3 +61,11 @@ Roadmap фиксирует текущее состояние spike и ближа
 - старый `RecoveryController`;
 - `OperationProfile/OperationRegistry` как orchestration abstraction;
 - старый `ModelController` целиком.
+
+
+## Editing strategy experiments
+
+- Live-test `ChangeCodeRangeReplaceAction` with small guarded ranges (`startLine/endLine + expected + replacement`) as the primary CodeWorker strategy.
+- Keep `ChangeCodeReplaceAction` and `ChangeCodeDiffAction` for comparison.
+- Keep `ChangeCodeEditAction` as the implemented full-file strategy and decide later how Worker routing/fallback should select it.
+- Code-changing Actions must prepare the whole coherent change-set in memory before committing files.

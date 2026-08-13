@@ -18,7 +18,7 @@ CLI/App
   -> Planner -> Plan
   -> Determine -> Worker
   -> Worker -> Action
-       -> ChangeCodeReplaceAction (current primary)
+       -> ChangeCodeRangeReplaceAction (current primary)
        -> ResearchAction when explicitly requested
   -> WorkerResult
   -> Engine reaction
@@ -47,9 +47,9 @@ Planner строит маленький semantic plan. `PlanStep` описыва
 change-code -> research (по запросу action) -> change-code retry
 ```
 
-`ChangeCodeReplaceAction` может менять несколько файлов, если это одна связная задача. Для каждого файла модель возвращает exact `before -> after` replacements с 1-based `line` hint; `before` является guard, все операции резолвятся на одном source snapshot и применяются снизу вверх. Один локальный regeneration разрешён на актуальном файле.
+`ChangeCodeRangeReplaceAction` — текущая primary-стратегия. Модель возвращает небольшие guarded ranges (`startLine/endLine + expected + replacement`), а не большие `before` blocks. `expected` является guard, line range — только hint; операции готовятся в памяти и применяются снизу вверх к buffered source.
 
-Также сохранён `ChangeCodeDiffAction` как альтернативная unified-diff стратегия и добавлен `ChangeCodeEditAction`, который возвращает полный resulting file. Они пока не участвуют в routing: сначала собираем live-данные по replace.
+Также сохранены предыдущий `ChangeCodeReplaceAction`, `ChangeCodeDiffAction` и реализован `ChangeCodeEditAction`, который возвращает полный resulting file. Все code-change стратегии теперь используют общий buffered change-set: сначала весь coherent change готовится в памяти, и только затем файлы коммитятся. Routing/fallback между стратегиями пока не включён.
 
 `ResearchAction` вызывается только когда основной Action явно вернул конкретные missing-information requests. Research не запускается превентивно.
 
@@ -160,7 +160,7 @@ Vitest projects:
 4. **User interaction/control points.** Proposal approval, correction, async interrupt, `required/timeout/none`, configurable timeout action.
 5. **Validation layer.** Пока намеренно отсутствует.
 6. **Research precision.** Уточнить evidence dependencies: cache может зависеть от всех candidate files, а не только от реально использованных источников.
-7. **Action routing.** После live-проверки replace решить, как Worker выбирает/fallback-ит между `ChangeCodeReplaceAction`, `ChangeCodeDiffAction` и `ChangeCodeEditAction`; затем добавлять `RunCommandAction` и другие capabilities только по реальным сценариям.
+7. **Action routing.** После live-проверки replace решить, как Worker выбирает/fallback-ит между `ChangeCodeRangeReplaceAction`, `ChangeCodeReplaceAction`, `ChangeCodeDiffAction` и `ChangeCodeEditAction`; затем добавлять `RunCommandAction` и другие capabilities только по реальным сценариям.
 8. **AgentWorker semantics.** Различать настоящий completed от ответа модели вида «нужен пользовательский контекст».
 9. **Experience data.** Продолжать логировать task/worker/action outcomes для будущего task clustering и более дешёвого Determine.
 

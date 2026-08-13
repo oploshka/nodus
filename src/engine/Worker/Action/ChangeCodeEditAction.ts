@@ -2,7 +2,7 @@ import {
   ChangeCodeAction,
   type ChangeCodeActionInput,
   type ChangeCodeActionProfile,
-  type ChangeCodeApplyResult,
+  type ChangeCodePrepareResult,
   type ChangeCodeEdit,
 } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
@@ -42,10 +42,10 @@ export class ChangeCodeEditAction extends ChangeCodeAction {
     super(project, model, logger, profile, defaultModelSettings, maxEditsPerAttempt);
   }
 
-  protected async applyEdit(context: ChangeCodeActionInput, edit: ChangeCodeEdit): Promise<ChangeCodeApplyResult> {
-    const path = await this.project.resolvePath(edit.path);
-    const source = await this.project.read(path);
-    const response = await callModel<EditFileResponse>(this.model, this.logger, {
+  protected async prepareEdit(context: ChangeCodeActionInput, edit: ChangeCodeEdit, source: string): Promise<ChangeCodePrepareResult> {
+    const path = edit.path;
+    this.logger.info('worker.edit.prepare.start', { strategy: 'edit', path });
+    const response = await callModel<EditFileResponse>(this.model, this.editModelLogger(), {
       request: {
         message: 'Apply this concrete project edit by returning the complete resulting file.',
         data: {
@@ -73,9 +73,16 @@ export class ChangeCodeEditAction extends ChangeCodeAction {
     const responsePath = await this.project.resolvePath(response.path);
     if (responsePath !== path) throw new Error(`Edit path mismatch: expected ${path}, received ${responsePath}`);
     const content = this.preserveEol(source, response.content);
-    if (content === source) return { status: 'completed', changed: false, path };
-    await this.project.write(path, content);
-    return { status: 'completed', changed: true, path };
+    this.logger.info('worker.edit.prepare.finish', { strategy: 'edit', path, operations: 1 });
+    return { status: 'completed', path, content };
+  }
+
+  private editModelLogger(): EngineLogger {
+    return {
+      info: (event, data) => this.logger.info(`worker.edit.model.${event}`, data),
+      warn: (event, data) => this.logger.warn(`worker.edit.model.${event}`, data),
+      error: (event, data) => this.logger.error(`worker.edit.model.${event}`, data),
+    };
   }
 
   private preserveEol(source: string, content: string): string {

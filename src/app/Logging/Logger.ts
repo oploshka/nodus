@@ -56,6 +56,7 @@ export class ConsoleLogger implements EngineLogger {
     const model = this.label('Model', 'blue');
     const research = this.label('Research', 'yellow');
     const worker = this.label('Worker', 'green');
+    const edit = this.label('Edit', 'yellow');
 
     if (event === 'app.startup') {
       const project = stringValue(record.projectId);
@@ -104,6 +105,49 @@ export class ConsoleLogger implements EngineLogger {
       return this.russian ? `${worker} ${workerId}: начало${suffix}` : `${worker} ${workerId}: start${suffix}`;
     }
 
+
+
+    if (event === 'worker.edit.prepare.start') {
+      const path = stringValue(record.path);
+      return this.russian ? `${edit} Подготавливаю изменения: ${path}` : `${edit} Preparing changes: ${path}`;
+    }
+
+    if (event === 'worker.edit.prepare.finish') {
+      const path = stringValue(record.path);
+      const operations = numberValue(record.operations);
+      const suffix = operations ? (this.russian ? ` · операций: ${operations}` : ` · operations: ${operations}`) : '';
+      return this.russian ? `${edit} Изменения подготовлены: ${path}${suffix}` : `${edit} Changes prepared: ${path}${suffix}`;
+    }
+
+    if (event === 'worker.edit.prepare.failed') {
+      const path = stringValue(record.path);
+      const reason = stringValue(record.reason);
+      return this.russian ? `${edit} Не удалось подготовить изменения: ${path} · ${reason}` : `${edit} Failed to prepare changes: ${path} · ${reason}`;
+    }
+
+    if (event === 'worker.change-set.prepare.start') {
+      const edits = numberValue(record.edits);
+      return this.russian ? `${edit} Подготавливаю change-set · изменений: ${edits}` : `${edit} Preparing change-set · edits: ${edits}`;
+    }
+
+    if (event === 'worker.change-set.file.prepared') return '';
+
+    if (event === 'worker.change-set.prepare.failed') {
+      const path = stringValue(record.path);
+      return this.russian ? `${edit} Change-set не подготовлен${path ? ` · ${path}` : ''}` : `${edit} Change-set preparation failed${path ? ` · ${path}` : ''}`;
+    }
+
+    if (event === 'worker.change-set.commit.start') {
+      const files = numberValue(record.files);
+      return this.russian ? `${edit} Применяю change-set · файлов: ${files}` : `${edit} Applying change-set · files: ${files}`;
+    }
+
+    if (event === 'worker.change-set.commit.finish') {
+      const files = numberValue(record.files);
+      return this.russian ? `${edit} Change-set применён · файлов: ${files}` : `${edit} Change-set applied · files: ${files}`;
+    }
+
+    if (event.startsWith('worker.edit.model.')) return '';
 
     if (event === 'worker.action.start') {
       const workerId = stringValue(record.workerId);

@@ -55,22 +55,24 @@ export const statusScenario = scenario({
       path: 'src/Cli/Cli.ts',
       operations: [
         {
-          line: 2,
-          before: "  { name: '/help', description: 'Help.' },",
-          after: [
+          startLine: 2,
+          endLine: 2,
+          expected: "  { name: '/help', description: 'Help.' },",
+          replacement: [
             "  { name: '/help', description: 'Help.' },",
             "  { name: '/status', description: 'Show current project status.' },",
           ].join('\n'),
         },
         {
-          line: 6,
-          before: [
+          startLine: 6,
+          endLine: 9,
+          expected: [
             "  if (value === '/help') {",
             '    console.log(COMMANDS);',
             '    return;',
             '  }',
           ].join('\n'),
-          after: [
+          replacement: [
             "  if (value === '/help') {",
             '    console.log(COMMANDS);',
             '    return;',

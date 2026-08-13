@@ -65,9 +65,10 @@ export const maxPlanStepsScenario = scenario({
       path: 'src/engine/Planner/ModelPlanner.ts',
       operations: [
         {
-          line: 2,
-          before: '  public constructor(private readonly model: unknown) {}',
-          after: [
+          startLine: 2,
+          endLine: 2,
+          expected: '  public constructor(private readonly model: unknown) {}',
+          replacement: [
             '  public constructor(',
             '    private readonly model: unknown,',
             '    private readonly maxPlanSteps = 8,',
@@ -75,26 +76,29 @@ export const maxPlanStepsScenario = scenario({
           ].join('\n'),
         },
         {
-          line: 5,
-          before: '    return steps.slice(0, 8);',
-          after: '    return steps.slice(0, this.maxPlanSteps);',
+          startLine: 5,
+          endLine: 5,
+          expected: '    return steps.slice(0, 8);',
+          replacement: '    return steps.slice(0, this.maxPlanSteps);',
         },
       ],
     }),
     JSON.stringify({
       path: 'src/app/Bootstrap.ts',
       operations: [{
-        line: 4,
-        before: '  return new ModelPlanner(model);',
-        after: '  return new ModelPlanner(model, configuration.runtime?.maxPlanSteps);',
+        startLine: 4,
+        endLine: 4,
+        expected: '  return new ModelPlanner(model);',
+        replacement: '  return new ModelPlanner(model, configuration.runtime?.maxPlanSteps);',
       }],
     }),
     JSON.stringify({
       path: 'nodus.config.example.json',
       operations: [{
-        line: 3,
-        before: '    \"maxWorkerAttempts\": 4',
-        after: ['    \"maxWorkerAttempts\": 4,', '    \"maxPlanSteps\": 8'].join('\n'),
+        startLine: 3,
+        endLine: 3,
+        expected: '    \"maxWorkerAttempts\": 4',
+        replacement: ['    \"maxWorkerAttempts\": 4,', '    \"maxPlanSteps\": 8'].join('\n'),
       }],
     }),
   ],

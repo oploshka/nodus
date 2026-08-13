@@ -8,7 +8,7 @@ import { BoundedModelResearchResolver } from '@engine/Research/BoundedModelResea
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import { ChangeCodeReplaceAction } from '@engine/Worker/Action/ChangeCodeReplaceAction.js';
+import { ChangeCodeRangeReplaceAction } from '@engine/Worker/Action/ChangeCodeRangeReplaceAction.js';
 import { ChangeCodeDiffAction } from '@engine/Worker/Action/ChangeCodeDiffAction.js';
 import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
@@ -62,7 +62,7 @@ export class Bootstrap {
     const researchAction = new ResearchAction(research);
 
     const codeWorker = new CodeWorker(
-      new ChangeCodeReplaceAction(project, model, logger, {
+      new ChangeCodeRangeReplaceAction(project, model, logger, {
         purpose: 'Implement the requested software/project behavior change.',
         guidance: 'Prefer existing project APIs and conventions. Change source code only when required by the task.',
         language,

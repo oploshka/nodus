@@ -70,16 +70,23 @@ export interface ResearchActionRequest {
 }
 
 export type ChangeCodeEdit = { path: string; instruction: string };
-export type ChangeCodeApplyResult =
-  | { status: 'completed'; changed: boolean; path: string }
+export type ChangeCodePrepareResult =
+  | { status: 'completed'; path: string; content: string }
   | { status: 'not-completed'; reason: string };
+
+interface BufferedFile {
+  path: string;
+  original: string;
+  current: string;
+}
 
 /**
  * Shared lifecycle for code-changing Actions.
  *
- * A concrete Action owns only the mechanics of applying one prepared file edit
- * (replace, diff, full rewrite, ...). Planning the coherent change and asking
- * for bounded Research stay identical across those strategies.
+ * Concrete strategies only prepare resulting file contents. The base Action
+ * buffers every edit in memory and writes the project only after the complete
+ * change-set has been prepared successfully. Model/applicator failures therefore
+ * cannot leave a half-applied coherent change on disk.
  */
 export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
   public abstract readonly id: string;
@@ -153,21 +160,69 @@ export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionI
     const edits = (decision.edits ?? []).slice(0, this.maxEditsPerAttempt);
     if (edits.length === 0) throw new Error('Attempt was ready but returned no edits.');
 
-    const changed: string[] = [];
+    this.logger.info('worker.change-set.prepare.start', { strategy: this.id, edits: edits.length });
+    const files = new Map<string, BufferedFile>();
+
     for (const edit of edits) {
-      const result = await this.applyEdit(context, edit);
-      if (result.status === 'not-completed') return { ...result, canContinue: true };
-      if (result.changed) changed.push(result.path);
+      const path = await this.project.resolvePath(edit.path);
+      let file = files.get(path);
+      if (!file) {
+        const source = await this.project.read(path);
+        file = { path, original: source, current: source };
+        files.set(path, file);
+      }
+
+      const result = await this.prepareEdit(context, { ...edit, path }, file.current);
+      if (result.status === 'not-completed') {
+        this.logger.warn('worker.change-set.prepare.failed', { strategy: this.id, path, reason: result.reason });
+        return { ...result, canContinue: true };
+      }
+      if (result.path !== path) throw new Error(`Prepared edit path mismatch: expected ${path}, received ${result.path}`);
+      file.current = result.content;
+      this.logger.info('worker.change-set.file.prepared', { strategy: this.id, path });
     }
 
+    const changed = [...files.values()].filter((file) => file.current !== file.original);
     if (changed.length === 0) return { status: 'not-completed', reason: 'Action produced no project changes.', canContinue: true };
+
+    // Validate every write target before mutating any project file.
+    for (const file of changed) await this.project.resolveTargetPath(file.path);
+
+    this.logger.info('worker.change-set.commit.start', { strategy: this.id, files: changed.length });
+    const written: BufferedFile[] = [];
+    try {
+      for (const file of changed) {
+        await this.project.write(file.path, file.current);
+        written.push(file);
+      }
+    } catch (error) {
+      // Best-effort rollback makes filesystem failures much less likely to leave
+      // a partially committed coherent change. Preparation failures never write.
+      for (const file of written.reverse()) {
+        try { await this.project.write(file.path, file.original); }
+        catch (rollbackError) {
+          this.logger.error('worker.change-set.rollback.failed', {
+            strategy: this.id,
+            path: file.path,
+            error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+          });
+        }
+      }
+      throw error;
+    }
+
+    this.logger.info('worker.change-set.commit.finish', { strategy: this.id, files: changed.length });
     return {
       status: 'completed',
-      data: { summary: decision.summary ?? `Changed ${changed.join(', ')}` },
+      data: { summary: decision.summary ?? `Changed ${changed.map((file) => file.path).join(', ')}` },
     };
   }
 
-  protected abstract applyEdit(context: ChangeCodeActionInput, edit: ChangeCodeEdit): Promise<ChangeCodeApplyResult>;
+  protected abstract prepareEdit(
+    context: ChangeCodeActionInput,
+    edit: ChangeCodeEdit,
+    source: string,
+  ): Promise<ChangeCodePrepareResult>;
 
   private candidateFiles(context: ChangeCodeActionInput): string[] {
     const paths = new Set<string>();
