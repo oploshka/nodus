@@ -8,7 +8,8 @@ import { BoundedModelResearchResolver } from '@engine/Research/BoundedModelResea
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
+import { ChangeCodeReplaceAction } from '@engine/Worker/Action/ChangeCodeReplaceAction.js';
+import { ChangeCodeDiffAction } from '@engine/Worker/Action/ChangeCodeDiffAction.js';
 import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import { DocumentationWorker } from '@engine/Worker/DocumentationWorker.js';
@@ -61,7 +62,7 @@ export class Bootstrap {
     const researchAction = new ResearchAction(research);
 
     const codeWorker = new CodeWorker(
-      new ChangeCodeAction(project, model, logger, {
+      new ChangeCodeReplaceAction(project, model, logger, {
         purpose: 'Implement the requested software/project behavior change.',
         guidance: 'Prefer existing project APIs and conventions. Change source code only when required by the task.',
         language,
@@ -73,7 +74,7 @@ export class Bootstrap {
     );
 
     const documentationWorker = new DocumentationWorker(
-      new ChangeCodeAction(project, model, logger, {
+      new ChangeCodeDiffAction(project, model, logger, {
         purpose: 'Implement the requested human-facing documentation change.',
         guidance: 'Prefer documentation files and explanatory text. Do not modify runtime code unless the task explicitly requires it.',
         language,

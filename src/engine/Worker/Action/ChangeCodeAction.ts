@@ -1,11 +1,10 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Project } from '@engine/Project/Project.js';
-import { PatchApplicator } from '@engine/Worker/Edit/PatchApplicator.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { ActionModelOptions, ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
-import { callDiffFile, callModel } from '@model/Runner/ModelCaller.js';
+import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
@@ -56,7 +55,6 @@ const decisionSchema: ModelResponseSchema = {
   },
 };
 
-/** Project-change Action used by specialized Workers. Prompts live here because this Action owns the semantics of proposing and applying a coherent change. */
 export interface ChangeCodeActionInput extends ActionModelOptions {
   task: Task;
   step: PlanStep;
@@ -71,22 +69,32 @@ export interface ResearchActionRequest {
   question: string;
 }
 
-export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
-  public readonly id = 'change-code';
-  public readonly description = 'Apply one coherent project/code change; multiple files are allowed when they belong to the same outcome.';
-  public constructor(
-    private readonly project: Project,
-    private readonly model: ModelRunner,
-    private readonly logger: EngineLogger,
-    private readonly profile: ChangeCodeActionProfile,
-    private readonly defaultModelSettings: ChangeCodeActionInput['settings'] = undefined,
+export type ChangeCodeEdit = { path: string; instruction: string };
+export type ChangeCodeApplyResult =
+  | { status: 'completed'; changed: boolean; path: string }
+  | { status: 'not-completed'; reason: string };
+
+/**
+ * Shared lifecycle for code-changing Actions.
+ *
+ * A concrete Action owns only the mechanics of applying one prepared file edit
+ * (replace, diff, full rewrite, ...). Planning the coherent change and asking
+ * for bounded Research stay identical across those strategies.
+ */
+export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
+  public abstract readonly id: string;
+  public abstract readonly description: string;
+
+  protected constructor(
+    protected readonly project: Project,
+    protected readonly model: ModelRunner,
+    protected readonly logger: EngineLogger,
+    protected readonly profile: ChangeCodeActionProfile,
+    protected readonly defaultModelSettings: ChangeCodeActionInput['settings'] = undefined,
     private readonly maxEditsPerAttempt = 6,
-    private readonly maxEditAttempts = 3,
-    private readonly applicator = new PatchApplicator(),
   ) {}
 
   public async run(context: ChangeCodeActionInput): Promise<ActionResult<ChangeCodeActionData, ResearchActionRequest>> {
-    const candidates = this.candidateFiles(context);
     const decision = await callModel<ChangeDecision>(this.model, this.logger, {
       request: {
         message: 'Attempt to complete the assigned PlanStep now.',
@@ -94,7 +102,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
           task: context.task.description,
           step: context.step,
           purpose: this.profile.purpose,
-          candidateFiles: candidates,
+          candidateFiles: this.candidateFiles(context),
           knowledge: context.knowledge.map((item) => ({
             question: item.question,
             status: item.status,
@@ -147,7 +155,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
 
     const changed: string[] = [];
     for (const edit of edits) {
-      const result = await this.applyEditWithRecovery(context, edit);
+      const result = await this.applyEdit(context, edit);
       if (result.status === 'not-completed') return { ...result, canContinue: true };
       if (result.changed) changed.push(result.path);
     }
@@ -159,77 +167,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     };
   }
 
-  private async applyEditWithRecovery(
-    context: ChangeCodeActionInput,
-    edit: { path: string; instruction: string },
-  ): Promise<{ status: 'completed'; changed: boolean; path: string } | { status: 'not-completed'; reason: string }> {
-    let lastError: string | undefined;
-    const path = await this.project.resolvePath(edit.path);
-
-    for (let editAttempt = 1; editAttempt <= this.maxEditAttempts; editAttempt += 1) {
-      const source = await this.project.read(path);
-
-      try {
-        const response = await callDiffFile(this.model, this.logger, {
-          path,
-          request: {
-            message: editAttempt === 1
-              ? 'Apply this concrete project edit.'
-              : 'Repair the failed edit against the current authoritative file.',
-            data: {
-              task: context.task.description,
-              step: context.step,
-              instruction: edit.instruction,
-              knowledge: context.knowledge.map((item) => ({ question: item.question, status: item.status, answer: item.answer })),
-              authoritativeSource: { path, content: source },
-              recovery: editAttempt === 1 ? undefined : {
-                attempt: editAttempt,
-                previousError: lastError,
-              },
-            },
-            format: ModelRequestFormat.Json,
-            guidance: [
-              this.profile.guidance,
-              `Use ${this.profile.language.nodus} for internal reasoning/instructions and preserve code identifiers exactly.`,
-              `Use ${this.profile.language.project} for new human-authored project text unless the task explicitly requests another language.`,
-              'Edit exactly the authoritative file supplied in DATA.',
-              'Treat authoritativeSource.content as the current source of truth; do not rely on line numbers or source from an earlier edit attempt.',
-              editAttempt === 1
-                ? 'Return the minimal unified diff for this file only.'
-                : 'The previous patch could not be applied. Regenerate the diff from scratch against the current authoritative source and fix only this edit.',
-              'Include enough unchanged context for deterministic patch application.',
-              'Do not change unrelated code or documentation.',
-            ].join('\n'),
-          },
-        });
-
-        const content = this.applicator.apply(source, response.hunks, path);
-        if (content === source) return { status: 'completed', changed: false, path };
-
-        await this.project.write(path, content);
-        if (editAttempt > 1) {
-          this.logger.info('worker.edit.recovered', {
-            path,
-            editAttempt,
-          });
-        }
-        return { status: 'completed', changed: true, path };
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
-        this.logger.warn('worker.edit.error', {
-          path,
-          editAttempt,
-          maxEditAttempts: this.maxEditAttempts,
-          error: lastError,
-        });
-      }
-    }
-
-    return {
-      status: 'not-completed',
-      reason: `Edit recovery limit reached (${this.maxEditAttempts}) for ${path}. Last error: ${lastError ?? 'unknown edit error'}`,
-    };
-  }
+  protected abstract applyEdit(context: ChangeCodeActionInput, edit: ChangeCodeEdit): Promise<ChangeCodeApplyResult>;
 
   private candidateFiles(context: ChangeCodeActionInput): string[] {
     const paths = new Set<string>();

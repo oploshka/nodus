@@ -18,7 +18,7 @@ CLI/App
   -> Planner -> Plan
   -> Determine -> Worker
   -> Worker -> Action
-       -> ChangeCodeAction
+       -> ChangeCodeReplaceAction (current primary)
        -> ResearchAction when explicitly requested
   -> WorkerResult
   -> Engine reaction
@@ -41,13 +41,15 @@ Planner строит маленький semantic plan. `PlanStep` описыва
 
 ## Worker / Actions
 
-Текущий `CodeWorker` работает через:
+Текущий `CodeWorker` намеренно тестирует replace-стратегию и работает через:
 
 ```text
 change-code -> research (по запросу action) -> change-code retry
 ```
 
-`ChangeCodeAction` может менять несколько файлов, если это одна связная задача. Он отвечает за proposal/edit list, diff generation, patch apply и локальный recovery конкретного edit.
+`ChangeCodeReplaceAction` может менять несколько файлов, если это одна связная задача. Для каждого файла модель возвращает exact `before -> after` replacements с 1-based `line` hint; `before` является guard, все операции резолвятся на одном source snapshot и применяются снизу вверх. Один локальный regeneration разрешён на актуальном файле.
+
+Также сохранён `ChangeCodeDiffAction` как альтернативная unified-diff стратегия и добавлен `ChangeCodeEditAction`, который возвращает полный resulting file. Они пока не участвуют в routing: сначала собираем live-данные по replace.
 
 `ResearchAction` вызывается только когда основной Action явно вернул конкретные missing-information requests. Research не запускается превентивно.
 
@@ -158,7 +160,7 @@ Vitest projects:
 4. **User interaction/control points.** Proposal approval, correction, async interrupt, `required/timeout/none`, configurable timeout action.
 5. **Validation layer.** Пока намеренно отсутствует.
 6. **Research precision.** Уточнить evidence dependencies: cache может зависеть от всех candidate files, а не только от реально использованных источников.
-7. **Action growth.** После стабилизации `ResearchAction + ChangeCodeAction` рассмотреть `RunCommandAction`, documentation action и другие capabilities по реальным сценариям.
+7. **Action routing.** После live-проверки replace решить, как Worker выбирает/fallback-ит между `ChangeCodeReplaceAction`, `ChangeCodeDiffAction` и `ChangeCodeEditAction`; затем добавлять `RunCommandAction` и другие capabilities только по реальным сценариям.
 8. **AgentWorker semantics.** Различать настоящий completed от ответа модели вида «нужен пользовательский контекст».
 9. **Experience data.** Продолжать логировать task/worker/action outcomes для будущего task clustering и более дешёвого Determine.
 

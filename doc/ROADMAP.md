@@ -13,8 +13,11 @@ Roadmap фиксирует текущее состояние spike и ближа
 - [x] `CodeWorker`, `DocumentationWorker`, `AgentWorker`; default Worker отсутствует.
 - [x] Worker Actions как executable capabilities, а не prompt descriptions.
 - [x] `CodeWorker -> ChangeCodeAction -> ResearchAction -> retry` lifecycle.
+- [x] Разделить code-edit strategy на explicit Actions: replace / diff / full edit; `CodeWorker` пока запускает только replace для controlled live test.
 - [x] Multi-file coherent edits в `ChangeCodeAction`.
-- [x] Local diff recovery конкретного edit без полного replanning всей задачи.
+- [x] Local edit recovery конкретного edit без полного replanning всей задачи.
+- [x] `ChangeCodeReplaceAction`: exact before/after blocks + line hint, bottom-up apply, one local regeneration.
+- [x] `ChangeCodeEditAction`: complete resulting-file strategy (пока не routed).
 - [x] Bounded Research + persistent source-hash cache invalidation.
 - [x] `ProjectPathResolver`: root-relative canonical paths, dirty/absolute/file URL parsing, existence check и unambiguous index repair.
 - [x] Write policy для hard-protected `node_modules/.git` и project excludes.
@@ -30,7 +33,8 @@ Roadmap фиксирует текущее состояние spike и ближа
 
 - [ ] **Разделить Nodus internal storage и model-editable project paths.** Сейчас `.nodus` временно разрешён write resolver'ом, чтобы Research cache/index могли сохраняться через общий Project API. Нужен отдельный internal storage API; после этого model Actions снова блокируют `.nodus`.
 - [ ] **Централизовать language policy в model layer.** Internal Nodus language по умолчанию English; `project` и `response` остаются отдельными configurable hints. Не дублировать правило языка в каждом Action/Service prompt.
-- [ ] Повторить live `runtime.maxPlanSteps` после стабилизации path/storage boundary и проверить полный Action lifecycle на локальной 14B.
+- [ ] Повторить live `runtime.maxPlanSteps` через `ChangeCodeReplaceAction`; сравнить apply success, token cost и recovery frequency с прежним diff pipeline.
+- [ ] После replace experiment определить fallback/routing между replace -> diff -> full edit (не добавлять routing заранее без данных).
 - [ ] Реализовать настоящий Engine/Worker continuation для `not-completed` (`/continue` не должен становиться новой user task).
 - [ ] Определить минимальный API user interaction/control points: approval, correction, interrupt, required/timeout/none.
 - [ ] Разделить AgentWorker `completed` и «нужен пользовательский input».

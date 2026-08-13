@@ -1,65 +1,45 @@
 # Worker
 
-Worker выполняет один `PlanStep` и скрывает локальный execution process от Engine.
-
-Engine видит только:
-
-- `completed`;
-- `not-completed` + `canContinue`;
-- `failed`.
-
-Worker — процесс с непредсказуемым итогом. Он может успешно решить задачу, исчерпать budget или столкнуться с terminal constraint.
+Worker owns the bounded execution process for one `PlanStep`. Engine selects a Worker and sees only its final `completed | not-completed | failed` result; the internal Action sequence belongs to the Worker.
 
 ## Actions
 
-Worker владеет bounded списком executable Actions. Action — capability с конкретным input/output contract, а не объект, который нужно «превратить в prompt» снаружи.
+Actions are executable capabilities, not descriptions that Engine converts into model calls. An Action may use `ModelCaller`, Project, Research or other engine/model services internally and returns the common `ActionResult` contract.
 
-Текущий `CodeWorker`:
+Current `CodeWorker` intentionally tests one primary editing strategy:
 
-```text
-CodeWorker
-  change-code
-  research
+- `change-code-replace` — primary experimental code-change Action;
+- `research` — invoked only when the primary Action explicitly reports missing project facts.
+
+Two alternative code-changing Actions also exist but are not selected by `CodeWorker` yet:
+
+- `ChangeCodeDiffAction` — unified-diff strategy kept for comparison;
+- `ChangeCodeEditAction` — complete resulting-file strategy for a more expensive/high-context fallback.
+
+This is deliberate. We want runtime evidence for replace before adding Action routing/fallback logic.
+
+## Replace strategy
+
+`ChangeCodeReplaceAction` first prepares one coherent change and may touch multiple files when they are required for the same outcome. For each file it asks for guarded operations:
+
+```ts
+{
+  line: 35,      // 1-based location hint only
+  before: '...', // exact text from current authoritative source
+  after: '...',  // complete replacement text
+}
 ```
 
-Нормальный цикл:
+`before` is authoritative; `line` only helps localize the match. All operations for a file are resolved against the same current source snapshot and applied bottom-up. Missing, ambiguous or overlapping matches fail instead of being guessed. One local regeneration is allowed against the latest authoritative file.
 
-```text
-ChangeCodeAction.run(step, knowledge)
-  -> completed
-  -> failed
-  -> not-completed + research requests
+Insertions can be represented by replacing a stable anchor with `anchor + inserted content`; deletion uses an empty `after`.
 
-ResearchAction.run(question)
-  -> bounded Research answer
+## Research lifecycle
 
-ChangeCodeAction.run(step, updated knowledge)
-  -> retry execution
-```
+Research is not speculative preprocessing. The primary Action starts by attempting the task. Only a `not-completed` result containing explicit `research` requests causes the Worker to run `ResearchAction`; answers are added to the Worker session and the primary Action is retried.
 
-Research не запускается заранее. Primary Action сначала пытается выполнить задачу и только потом явно сообщает, каких concrete facts не хватает.
+Research itself owns cache lookup and source-hash invalidation.
 
-## Action responsibilities
+## Paths
 
-`ChangeCodeAction` отвечает за coherent project change. Один Action может менять несколько файлов, если все edits нужны для одного outcome. Внутри Action находятся его model guidance/prompt, proposal/edit contract, diff generation, patch apply и local recovery конкретного edit.
-
-Action может использовать `ModelCaller`/`ModelRunner` и per-call model settings. Он не должен знать provider-specific HTTP/wire details.
-
-`ResearchAction` оборачивает Research service и возвращает его локальный результат Worker.
-
-Новые Actions (`RunCommandAction`, documentation и т.п.) не вводятся заранее — только когда capability становится отдельным повторяемым contract.
-
-## Project paths
-
-Project file references считаются untrusted model input. Каноническая форма внутри engine — path relative to project root с `/` separators.
-
-`ProjectPathResolver`:
-
-- принимает decorated/absolute/file URL references и приводит их к project-relative path;
-- запрещает выход за project root;
-- для existing operations проверяет реальное существование файла;
-- может исправить неверный prefix через project index только при одном однозначном match;
-- для create target требует безопасный existing parent;
-- блокирует writes в `node_modules`, `.git` и project excludes.
-
-`.nodus` сейчас временно исключён из write-policy enforcement, потому что Research cache/index всё ещё сохраняются через общий Project write API. Это не целевая security policy: planned internal-storage boundary должен снова сделать `.nodus` недоступным model Actions.
+Model-facing project paths are canonical project-root-relative paths. `ProjectPathResolver` may normalize dirty or absolute in-project representations and may repair an incorrect prefix only when the project index gives one unambiguous existing match. Write policy blocks protected/ignored project targets according to the current Project rules.
