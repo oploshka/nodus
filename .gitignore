@@ -3,3 +3,4 @@ dist/
 .nodus/
 test/logs/*.log
 /benchmark/model-capabilities/runs/
+./diff.txt
