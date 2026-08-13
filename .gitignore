@@ -2,3 +2,4 @@ node_modules/
 dist/
 .nodus/
 test/logs/*.log
+/benchmark/model-capabilities/runs/
