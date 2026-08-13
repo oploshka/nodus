@@ -8,6 +8,7 @@ import type { Task } from '@engine/Task/Task.js';
 import type { Plan, PlanStepDecompositionType } from '@engine/Planner/Plan.js';
 import type { Planner } from '@engine/Planner/Planner.js';
 import { PlannerPresentation } from '@engine/Presentation/PlannerPresentation.js';
+import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 
 interface PlannerModelResponse {
   steps: Array<{
@@ -71,7 +72,8 @@ export class ModelPlanner implements Planner {
         format: ModelRequestFormat.Text,
         guidance: [
           'You are the high-level Planner inside Nodus.',
-          `The user task may be in any language. Write all plan goals, constraints and other internal fields in ${this.nodusLanguage}. Preserve code identifiers and paths exactly.`,
+          'The user task may be in any language.',
+          ModelLanguagePolicy.nodus(this.nodusLanguage),
           'Create only steps that directly contribute to the user-requested outcome.',
           'Do not invent analysis, documentation, safety limits, configuration semantics, or other requirements the user did not ask for.',
           'Do not add research/understand/discover steps merely because implementation details are unknown; the Worker resolves missing project knowledge while executing.',

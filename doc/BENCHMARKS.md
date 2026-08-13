@@ -34,3 +34,18 @@ npm run benchmark:raw-agent -- nodus.config.json
 ## Raw-agent control
 
 `benchmark/RawAgentBenchmark.ts` intentionally bypasses Engine/Planner/Research/Worker orchestration and remains a control group for comparing the same model and project tools against Nodus. Benchmark code is not a Vitest suite: correctness/regression belongs to `test/`, while timing/token/tool-call comparisons belong here.
+
+## TODO: стоимость языка внутренних запросов
+
+Проверить стоимость одинаковых machine-facing запросов при `language.nodus = en` и `language.nodus = ru`. Это отдельный benchmark-эксперимент, а не часть runtime language policy.
+
+Для сравнения использовать одинаковые model/configuration, input data, response schema и sampling settings. Начать с нескольких небольших вызовов: Planner, Determine, Worker attempt и Research.
+
+Фиксировать отдельно:
+
+- prompt tokens;
+- completion tokens;
+- total tokens;
+- duration.
+
+Не считать заранее, что английский экономит примерно `2x`: вывод должен следовать из измерений.

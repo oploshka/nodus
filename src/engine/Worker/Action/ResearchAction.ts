@@ -1,9 +1,11 @@
 import type { Research } from '@engine/Research/Research.js';
-import type { ResearchAnswer, ResearchRequest } from '@engine/Research/ResearchTypes.js';
+import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { ActionModelOptions, ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
 
-export interface ResearchActionInput extends ActionModelOptions, ResearchRequest {}
+export interface ResearchActionInput extends ActionModelOptions {
+  question: string;
+}
 
 export class ResearchAction implements WorkerAction<ResearchActionInput, ResearchAnswer> {
   public readonly id = 'research';
@@ -22,7 +24,7 @@ export class ResearchAction implements WorkerAction<ResearchActionInput, Researc
 
   public async run(input: ResearchActionInput): Promise<ActionResult<ResearchAnswer>> {
     try {
-      const answer = await this.research.ask({ question: input.question, targets: input.targets }, {
+      const answer = await this.research.ask(input.question, {
         guidance: this.guidance,
         settings: input.settings,
       });

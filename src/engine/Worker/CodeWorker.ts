@@ -7,7 +7,7 @@ import { IterativeWorker, type IterativeWorkerModelSettings } from '@engine/Work
 import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 
 export class CodeWorker extends IterativeWorker {
-  public readonly presentation = new WorkerPresentation({ name: { en: 'Code' } });
+  public readonly presentation = new WorkerPresentation({ name: { en: 'Development', ru: 'Разработка' } });
   public readonly name = this.presentation.name();
   public readonly id = 'code';
   public readonly description = 'Implement source-code, runtime behavior, configuration, and project logic changes.';

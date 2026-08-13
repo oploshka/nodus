@@ -8,12 +8,12 @@ export type PresentationColor =
   | 'blue'
   | 'yellow'
   | 'green'
+  | 'brightGreen'
   | 'red';
 
 export interface PresentedMessage {
   text: string;
   details?: string[];
-  showRole?: boolean;
 }
 
 /**

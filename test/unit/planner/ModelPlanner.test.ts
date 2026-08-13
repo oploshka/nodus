@@ -70,6 +70,24 @@ describe('ModelPlanner', () => {
     expect(system).toContain('return exactly one coherent-outcome step');
   });
 
+  it('uses language.nodus for the model-facing plan contract', async () => {
+    const adapter = new CapturingResponseAdapter(createPlannerResponse({
+      goal: 'Make the change',
+      constraints: [],
+      decompositionType: 'coherent-outcome',
+    }));
+    const runner = new ModelRunner(
+      adapter,
+      { provider: 'openai-compatible', endpoint: 'unused', model: 'test' },
+    );
+    const planner = new ModelPlanner(runner, new NullLogger(), 'en');
+
+    await planner.plan(new Task('Сделай изменение', 'project'));
+
+    const system = adapter.request?.messages.find((message) => message.role === 'system')?.content ?? '';
+    expect(system).toContain('Use en for all machine-facing Nodus fields');
+  });
+
   it('requires constraints instead of silently dropping them', async () => {
     const runner = new ModelRunner(
       new CapturingResponseAdapter(createPlannerResponse({

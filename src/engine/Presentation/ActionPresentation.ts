@@ -13,12 +13,10 @@ export type ActionPresentationEvent =
 
 export interface ActionPresentationData {
   name: LocalizedText;
-  /** Optional implementation detail shown after the semantic action name. */
-  detail?: string;
+  detail?: LocalizedText;
   color?: PresentationColor;
 }
 
-/** Reusable presentation for concrete WorkerAction implementations. */
 export class ActionPresentation implements Presentation<ActionPresentationEvent> {
   public readonly role = 'Action';
   public readonly color: PresentationColor;
@@ -27,13 +25,8 @@ export class ActionPresentation implements Presentation<ActionPresentationEvent>
     this.color = data.color ?? 'green';
   }
 
-  public name(responseLanguage = 'en'): string {
-    return localized(this.data.name, responseLanguage);
-  }
-
-  public detail(): string | undefined {
-    return this.data.detail;
-  }
+  public name(responseLanguage = 'en'): string { return localized(this.data.name, responseLanguage); }
+  public detail(responseLanguage = 'en'): string | undefined { return this.data.detail ? localized(this.data.detail, responseLanguage) : undefined; }
 
   public format(event: ActionPresentationEvent, responseLanguage = 'en'): PresentedMessage {
     const russian = responseLanguage.toLowerCase().startsWith('ru');
@@ -41,17 +34,16 @@ export class ActionPresentation implements Presentation<ActionPresentationEvent>
 
     if (event.type === 'start') {
       if (event.attempt) parts.push(russian ? `попытка ${event.attempt}` : `attempt ${event.attempt}`);
-      if (this.data.detail) parts.push(russian ? `метод: ${this.data.detail}` : `method: ${this.data.detail}`);
+      const detail = this.detail(responseLanguage);
+      if (detail) parts.push(detail);
       return { text: parts.join(' · ') };
     }
-
     if (event.type === 'finish') {
       parts.push(humanStatus(event.status, russian));
       if (event.attempt) parts.push(russian ? `попытка ${event.attempt}` : `attempt ${event.attempt}`);
       if (event.requests) parts.push(russian ? `требуется данных: ${event.requests}` : `data requests: ${event.requests}`);
       return { text: parts.join(' · ') };
     }
-
     parts.push(russian ? 'ошибка' : 'error');
     if (event.attempt) parts.push(russian ? `попытка ${event.attempt}` : `attempt ${event.attempt}`);
     parts.push(event.error);

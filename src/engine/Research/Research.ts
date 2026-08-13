@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Project } from '@engine/Project/Project.js';
-import type { ResearchAnswer, ResearchRequest, ResearchResolveOptions, ResearchResolver } from '@engine/Research/ResearchTypes.js';
+import type { ResearchAnswer, ResearchResolveOptions, ResearchResolver } from '@engine/Research/ResearchTypes.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
 
@@ -13,25 +13,25 @@ export class Research {
     private readonly logger: EngineLogger,
   ) {}
 
-  public async ask(request: ResearchRequest, options?: ResearchResolveOptions): Promise<ResearchAnswer> {
-    const cached = await this.store.get(request);
+  public async ask(question: string, options?: ResearchResolveOptions): Promise<ResearchAnswer> {
+    const cached = await this.store.get(question);
     if (cached) {
-      this.logger.info('research.hit', { request, presentation: this.presentation });
+      this.logger.info('research.hit', { question, presentation: this.presentation });
       return cached;
     }
 
-    this.logger.info('research.miss', { request, presentation: this.presentation });
-    const resolved = await this.resolver.resolve(request, options);
+    this.logger.info('research.miss', { question, presentation: this.presentation });
+    const resolved = await this.resolver.resolve(question, options);
     if (resolved.status === 'not-found') {
       const answer: ResearchAnswer = {
-        question: request.question,
-        targets: request.targets,
+        question,
         status: 'not-found',
         answer: resolved.answer,
         sources: [],
         createdAt: new Date().toISOString(),
       };
-      this.logger.info('research.not-found', { request, reason: resolved.reason, presentation: this.presentation });
+      // Do not cache misses: a later project change/index refresh may make the same question resolvable.
+      this.logger.info('research.not-found', { question, reason: resolved.reason, presentation: this.presentation });
       return answer;
     }
 
@@ -40,15 +40,14 @@ export class Research {
       sources.push({ path, hash: await this.project.hash(path) });
     }
     const answer: ResearchAnswer = {
-      question: request.question,
-      targets: request.targets,
+      question,
       status: 'resolved',
       answer: resolved.answer,
       sources,
       createdAt: new Date().toISOString(),
     };
     await this.store.put(answer);
-    this.logger.info('research.resolved', { request, sources: answer.sources.map((source) => source.path), presentation: this.presentation });
+    this.logger.info('research.resolved', { question, sources: answer.sources.map((source) => source.path), presentation: this.presentation });
     return answer;
   }
 }

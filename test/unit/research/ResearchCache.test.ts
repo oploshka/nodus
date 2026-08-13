@@ -9,7 +9,7 @@ import { TestProject } from '@test/framework/TestProject.js';
 class CountingResolver implements ResearchResolver {
   public calls = 0;
   public constructor(private readonly path: string) {}
-  public async resolve(_request: { question: string }, _options?: ResearchResolveOptions): Promise<ResolvedResearch> {
+  public async resolve(_question: string, _options?: ResearchResolveOptions): Promise<ResolvedResearch> {
     this.calls += 1;
     return { status: 'resolved', answer: `answer-${this.calls}`, sources: [this.path] };
   }
@@ -26,14 +26,14 @@ describe('ResearchStore', () => {
       const resolver = new CountingResolver('A.ts');
       const research = new Research(store, resolver, project, logger);
 
-      const first = await research.ask({ question: 'how is a implemented?' });
-      const second = await research.ask({ question: 'how is a implemented?' });
+      const first = await research.ask('how is a implemented?');
+      const second = await research.ask('how is a implemented?');
       expect(first.answer).toBe('answer-1');
       expect(second.answer).toBe('answer-1');
       expect(resolver.calls).toBe(1);
 
       await fixture.write('A.ts', 'export const a = 2;\n');
-      const third = await research.ask({ question: 'how is a implemented?' });
+      const third = await research.ask('how is a implemented?');
       expect(third.answer).toBe('answer-2');
       expect(resolver.calls).toBe(2);
     } finally {
@@ -62,8 +62,8 @@ describe('ResearchStore', () => {
       };
       const research = new Research(store, resolver, project, logger);
 
-      const first = await research.ask({ question: 'unknown thing?' });
-      const second = await research.ask({ question: 'unknown thing?' });
+      const first = await research.ask('unknown thing?');
+      const second = await research.ask('unknown thing?');
 
       expect(first.status).toBe('not-found');
       expect(second.status).toBe('not-found');

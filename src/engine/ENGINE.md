@@ -6,10 +6,12 @@
 
 1. выбирает compatible Worker через `Determine`;
 2. передаёт Worker управление step;
-3. получает только `WorkerResult`;
-4. реагирует на `completed / not-completed / failed`.
+3. получает `WorkerResult`;
+4. если Worker подготовил изменения, передаёт их engine-owned `ProjectEditor`;
+5. только после успешного атомарного commit считает step завершённым;
+6. реагирует на `completed / not-completed / failed`.
 
-Engine не знает, какие Research вопросы задавал Worker, какие Actions выполнялись, сколько diff recovery было сделано и как устроен provider transport.
+Engine не знает, какие Research вопросы задавал Worker, какие Actions выполнялись, сколько diff recovery было сделано и как устроен provider transport. При этом физическая мутация Project теперь принадлежит Engine через `ProjectEditor`: Worker может подготовить изменения, но не коммитит их сам.
 
 ## Services
 
@@ -53,3 +55,17 @@ type InteractionWait =
 ```
 
 Нужны proposal approval/correction, async user interrupt и возможность timeout continuation для некритических состояний. Worker не должен владеть CLI/UI transport.
+
+
+## Edit ownership
+
+Edit теперь полностью находится на уровне Engine. Worker возвращает `ProjectEditRequest` с semantic `path + instruction`; `ProjectEditor` выбирает зарегистрированную `EditStrategy`, читает authoritative source, готовит все изменения в памяти и только затем атомарно коммитит набор.
+
+`range-replace`, `replace`, `diff` и full-file `edit` больше не являются Worker Actions. Их model contracts и applicators живут в `src/engine/Edit`. Перед первой записью `ProjectEditor` проверяет canonical target path и соответствие buffered `expected` текущему содержимому. Ошибка подготовки не пишет ничего; ошибка записи после начала commit вызывает best-effort rollback.
+
+Task-wide virtual workspace/commit после всех PlanSteps отдельно не реализован; это следующий независимый уровень ownership, а не часть текущего Editor.
+
+
+## Validation
+
+После успешного Worker/Edit результата Engine вызывает отдельный `Validator`. Сейчас `PassValidator` только закрепляет lifecycle boundary и всегда подтверждает результат; будущий контракт описан в [`Validation/VALIDATION.md`](Validation/VALIDATION.md).

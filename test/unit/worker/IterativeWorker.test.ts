@@ -6,13 +6,10 @@ import type { ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAct
 import type { ChangeCodeActionData, ChangeCodeActionInput, ResearchActionRequest } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
-import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
-import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
 
 class SequenceChangeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
   public readonly id = 'change-code';
   public readonly description = 'test change action';
-  public readonly presentation = new ActionPresentation({ name: { en: 'Change' } });
   public readonly knowledgeSizes: number[] = [];
 
   public constructor(private readonly results: Array<ActionResult<ChangeCodeActionData, ResearchActionRequest>>) {}
@@ -28,11 +25,10 @@ class SequenceChangeAction implements WorkerAction<ChangeCodeActionInput, Change
 class ScriptedResearchAction implements WorkerAction<ResearchActionInput, ResearchAnswer> {
   public readonly id = 'research';
   public readonly description = 'test research action';
-  public readonly presentation = new ResearchPresentation();
-  public readonly asked: Array<{ question: string; targets?: string[] }> = [];
+  public readonly asked: string[] = [];
 
   public async run(input: ResearchActionInput): Promise<ActionResult<ResearchAnswer>> {
-    this.asked.push({ question: input.question, targets: input.targets?.map((target) => target.path) });
+    this.asked.push(input.question);
     return { status: 'completed', data: answer(input.question) };
   }
 }
@@ -58,7 +54,7 @@ describe('Iterative Worker action lifecycle', () => {
     const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [], decompositionType: 'coherent-outcome' });
 
     expect(result.status).toBe('completed');
-    expect(research.asked).toEqual([{ question: 'Where is CLI dispatch?', targets: undefined }]);
+    expect(research.asked).toEqual(['Where is CLI dispatch?']);
     expect(change.knowledgeSizes).toEqual([0, 1]);
   });
 

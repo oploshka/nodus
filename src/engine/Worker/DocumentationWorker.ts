@@ -7,7 +7,7 @@ import { IterativeWorker, type IterativeWorkerModelSettings } from '@engine/Work
 import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 
 export class DocumentationWorker extends IterativeWorker {
-  public readonly presentation = new WorkerPresentation({ name: { en: 'Documentation' } });
+  public readonly presentation = new WorkerPresentation({ name: { en: 'Documentation', ru: 'Документация' } });
   public readonly name = this.presentation.name();
   public readonly id = 'documentation';
   public readonly description = 'Update human-facing documentation, README files, examples, and explanatory project text.';

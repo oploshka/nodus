@@ -111,4 +111,3 @@ async function readCliInput(): Promise<CliInputResult> {
     input.on('keypress', onKeypress);
   });
 }
-

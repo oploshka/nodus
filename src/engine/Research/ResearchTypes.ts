@@ -1,15 +1,5 @@
 import type { ModelRunSettings } from '@model/Request/ModelRun.js';
 
-export interface ResearchTarget {
-  type: 'file';
-  path: string;
-}
-
-export interface ResearchRequest {
-  question: string;
-  targets?: ResearchTarget[];
-}
-
 export interface ResearchSource {
   path: string;
   hash: string;
@@ -17,7 +7,6 @@ export interface ResearchSource {
 
 export interface ResearchAnswer {
   question: string;
-  targets?: ResearchTarget[];
   status: 'resolved' | 'not-found';
   answer: string;
   sources: ResearchSource[];
@@ -37,5 +26,5 @@ export interface ResearchResolveOptions {
 }
 
 export interface ResearchResolver {
-  resolve(request: ResearchRequest, options?: ResearchResolveOptions): Promise<ResolvedResearch>;
+  resolve(question: string, options?: ResearchResolveOptions): Promise<ResolvedResearch>;
 }

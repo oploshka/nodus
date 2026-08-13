@@ -24,13 +24,13 @@ npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
 - [Roadmap](doc/ROADMAP.md)
 - [Current design questions](doc/NOTES.md)
 - [Project conventions](doc/CONVENTIONS.md)
+- [Console output contract](doc/CONSOLE-OUTPUT.md)
 
 ### Слои
 
 - [Application](src/app/APPLICATION.md)
 - [Engine](src/engine/ENGINE.md)
-- [Console output contract](doc/CONSOLE-OUTPUT.md)
-- [Planner](src/engine/Planner/PLANNER.md)
+  - [Planner](src/engine/Planner/PLANNER.md)
   - [Worker / Actions](src/engine/Worker/WORKER.md)
 - [Model](src/model/MODEL.md)
   - [Response formats](src/model/RESPONSE-FORMATS.md)

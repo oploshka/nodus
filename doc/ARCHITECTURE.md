@@ -45,7 +45,7 @@ CodeWorker
 
 ## Research boundary
 
-Research отвечает на один bounded project question. Он владеет cache lookup, source-hash invalidation и persistence. Research не является Worker и не запускается заранее «на всякий случай». Research request структурирован как `{ question, targets? }`: известные файлы не смешиваются с естественным языком вопроса.
+Research отвечает на один bounded project question. Он владеет cache lookup, source-hash invalidation и persistence. Research не является Worker и не запускается заранее «на всякий случай».
 
 ## Project path boundary
 
@@ -66,3 +66,16 @@ Engine рассматривается как control plane между автон
 ## Validation
 
 Validation намеренно отсутствует как отдельный слой. Worker `completed` пока означает только «Worker считает outcome достигнутым», а не формальное доказательство корректности всей пользовательской задачи.
+
+## Владение изменениями Project
+
+Edit целиком принадлежит Engine. Code-changing Worker/Action возвращает semantic `ProjectEditRequest` (`path + instruction + preferred strategy`), а authoritative source, edit serialization, applicator, buffering и atomic commit принадлежат `src/engine/Edit`.
+
+`Engine` передаёт этот набор в `ProjectEditor`. Editor до первой записи проверяет все target paths и guards `expected`, затем коммитит набор целиком; при ошибке записи выполняется best-effort rollback. Это отделяет решение Worker «что должно измениться» от решения Engine «когда изменение становится состоянием проекта».
+
+Текущая граница промежуточная: стратегии подготовки (`range-replace`, `diff`, full-file edit) пока остаются Worker Actions. Task-wide virtual workspace и commit только после завершения всего Plan не реализованы.
+
+
+## Validation boundary
+
+После успешного Worker результата и Engine-owned Edit commit выполняется отдельный Validation boundary. На текущем этапе `PassValidator` всегда возвращает success; реальные проверки намеренно отложены до появления конкретного validation contract. Подробности и TODO: [`../src/engine/Validation/VALIDATION.md`](../src/engine/Validation/VALIDATION.md).

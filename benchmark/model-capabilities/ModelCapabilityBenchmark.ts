@@ -3,15 +3,17 @@ import { join, resolve } from 'node:path';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import { FileLogger } from '@app/Logging/Logger.js';
 import { Project } from '@engine/Project/Project.js';
+import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
-import { ChangeCodeDiffAction } from '@engine/Worker/Action/ChangeCodeDiffAction.js';
-import { ChangeCodeEditAction } from '@engine/Worker/Action/ChangeCodeEditAction.js';
-import { ChangeCodeRangeReplaceAction } from '@engine/Worker/Action/ChangeCodeRangeReplaceAction.js';
-import { ChangeCodeReplaceAction } from '@engine/Worker/Action/ChangeCodeReplaceAction.js';
+import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
+import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEditStrategy.js';
+import { ReplaceEditStrategy } from '@engine/Edit/Strategy/ReplaceEditStrategy.js';
+import { DiffEditStrategy } from '@engine/Edit/Strategy/DiffEditStrategy.js';
+import { FullFileEditStrategy } from '@engine/Edit/Strategy/FullFileEditStrategy.js';
+import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
-import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import type { WorkerResult } from '@engine/Worker/Worker.js';
 import { Task } from '@engine/Task/Task.js';
@@ -81,10 +83,10 @@ const PROFILE = {
 /**
  * Benchmark-only Project implementation.
  *
- * CodeWorker and real ChangeCode*Action classes still see the normal Project
+ * CodeWorker, ChangeCodeAction and Engine-owned EditStrategy classes still see the normal Project
  * contract, but reads/writes are backed by an in-memory map. This keeps the
- * benchmark focused on model -> Action contract -> applicator behavior and
- * avoids filesystem copying/commit noise.
+ * benchmark focused on model -> semantic edit intent -> Editor strategy/applicator behavior
+ * and avoids filesystem copying noise.
  */
 class InMemoryBenchmarkProject extends Project {
   private readonly files: Map<string, string>;
@@ -461,6 +463,14 @@ async function runCase(
     let run: WorkerResult;
     try {
       run = await worker.run(task, step);
+      if (run.status === 'completed' && run.edit) {
+        const summary = run.summary;
+        const editor = new ProjectEditor(project, logger, [createEditStrategy(strategy, project, model, logger)]);
+        const editResult = await editor.apply(task, step, run.edit);
+        run = editResult.status === 'completed'
+          ? { status: 'completed', summary }
+          : { status: 'not-completed', reason: editResult.reason, canContinue: true };
+      }
     } catch (error) {
       run = { status: 'failed', reason: error instanceof Error ? error.message : String(error), canContinue: false };
     }
@@ -587,16 +597,25 @@ function createAction(
   model: ModelRunner,
   logger: EngineLogger,
 ): WorkerAction<any, any, any> {
-  if (strategy === 'replace') return new ChangeCodeReplaceAction(project, model, logger, PROFILE, undefined, 6, 1);
-  if (strategy === 'range-replace') return new ChangeCodeRangeReplaceAction(project, model, logger, PROFILE);
-  if (strategy === 'diff') return new ChangeCodeDiffAction(project, model, logger, PROFILE, undefined, 6, 1);
-  return new ChangeCodeEditAction(project, model, logger, PROFILE);
+  return new ChangeCodeAction(project, model, logger, { ...PROFILE, strategy });
+}
+
+function createEditStrategy(
+  strategy: StrategyId,
+  project: Project,
+  model: ModelRunner,
+  logger: EngineLogger,
+): EditStrategy {
+  const guidance = PROFILE.guidance;
+  if (strategy === 'replace') return new ReplaceEditStrategy(project, model, logger, PROFILE.language, guidance, 1);
+  if (strategy === 'range-replace') return new RangeReplaceEditStrategy(project, model, logger, PROFILE.language, guidance);
+  if (strategy === 'diff') return new DiffEditStrategy(model, logger, PROFILE.language, guidance, 1);
+  return new FullFileEditStrategy(project, model, logger, PROFILE.language, guidance);
 }
 
 function unavailableResearch(): WorkerAction<any, any, any> {
   return {
     id: 'research',
-    presentation: new ResearchPresentation(),
     description: 'Research is disabled in model capability benchmarks because all edit intent is injected.',
     async run() {
       return { status: 'failed', reason: 'Research is disabled in this benchmark.', canContinue: false };

@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { inspect } from 'node:util';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Presentation, PresentationColor, PresentedMessage } from '@engine/Presentation/Presentation.js';
+import { TaskExecutionMetricsTracker } from '@engine/Metrics/TaskExecutionMetrics.js';
 
 interface ConsolePlanStep { id?: string; goal?: string }
 
@@ -16,6 +17,7 @@ const ANSI: Record<PresentationColor, string> = {
   blue: '\x1b[34m',
   yellow: '\x1b[33m',
   green: '\x1b[32m',
+  brightGreen: '\x1b[92m',
   red: '\x1b[31m',
 };
 const RESET = '\x1b[0m';
@@ -30,6 +32,7 @@ export class ConsoleLogger implements EngineLogger {
   private readonly responseLanguage: string;
   private readonly colorsEnabled = Boolean(process.stdout.isTTY) && !('NO_COLOR' in process.env);
   private modelIndent = 4;
+  private readonly metrics = new TaskExecutionMetricsTracker();
 
   public constructor(responseLanguage = 'en') {
     this.responseLanguage = responseLanguage;
@@ -41,6 +44,7 @@ export class ConsoleLogger implements EngineLogger {
   public error(event: string, data?: unknown): void { this.print('error', event, data); }
 
   private print(level: 'info' | 'warn' | 'error', event: string, data?: unknown): void {
+    this.metrics.observe(event, data);
     const text = this.format(event, data);
     if (!text) return;
     if (level === 'error') console.error(text);
@@ -57,13 +61,20 @@ export class ConsoleLogger implements EngineLogger {
     return this.colorsEnabled ? `${ANSI.gray}${text}${RESET}` : text;
   }
 
-  private renderPresentation(presentation: Presentation<unknown> | undefined, message: PresentedMessage, indent: number): string {
-    if (!presentation) return '';
+  private detail(text: string, indent: number, marker?: 'success' | 'failure'): string {
+    const prefix = ' '.repeat(indent);
+    const rendered = marker === 'success' ? `✓ ${text}` : marker === 'failure' ? `✗ ${text}` : text;
+    if (!this.colorsEnabled || !marker) return marker ? `${prefix}${rendered}` : this.muted(`${prefix}${rendered}`);
+    const color = marker === 'success' ? ANSI.green : ANSI.red;
+    return `${prefix}${color}${rendered}${RESET}`;
+  }
+
+  private renderPresentation(presentation: Presentation<unknown>, message: PresentedMessage, indent: number): string {
     const label = this.label(presentation.role, presentation.color);
     const prefix = ' '.repeat(indent);
     const details = message.details ?? [];
     return [
-      message.showRole === false ? `${prefix}${this.muted(message.text)}` : `${prefix}${label} ${message.text}`,
+      `${prefix}${label} ${message.text}`,
       ...details.map((detail) => this.muted(`${' '.repeat(indent + 2)}${detail}`)),
     ].join('\n');
   }
@@ -115,10 +126,17 @@ export class ConsoleLogger implements EngineLogger {
 
     if (event === 'determine.finish') {
       const optionId = stringValue(record.optionId);
-      const workerName = stringValue(record.workerName) || optionId;
+      const workerPresentation = record.workerPresentation as { name?: (language?: string) => string } | undefined;
+      const workerName = workerPresentation?.name?.(this.responseLanguage) || stringValue(record.workerName) || optionId;
       const presentation = this.presentation(record.presentation);
       const message = presentation?.format({ type: 'finish', workerName }, this.responseLanguage);
       return message ? this.renderPresentation(presentation, message, 2) : '';
+    }
+
+    if (event === 'engine.execution.start') {
+      const presentation = this.presentation(record.presentation);
+      const message = presentation?.format({ type: 'execution-start' }, this.responseLanguage);
+      return message ? `\n${this.renderPresentation(presentation, message, 0)}` : '';
     }
 
     if (event === 'engine.plan') {
@@ -155,79 +173,96 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
     }
 
 
-    if (event === 'worker.edit.prepare.start') {
+    if (event === 'engine.edit.file.start') {
       const path = stringValue(record.path);
-      this.modelIndent = 8;
+      this.modelIndent = 6;
       const presentation = this.presentation(record.presentation);
       const message = presentation?.format({ type: 'file-prepare', path }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, 6) : '';
+      return message ? this.detail(message.text, 4) : '';
     }
 
-    if (event === 'worker.edit.prepare.finish') {
+    if (event === 'engine.edit.file.finish') {
       const path = stringValue(record.path);
       const operations = numberValue(record.operations);
-      const suffix = operations ? (this.russian ? ` · операций: ${operations}` : ` · operations: ${operations}`) : '';
       const presentation = this.presentation(record.presentation);
       const message = presentation?.format({ type: 'file-prepared', path, operations }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, 6) : '';
+      return message ? this.detail(message.text, 4, 'success') : '';
     }
 
-    if (event === 'worker.edit.prepare.failed') {
+    if (event === 'engine.edit.file.failed') {
       const path = stringValue(record.path);
       const reason = stringValue(record.reason);
       const presentation = this.presentation(record.presentation);
       const message = presentation?.format({ type: 'file-failed', path, reason }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, 6) : '';
+      return message ? this.detail(message.text, 4, 'failure') : '';
     }
 
-    if (event === 'worker.change-set.prepare.start') {
-      const edits = numberValue(record.edits);
+    if (event === 'engine.edit.prepare.start') {
+      const files = numberValue(record.files) || numberValue(record.edits);
       const presentation = this.presentation(record.presentation);
-      const message = presentation?.format({ type: 'change-set-prepare', edits }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, 6) : '';
+      const message = presentation?.format({ type: 'change-set-prepare', files }, this.responseLanguage);
+      return message ? this.renderPresentation(presentation, message, 2) : '';
     }
 
-    if (event === 'worker.change-set.file.prepared') return '';
+    
 
-    if (event === 'worker.change-set.prepare.failed') {
+    if (event === 'engine.edit.prepare.failed') {
       const path = stringValue(record.path);
       const presentation = this.presentation(record.presentation);
       const message = presentation?.format({ type: 'change-set-failed', path }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, 6) : '';
+      return message ? this.renderPresentation(presentation, message, 2) : '';
     }
 
-    if (event === 'worker.change-set.commit.start') {
+    if (event === 'engine.edit.commit.start') {
       const files = numberValue(record.files);
       const presentation = this.presentation(record.presentation);
       const message = presentation?.format({ type: 'commit-start', files }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, 6) : '';
+      return message ? this.renderPresentation(presentation, message, 2) : '';
     }
 
-    if (event === 'worker.change-set.commit.finish') {
+    if (event === 'engine.edit.commit.finish') {
       const files = numberValue(record.files);
       const presentation = this.presentation(record.presentation);
       const message = presentation?.format({ type: 'commit-finish', files }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, 6) : '';
+      return message ? this.renderPresentation(presentation, message, 2) : '';
     }
 
-    if (event === 'worker.edit.model.model.run.start') {
-      this.modelIndent = 8;
+    if (event === 'validation.start') {
+      const presentation = this.presentation(record.presentation);
+      const message = presentation?.format({ type: 'start' }, this.responseLanguage);
+      return message ? this.renderPresentation(presentation, message, 2) : '';
+    }
+
+    if (event === 'validation.passed') {
+      const presentation = this.presentation(record.presentation);
+      const message = presentation?.format({ type: 'passed' }, this.responseLanguage);
+      return message ? this.renderPresentation(presentation, message, 2) : '';
+    }
+
+    if (event === 'validation.failed') {
+      const reason = stringValue(record.reason);
+      const presentation = this.presentation(record.presentation);
+      const message = presentation?.format({ type: 'failed', reason }, this.responseLanguage);
+      return message ? this.renderPresentation(presentation, message, 2) : '';
+    }
+
+    if (event === 'engine.edit.model.model.run.start') {
+      this.modelIndent = 6;
       const presentation = this.presentation(record.presentation);
       const message = presentation?.format({ type: 'start' }, this.responseLanguage);
       return message ? this.renderPresentation(presentation, message, this.modelIndent) : '';
     }
 
-    if (event === 'worker.edit.model.model.run' || event === 'worker.edit.model.model.run.error') {
+    if (event === 'engine.edit.model.model.run' || event === 'engine.edit.model.model.run.error') {
       return this.formatModelResult(record);
     }
 
-    if (event.startsWith('worker.edit.model.')) return '';
+    if (event.startsWith('engine.edit.model.')) return '';
 
     if (event === 'worker.action.start') {
       const actionId = stringValue(record.actionId);
       const attempt = numberValue(record.attempt);
       const question = compactText(stringValue(record.question), 220);
-      const targets = Array.isArray(record.targets) ? record.targets.map(stringValue).filter(Boolean) : [];
 
       if (actionId === 'research') {
         this.modelIndent = 6;
@@ -235,7 +270,7 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
         const maxRequests = numberValue(record.maxRequests);
         const position = requestIndex > 0 ? `${requestIndex}${maxRequests > 0 ? `/${maxRequests}` : ''}` : '';
         const presentation = this.presentation(record.actionPresentation);
-        const message = presentation?.format({ type: 'question', index: requestIndex, max: maxRequests, question, targets }, this.responseLanguage);
+        const message = presentation?.format({ type: 'question', index: requestIndex, max: maxRequests, question }, this.responseLanguage);
         return message ? this.renderPresentation(presentation, message, 4) : '';
       }
 
@@ -266,7 +301,7 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
       return message ? this.renderPresentation(presentation, message, 4) : '';
     }
 
-    if (event === 'worker.edit.error') {
+    if (event === 'engine.edit.error') {
       const path = stringValue(record.path);
       const attempt = numberValue(record.editAttempt);
       const max = numberValue(record.maxEditAttempts);
@@ -275,7 +310,7 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
       return message ? this.renderPresentation(presentation, message, 6) : '';
     }
 
-    if (event === 'worker.edit.recovered') {
+    if (event === 'engine.edit.recovered') {
       const path = stringValue(record.path);
       const attempt = numberValue(record.editAttempt);
       const presentation = this.presentation(record.presentation);
@@ -341,9 +376,9 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
       if (taskId) this.plans.delete(taskId);
       const status = stringValue(record.status);
       const reason = stringValue(record.reason);
-      const canContinue = record.canContinue === true;
+      const canContinue = Boolean(record.canContinue);
       const presentation = this.presentation(record.presentation);
-      const message = presentation?.format({ type: 'task-finish', status, reason, canContinue }, this.responseLanguage);
+      const message = presentation?.format({ type: 'task-finish', status, reason: reason || undefined, canContinue, metrics: this.metrics.snapshot() }, this.responseLanguage);
       return message ? this.renderPresentation(presentation, message, 0) : '';
     }
 
@@ -367,7 +402,7 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
   private stepPosition(taskId: string, stepId: string): string {
     const steps = this.plans.get(taskId) ?? [];
     const index = steps.findIndex((step) => step.id === stepId);
-    return index >= 0 ? `${index + 1}/${steps.length}` : stepId || '?';
+    return index >= 0 ? `${index + 1}` : stepId || '?';
   }
 }
 

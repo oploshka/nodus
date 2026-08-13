@@ -6,6 +6,7 @@ import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import { DeterminePresentation } from '@engine/Presentation/DeterminePresentation.js';
+import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 
 interface DetermineModelResponse {
   optionId: string;
@@ -43,7 +44,7 @@ export class ModelDetermine implements Determine {
         },
         format: ModelRequestFormat.Json,
         guidance: [
-          `Reason about the supplied goal using ${this.nodusLanguage} as the internal Nodus language. Preserve identifiers exactly.`,
+          ModelLanguagePolicy.nodus(this.nodusLanguage),
           'Choose exactly one option from the supplied list.',
           'Do not solve the goal yourself.',
           'Do not invent options that are not supplied.',

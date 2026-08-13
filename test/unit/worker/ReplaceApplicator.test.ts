@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ReplaceApplicator } from '@engine/Worker/Edit/ReplaceApplicator.js';
+import { ReplaceApplicator } from '@engine/Edit/Applicator/ReplaceApplicator.js';
 
 describe('ReplaceApplicator', () => {
   it('uses line as a hint and validates the exact before block', () => {

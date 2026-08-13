@@ -36,9 +36,9 @@ export const maxPlanStepsScenario = scenario({
     JSON.stringify({ optionId: 'code' }),
     JSON.stringify({
       outcome: 'missing-information',
-      researchRequests: [
-        { question: 'Where is the current maxPlanSteps limit defined?', targets: ['src/engine/Planner/ModelPlanner.ts'] },
-        { question: 'How does Bootstrap instantiate ModelPlanner and pass runtime configuration?', targets: ['src/app/Bootstrap.ts'] },
+      questions: [
+        'Where is the current maxPlanSteps limit defined in ModelPlanner?',
+        'How does Bootstrap instantiate ModelPlanner and pass runtime configuration?',
       ],
     }),
     'ModelPlanner currently hardcodes the limit with steps.slice(0, 8).',

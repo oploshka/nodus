@@ -35,7 +35,7 @@ describe('runtime maxPlanSteps vertical slice', () => {
       expect(log).toContain('research.miss');
       expect(log).toContain('research.resolved');
       expect(log).not.toContain('worker.action.error');
-      expect(log).not.toContain('worker.edit.error');
+      expect(log).not.toContain('engine.edit.error');
     } finally {
       await result.dispose();
     }

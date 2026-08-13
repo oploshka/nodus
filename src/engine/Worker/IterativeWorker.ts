@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
-import type { ResearchAnswer, ResearchRequest } from '@engine/Research/ResearchTypes.js';
+import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { ChangeCodeActionData, ChangeCodeActionInput, ResearchActionRequest } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
@@ -111,7 +111,7 @@ export abstract class IterativeWorker implements Worker {
 
       if (result.status === 'completed') {
         this.sessions.delete(sessionKey);
-        return { status: 'completed', summary: result.data.summary };
+        return { status: 'completed', summary: result.data.summary, edit: result.data.edit };
       }
 
       if (result.status === 'failed') {
@@ -124,11 +124,14 @@ export abstract class IterativeWorker implements Worker {
         return { status: 'not-completed', reason: result.reason, canContinue: true };
       }
 
-      const knownRequests = new Set(session.knowledge.map((item) => researchKey({ question: item.question, targets: item.targets })));
-      const researchItems = dedupeResearchRequests(requests.map((request) => request.input))
-        .filter((request) => !knownRequests.has(researchKey(request)));
+      const knownQuestions = new Set(session.knowledge.map((item) => item.question.trim()));
+      const questions = Array.from(new Set(
+        requests
+          .map((request) => request.input.question.trim())
+          .filter(Boolean),
+      )).filter((question) => !knownQuestions.has(question));
 
-      if (researchItems.length === 0) {
+      if (questions.length === 0) {
         return {
           status: 'not-completed',
           reason: 'Worker requested Research that is already available and made no progress.',
@@ -136,7 +139,7 @@ export abstract class IterativeWorker implements Worker {
         };
       }
 
-      for (const researchRequest of researchItems) {
+      for (const question of questions) {
         if (researchRequests >= this.maxResearchRequests) {
           return {
             status: 'not-completed',
@@ -154,11 +157,10 @@ export abstract class IterativeWorker implements Worker {
           actionPresentation: this.researchAction.presentation,
           requestIndex: researchRequests,
           maxRequests: this.maxResearchRequests,
-          question: researchRequest.question,
-          targets: researchRequest.targets?.map((target) => target.path),
+          question,
         });
         const researchResult = await this.researchAction.run({
-          ...researchRequest,
+          question,
           settings: this.modelSettings.research,
         });
         this.logger.info('worker.action.finish', {
@@ -188,26 +190,4 @@ export abstract class IterativeWorker implements Worker {
       canContinue: true,
     };
   }
-}
-
-function dedupeResearchRequests(requests: ReadonlyArray<ResearchRequest>): ResearchRequest[] {
-  const unique = new Map<string, ResearchRequest>();
-  for (const request of requests) {
-    const normalized: ResearchRequest = {
-      question: request.question.trim(),
-      targets: request.targets?.map((target) => ({ ...target, path: target.path.trim() })).filter((target) => target.path),
-    };
-    if (!normalized.question) continue;
-    unique.set(researchKey(normalized), normalized);
-  }
-  return [...unique.values()];
-}
-
-function researchKey(request: ResearchRequest): string {
-  const question = request.question.trim().toLowerCase().replace(/\s+/g, ' ');
-  const targets = (request.targets ?? [])
-    .map((target) => `${target.type}:${target.path.replace(/\\/g, '/').toLowerCase()}`)
-    .sort()
-    .join('|');
-  return `${question}::${targets}`;
 }

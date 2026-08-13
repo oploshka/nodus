@@ -8,8 +8,14 @@ import { BoundedModelResearchResolver } from '@engine/Research/BoundedModelResea
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import { ChangeCodeRangeReplaceAction } from '@engine/Worker/Action/ChangeCodeRangeReplaceAction.js';
-import { ChangeCodeDiffAction } from '@engine/Worker/Action/ChangeCodeDiffAction.js';
+import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
+import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
+import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEditStrategy.js';
+import { ReplaceEditStrategy } from '@engine/Edit/Strategy/ReplaceEditStrategy.js';
+import { DiffEditStrategy } from '@engine/Edit/Strategy/DiffEditStrategy.js';
+import { FullFileEditStrategy } from '@engine/Edit/Strategy/FullFileEditStrategy.js';
+import { PassValidator } from '@engine/Validation/PassValidator.js';
+import type { Validator } from '@engine/Validation/Validator.js';
 import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import { DocumentationWorker } from '@engine/Worker/DocumentationWorker.js';
@@ -30,6 +36,7 @@ export interface BootstrapOverrides {
   logger?: EngineLogger;
   model?: ModelAdapter;
   project?: Project;
+  validator?: Validator;
 }
 
 /** Composition root for Engine dependencies. */
@@ -62,10 +69,11 @@ export class Bootstrap {
     const researchAction = new ResearchAction(research);
 
     const codeWorker = new CodeWorker(
-      new ChangeCodeRangeReplaceAction(project, model, logger, {
+      new ChangeCodeAction(project, model, logger, {
         purpose: 'Implement the requested software/project behavior change.',
         guidance: 'Prefer existing project APIs and conventions. Change source code only when required by the task.',
         language,
+        strategy: 'range-replace',
       }),
       researchAction,
       logger,
@@ -74,10 +82,11 @@ export class Bootstrap {
     );
 
     const documentationWorker = new DocumentationWorker(
-      new ChangeCodeDiffAction(project, model, logger, {
+      new ChangeCodeAction(project, model, logger, {
         purpose: 'Implement the requested human-facing documentation change.',
         guidance: 'Prefer documentation files and explanatory text. Do not modify runtime code unless the task explicitly requires it.',
         language,
+        strategy: 'diff',
       }),
       researchAction,
       logger,
@@ -103,6 +112,13 @@ export class Bootstrap {
       new ModelPlanner(model, logger, language.nodus, configuration.runtime?.maxPlanSteps),
       workers,
       new ModelDetermine(model, logger, language.nodus),
+      new ProjectEditor(project, logger, [
+        new RangeReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+        new ReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+        new DiffEditStrategy(model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+        new FullFileEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+      ]),
+      overrides.validator ?? new PassValidator(),
       logger,
     );
   }

@@ -25,17 +25,19 @@ The temporary `/scan` command remains app-level administration and is not part o
 The application accepts three independent language hints:
 
 - `language.project` — preferred language for human-authored project text such as documentation and comments;
-- `language.nodus` — machine-facing language for Planner goals, Worker questions, Research answers and other internal orchestration data;
-- `language.response` — language for user-facing summaries, errors, interactions and console labels.
+- `language.nodus` — machine-facing language for Planner goals, constraints, Worker/Action contracts, Research questions/answers, edit instructions, summaries/reasons consumed by Nodus and other internal orchestration data;
+- `language.response` — language only for text whose direct consumer is the user, plus deterministic user-facing errors, interactions and console labels.
+
+Language is selected by the consumer of generated data, not by a field name. In particular, a `summary` or `reason` passed from a Worker back to Engine is `language.nodus`, while human-authored documentation/comments written into the project use `language.project`.
 
 The current recommended/default internal Nodus language is English because project identifiers and source-code search terms are usually English. The user task itself may be written in any language. Central enforcement of this default is planned for the model layer; some callers still add the language guidance themselves.
 
 ## Logging
 
-Concrete logger implementations live in `app/Logging`. Engine owns only the shared logging contract in `engine/Type`. `ConsoleLogger` renders compact human progress according to [the console output contract](../../doc/CONSOLE-OUTPUT.md), while `FileLogger` keeps the full diagnostic event payload including model exchange data.
+Concrete logger implementations live in `app/Logging`. Engine owns only the shared logging contract in `engine/Type`. `ConsoleLogger` renders compact human progress (`Engine / Planner / Worker / Research / Model`), while `FileLogger` keeps the full diagnostic event payload including model exchange data.
 ## CLI input
 
-Interactive CLI input is multiline: `Enter` inserts a new line, while `Ctrl+Enter` or `Ctrl+D` submits the buffered task. `Ctrl+C` cancels the current input. Terminal task status is emitted by Engine Presentation as part of the same execution tree; CLI does not print a second duplicate summary after `Engine.run()` returns.
+Interactive CLI input is multiline: `Enter` inserts a new line, while `Ctrl+Enter` or `Ctrl+D` submits the buffered task. `Ctrl+C` cancels the current input. Terminal task status and deterministic execution metrics are emitted by Engine/Console presentation rather than duplicated by the CLI after `Engine.run()`.
 
 
 ## CLI diagnostics and startup flags
@@ -59,4 +61,4 @@ empty prompt exits the CLI. `/exit` remains available as an explicit command.
 
 ## Console output
 
-Человекочитаемый контракт консоли вынесен отдельно: [doc/CONSOLE-OUTPUT.md](../../doc/CONSOLE-OUTPUT.md). `ConsoleLogger` отвечает только за rendering/ANSI/отступы, а смысл сообщений принадлежит Presentation-объектам runtime-компонентов.
+Полный контракт человекочитаемого вывода, иерархии, Presentation, Model metrics, Edit-блоков и task-level summary зафиксирован отдельно в [`doc/CONSOLE-OUTPUT.md`](../../doc/CONSOLE-OUTPUT.md). `ConsoleLogger` остаётся renderer-ом; диагностические payload и model exchange принадлежат `FileLogger`.

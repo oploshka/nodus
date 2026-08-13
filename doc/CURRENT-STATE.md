@@ -18,7 +18,7 @@ CLI/App
   -> Planner -> Plan
   -> Determine -> Worker
   -> Worker -> Action
-       -> ChangeCodeRangeReplaceAction (current primary)
+       -> ChangeCodeAction -> ProjectEditRequest
        -> ResearchAction when explicitly requested
   -> WorkerResult
   -> Engine reaction
@@ -47,11 +47,11 @@ Planner строит маленький semantic plan. `PlanStep` описыва
 change-code -> research (по запросу action) -> change-code retry
 ```
 
-`ChangeCodeRangeReplaceAction` — текущая primary-стратегия. Модель возвращает небольшие guarded ranges (`startLine/endLine + expected + replacement`), а не большие `before` blocks. `expected` является guard, line range — только hint; операции готовятся в памяти и применяются снизу вверх к buffered source.
+`ChangeCodeAction` теперь описывает только semantic edits (`path + instruction`). Технические стратегии `range-replace`, `replace`, `diff` и full-file `edit` перенесены в `src/engine/Edit` и реализуют общий `EditStrategy` contract. Текущий Code Worker запрашивает `range-replace`, Documentation Worker — `diff`, но serialization и применение выполняет Engine-owned `ProjectEditor`.
 
-Также сохранены предыдущий `ChangeCodeReplaceAction`, `ChangeCodeDiffAction` и реализован `ChangeCodeEditAction`, который возвращает полный resulting file. Все code-change стратегии теперь используют общий buffered change-set: сначала весь coherent change готовится в памяти, и только затем файлы коммитятся. Routing/fallback между стратегиями пока не включён.
+Все edits одного Worker result сначала готовятся в памяти; несколько edits одного файла видят buffered результат предыдущего. Только полностью подготовленный набор проходит stale-source validation и atomic commit.
 
-`ResearchAction` вызывается только когда основной Action явно вернул конкретные missing-information requests. Research не запускается превентивно. Если Action уже знает конкретные файлы, request передаёт их отдельно в `targets`; текст `question` описывает только требуемый факт.
+`ResearchAction` вызывается только когда основной Action явно вернул конкретные missing-information requests. Research не запускается превентивно.
 
 Worker возвращает Engine:
 
@@ -68,7 +68,7 @@ Research — bounded service с persistent cache. Cache entry хранит sourc
 Текущий принцип:
 
 ```text
-Research.ask({ question, targets? })
+Research.ask(question)
   -> cache lookup
   -> validate source hashes
   -> hit: return cached answer
@@ -113,11 +113,11 @@ Schema единая object-schema; operation-specific schema classes не исп
 }
 ```
 
-- `project` — язык human-authored docs/comments;
-- `nodus` — внутренние Planner/Worker/Research/Determine данные;
-- `response` — пользовательский вывод.
+- `project` — язык human-authored docs/comments и другого создаваемого человеком текста внутри проекта;
+- `nodus` — язык всех machine-facing данных Planner/Determine/Worker/Action/Research, включая внутренние summary/reason и edit instructions;
+- `response` — только текст, непосредственным потребителем которого является пользователь, а также локализация deterministic UI/console.
 
-Сейчас enforcement частично живёт в prompts callers. Планируется перенести базовую language policy в model layer, чтобы internal language по умолчанию был English и не приходилось повторять правило в каждом Action/Service.
+Язык выбирается по потребителю данных, а не по названию поля. Общие model-facing инструкции централизованы в `ModelLanguagePolicy`; конкретные prompts остаются у своих Planner/Action/Research компонентов.
 
 ## CLI / logs
 
@@ -160,7 +160,7 @@ Vitest projects:
 4. **User interaction/control points.** Proposal approval, correction, async interrupt, `required/timeout/none`, configurable timeout action.
 5. **Validation layer.** Пока намеренно отсутствует.
 6. **Research precision.** Уточнить evidence dependencies: cache может зависеть от всех candidate files, а не только от реально использованных источников.
-7. **Action routing.** После live-проверки replace решить, как Worker выбирает/fallback-ит между `ChangeCodeRangeReplaceAction`, `ChangeCodeReplaceAction`, `ChangeCodeDiffAction` и `ChangeCodeEditAction`; затем добавлять `RunCommandAction` и другие capabilities только по реальным сценариям.
+7. **Edit routing.** После benchmark на mock project решить, как Engine Editor выбирает/fallback-ит между `range-replace`, `replace`, `diff` и full-file `edit`; Worker не должен владеть этой технической маршрутизацией.
 8. **AgentWorker semantics.** Различать настоящий completed от ответа модели вида «нужен пользовательский контекст».
 9. **Experience data.** Продолжать логировать task/worker/action outcomes для будущего task clustering и более дешёвого Determine.
 10. **Worker Workspace / task-level commit (идея, не утверждена).** Рассмотреть модель, где Worker работает только с виртуальным `ProjectView`/Workspace, ChangeCode меняет buffered файлы, Research видит эти buffered версии, а Engine применяет итоговый ChangeSet к реальному Project только после успешного завершения всех PlanStep пользовательской задачи. Первый кандидат хранения — in-memory overlay; `.nodus/fileCache` рассматривать только при реальной необходимости persistence/spill/resume. Persistent Research cache поверх виртуального Workspace требует отдельной semantics/versioning.
@@ -168,3 +168,13 @@ Vitest projects:
 ## Последнее наблюдаемое состояние тестов/debug
 
 До изменения project write-policy unit и integration suites были зелёными. Следующий integration run упал потому, что Research успешно получил ответы, но сохранение `.nodus/research-cache.json` было заблокировано новой write-policy. В этом snapshot для `.nodus` оставлено временное исключение; локально нужно повторно прогнать `npx tsc --noEmit`, unit и integration.
+
+
+## Engine-owned Edit commit
+
+Edit serialization и commit перенесены в `src/engine/Edit`. Worker возвращает semantic `ProjectEditRequest`; Engine-owned `ProjectEditor` готовит изменения выбранной стратегией, валидирует stale source и атомарно применяет набор. Virtual task-wide workspace остаётся будущим направлением.
+
+
+## Validation
+
+Engine теперь имеет отдельный Validation boundary после успешного выполнения шага. `PassValidator` всегда подтверждает результат и нужен только для фиксации слоя; реальные validation strategies пока не определены.

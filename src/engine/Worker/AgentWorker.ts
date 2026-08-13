@@ -6,10 +6,11 @@ import type { AgentRunner } from '@model/Runner/AgentRunner.js';
 import type { Tool, ToolContext } from '@model/Tool/Tool.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
+import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 
 /** General-purpose bounded agent loop. Specialized workers may outperform it. */
 export class AgentWorker implements Worker {
-  public readonly presentation = new WorkerPresentation({ name: { en: 'Agent' } });
+  public readonly presentation = new WorkerPresentation({ name: { en: 'General agent', ru: 'Универсальный агент' } });
   public readonly name = this.presentation.name();
   public readonly id = 'agent';
   public readonly description = 'General-purpose autonomous coding agent with project tools. Useful when a specialized worker is not a clear fit.';
@@ -32,9 +33,9 @@ export class AgentWorker implements Worker {
           `Original task: ${task.description}`,
           `Current task: ${step.goal}`,
           step.constraints.length > 0 ? `Constraints:\n- ${step.constraints.join('\n- ')}` : '',
-          `Internal working language: ${this.language.nodus}.`,
-          `Project human-authored text language: ${this.language.project}.`,
-          `Final user-facing response language: ${this.language.response}.`,
+          ModelLanguagePolicy.nodus(this.language.nodus),
+          ModelLanguagePolicy.project(this.language.project),
+          'Your final summary is consumed by Nodus and is therefore internal orchestration output, not a direct user response.',
         ].filter(Boolean).join('\n\n'),
         tools: this.tools,
         context: this.context,

@@ -1,9 +1,10 @@
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
+import type { ProjectEditRequest } from '@engine/Edit/EditTypes.js';
 
 export type WorkerResult =
-  | { status: 'completed'; summary: string }
+  | { status: 'completed'; summary: string; edit?: ProjectEditRequest }
   | { status: 'not-completed'; reason: string; canContinue: true }
   | { status: 'failed'; reason: string; canContinue: false };
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RangeReplaceApplicator } from '@engine/Worker/Edit/RangeReplaceApplicator.js';
+import { RangeReplaceApplicator } from '@engine/Edit/Applicator/RangeReplaceApplicator.js';
 
 describe('RangeReplaceApplicator', () => {
   it('uses a small exact range with line numbers only as hints', () => {
