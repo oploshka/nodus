@@ -69,3 +69,10 @@ Task-wide virtual workspace/commit после всех PlanSteps отдельн�
 ## Validation
 
 После успешного Worker/Edit результата Engine вызывает отдельный `Validator`. Сейчас `PassValidator` только закрепляет lifecycle boundary и всегда подтверждает результат; будущий контракт описан в [`Validation/VALIDATION.md`](Validation/VALIDATION.md).
+
+
+## Edit recovery
+
+Technical edit failures are recovered inside the Engine-owned Edit layer. `range-replace` gets one bounded localization retry using the authoritative buffered file, the original semantic instruction, previous operations, and the applicator error. Worker is not rerun for this recovery.
+
+If a strategy still cannot prepare the edit, `ProjectEditor` may fall back to another registered strategy while keeping the same semantic intent. The default chain is `range-replace -> diff -> edit`, `replace -> diff -> edit`, and `diff -> edit`. Preparation remains in memory; commit starts only after the complete coherent edit set is ready.

@@ -61,11 +61,11 @@ export class ConsoleLogger implements EngineLogger {
     return this.colorsEnabled ? `${ANSI.gray}${text}${RESET}` : text;
   }
 
-  private detail(text: string, indent: number, marker?: 'success' | 'failure'): string {
+  private detail(text: string, indent: number, marker?: 'success' | 'failure' | 'warning'): string {
     const prefix = ' '.repeat(indent);
-    const rendered = marker === 'success' ? `✓ ${text}` : marker === 'failure' ? `✗ ${text}` : text;
+    const rendered = marker === 'success' ? `✓ ${text}` : marker === 'failure' ? `✗ ${text}` : marker === 'warning' ? `⚠ ${text}` : text;
     if (!this.colorsEnabled || !marker) return marker ? `${prefix}${rendered}` : this.muted(`${prefix}${rendered}`);
-    const color = marker === 'success' ? ANSI.green : ANSI.red;
+    const color = marker === 'success' ? ANSI.green : marker === 'failure' ? ANSI.red : ANSI.yellow;
     return `${prefix}${color}${rendered}${RESET}`;
   }
 
@@ -299,6 +299,36 @@ ${this.renderPresentation(presentation, message, 0)}` : '';
       const presentation = this.presentation(record.actionPresentation);
       const message = presentation?.format({ type: 'error', attempt, error }, this.responseLanguage);
       return message ? this.renderPresentation(presentation, message, 4) : '';
+    }
+
+    if (event === 'engine.edit.strategy.retry') {
+      const path = stringValue(record.path);
+      const strategy = stringValue(record.strategy);
+      const attempt = numberValue(record.editAttempt);
+      const max = numberValue(record.maxEditAttempts);
+      const reason = stringValue(record.error);
+      const presentation = this.presentation(record.presentation);
+      const message = presentation?.format({ type: 'strategy-retry', path, strategy, attempt, max, reason }, this.responseLanguage);
+      return message ? this.detail(message.text, 4, 'warning') : '';
+    }
+
+    if (event === 'engine.edit.strategy.recovered') {
+      const path = stringValue(record.path);
+      const strategy = stringValue(record.strategy);
+      const attempt = numberValue(record.editAttempt);
+      const presentation = this.presentation(record.presentation);
+      const message = presentation?.format({ type: 'strategy-recovered', path, strategy, attempt }, this.responseLanguage);
+      return message ? this.detail(message.text, 4, 'success') : '';
+    }
+
+    if (event === 'engine.edit.strategy.fallback') {
+      const path = stringValue(record.path);
+      const fromStrategy = stringValue(record.fromStrategy);
+      const toStrategy = stringValue(record.toStrategy);
+      const reason = stringValue(record.reason);
+      const presentation = this.presentation(record.presentation);
+      const message = presentation?.format({ type: 'strategy-fallback', path, fromStrategy, toStrategy, reason }, this.responseLanguage);
+      return message ? this.detail(message.text, 4, 'warning') : '';
     }
 
     if (event === 'engine.edit.error') {

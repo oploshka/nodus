@@ -178,3 +178,10 @@ Edit serialization и commit перенесены в `src/engine/Edit`. Worker �
 ## Validation
 
 Engine теперь имеет отдельный Validation boundary после успешного выполнения шага. `PassValidator` всегда подтверждает результат и нужен только для фиксации слоя; реальные validation strategies пока не определены.
+
+
+## Edit recovery
+
+Technical edit failures are recovered inside the Engine-owned Edit layer. `range-replace` gets one bounded localization retry using the authoritative buffered file, the original semantic instruction, previous operations, and the applicator error. Worker is not rerun for this recovery.
+
+If a strategy still cannot prepare the edit, `ProjectEditor` may fall back to another registered strategy while keeping the same semantic intent. The default chain is `range-replace -> diff -> edit`, `replace -> diff -> edit`, and `diff -> edit`. Preparation remains in memory; commit starts only after the complete coherent edit set is ready.

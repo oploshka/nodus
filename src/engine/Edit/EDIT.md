@@ -41,3 +41,18 @@ Engine решает **когда** запускать Editor и только п�
 ## Later
 
 Следующий отдельный уровень — task-wide virtual workspace: PlanSteps должны видеть изменения предыдущих шагов до физического commit, а окончательный commit может принадлежать всей Task. Это намеренно не реализовано в текущем слое.
+
+## Recovery and fallback
+
+Edit recovery is owned by the Engine Edit layer, not by Worker. Worker semantic intent is not recomputed when a technical edit cannot be applied.
+
+For `range-replace`, the strategy gets one bounded recovery attempt. The recovery request receives the authoritative current file, the original semantic instruction, the previous operations, and the applicator error. It must only refine localization/context; it must not broaden or reinterpret the requested change.
+
+If the requested strategy still cannot prepare the edit, `ProjectEditor` may fall back to another registered technical strategy while preserving the same semantic intent and authoritative buffered source. The default order is:
+
+- `range-replace -> diff -> edit`
+- `replace -> diff -> edit`
+- `diff -> edit`
+- `edit` has no fallback
+
+All preparation remains buffered. No project file is committed until every edit in the coherent set is prepared successfully.

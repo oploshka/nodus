@@ -83,4 +83,38 @@ describe('ProjectEditor', () => {
     expect(result.status).toBe('completed');
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('A\nfirst\nsecond\n');
   });
+
+  it('falls back to the next technical strategy without rerunning Worker intent', async () => {
+    const range: EditStrategy = {
+      id: 'range-replace',
+      async prepare() {
+        return { status: 'not-completed', reason: 'Range replace context is ambiguous near line 2' };
+      },
+    };
+    const diff: EditStrategy = {
+      id: 'diff',
+      async prepare(context) {
+        return { status: 'completed', path: context.edit.path, content: 'AA\n', operations: 1 };
+      },
+    };
+    const root = await mkdtemp(join(tmpdir(), 'nodus-editor-fallback-'));
+    roots.push(root);
+    await writeFile(join(root, 'a.ts'), 'A\n', 'utf8');
+    const project = new Project({ id: 'test', root, scanMode: 'manual', include: [], exclude: [] }, logger);
+    const editor = new ProjectEditor(project, logger, [range, diff], {
+      'range-replace': ['diff'],
+      replace: [],
+      diff: [],
+      edit: [],
+    });
+
+    const result = await editor.apply(new Task('task', project.id), step, {
+      strategy: 'range-replace',
+      edits: [{ path: 'a.ts', instruction: 'change A' }],
+    });
+
+    expect(result.status).toBe('completed');
+    expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('AA\n');
+  });
+
 });
