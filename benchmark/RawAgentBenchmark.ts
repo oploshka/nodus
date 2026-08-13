@@ -143,7 +143,7 @@ async function main(): Promise<void> {
     { role: 'user', content: task },
   ];
 
-  const maxRounds = 20;
+  const maxRounds = 50;
   let modelCalls = 0;
   let toolCalls = 0;
   let totalTokens = 0;
