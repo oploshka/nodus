@@ -26,7 +26,7 @@ export async function runScenario(
   definition: ScenarioDefinition,
   options: ScenarioRunOptions = {},
 ): Promise<ScenarioRun> {
-  const project = await TestProject.create(definition.id, definition.files);
+  const project = await TestProject.create(definition.id, definition.files ?? {}, definition.fixtureRoot);
   const logger = options.logger ?? new TestFileLogger(definition.id);
   const model = options.model
     ? new LoggedModelAdapter(options.model, logger)

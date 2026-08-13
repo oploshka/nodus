@@ -4,32 +4,24 @@ import { QueueModelAdapter } from '@test-framework/ModelHarness.js';
 import { runScenario } from '@test-framework/ScenarioRunner.js';
 import { statusScenario } from '@test/integration/status/status.scenario.js';
 
-describe('/status vertical slice', () => {
-  it('crosses Engine -> Determine -> CodeWorker -> Research -> retry', async () => {
+describe('todo priority vertical slice', () => {
+  it('uses an isolated copy of target/project across research and a three-file edit', async () => {
     const result = await runScenario(statusScenario);
     try {
       expect(result.run.status).toBe('completed');
-      expect(result.run.plan.steps).toHaveLength(1);
       expect(result.run.steps[0].workerId).toBe('code');
-
-      const changed = await result.project.read('src/Cli/Cli.ts');
-      expect(changed).toMatch(/\/status/);
-      expect(changed).toMatch(/configuration\.project\.id/);
-      expect(changed).toMatch(/conversation\.id/);
-      expect(changed).toMatch(/projectSession\.index\?\.files\.length/);
-      expect(changed).not.toMatch(/scan\(|refresh\(/);
+      expect(await result.project.read('src/Todo.ts')).toContain("TodoPriority = 'low' | 'normal' | 'high'");
+      expect(await result.project.read('src/TodoService.ts')).toContain("priority: TodoPriority = 'normal'");
+      expect(await result.project.read('src/formatTodo.ts')).toContain('[${todo.priority}]');
 
       const model = result.model as QueueModelAdapter;
-      expect(model.requests).toHaveLength(6);
+      expect(model.requests).toHaveLength(8);
       expect(model.remainingResponses).toBe(0);
-
       const log = await readFile(result.logger.path, 'utf8');
-      expect(log).toContain('test.scenario.start');
-      expect(log).toContain('engine.worker.selected');
-      expect(log).toContain('worker.action.start');
-      expect(log).toContain('worker.action.finish');
       expect(log).toContain('research.miss');
-      expect(log).toContain('test.scenario.finish');
+      expect(log).toContain('research.resolved');
+      expect(log).not.toContain('worker.action.error');
+      expect(log).not.toContain('engine.edit.error');
     } finally {
       await result.dispose();
     }

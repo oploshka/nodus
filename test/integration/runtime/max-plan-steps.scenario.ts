@@ -1,105 +1,21 @@
+import { fileURLToPath } from 'node:url';
 import { scenario } from '@test-framework/Scenario.js';
 
 export const maxPlanStepsScenario = scenario({
-  id: 'max-plan-steps',
-  task: 'Make Planner maxPlanSteps configurable through runtime.maxPlanSteps, preserve the default value 8 in Planner, pass the value through Bootstrap, and update nodus.config.example.json.',
-  files: {
-    'src/engine/Planner/ModelPlanner.ts': [
-      'export class ModelPlanner {',
-      '  public constructor(private readonly model: unknown) {}',
-      '',
-      '  public plan(steps: string[]): string[] {',
-      '    return steps.slice(0, 8);',
-      '  }',
-      '}',
-      '',
-    ].join('\n'),
-    'src/app/Bootstrap.ts': [
-      "import { ModelPlanner } from '../engine/Planner/ModelPlanner.js';",
-      '',
-      'export function createPlanner(model: unknown, configuration: any): ModelPlanner {',
-      '  return new ModelPlanner(model);',
-      '}',
-      '',
-    ].join('\n'),
-    'nodus.config.example.json': JSON.stringify({ runtime: { maxWorkerAttempts: 4 } }, null, 2) + '\n',
-  },
-  runtime: { maxWorkerAttempts: 3, maxResearchRequests: 2 },
+  id: 'todo-title-limit',
+  fixtureRoot: fileURLToPath(new URL('../../../target/project', import.meta.url)),
+  task: 'Limit todo titles to 80 characters and add a regression test while preserving trimming and blank-title validation.',
+  runtime: { maxWorkerAttempts: 3, maxResearchRequests: 1 },
   modelResponses: [
-    JSON.stringify({
-      steps: [{
-        goal: 'Make Planner maxPlanSteps configurable through runtime.maxPlanSteps, preserve default 8, pass it through Bootstrap, and update the example config.',
-        constraints: [],
-        decompositionType: 'coherent-outcome',
-      }],
-    }),
+    JSON.stringify({ steps: [{ goal: 'Enforce an 80-character todo title limit and cover it with a test.', constraints: ['Preserve trimming and blank-title validation.'], decompositionType: 'coherent-outcome' }] }),
     JSON.stringify({ optionId: 'code' }),
-    JSON.stringify({
-      outcome: 'missing-information',
-      questions: [
-        'Where is the current maxPlanSteps limit defined in ModelPlanner?',
-        'How does Bootstrap instantiate ModelPlanner and pass runtime configuration?',
-      ],
-    }),
-    'ModelPlanner currently hardcodes the limit with steps.slice(0, 8).',
-    'Bootstrap constructs ModelPlanner with new ModelPlanner(model) and receives configuration in createPlanner.',
-    JSON.stringify({
-      outcome: 'ready',
-      summary: 'maxPlanSteps is configurable with default 8.',
-      edits: [
-        {
-          path: 'src/engine/Planner/ModelPlanner.ts',
-          instruction: 'Add an optional maxPlanSteps constructor parameter defaulting to 8 and use it instead of the hardcoded slice limit.',
-        },
-        {
-          path: 'src/app/Bootstrap.ts',
-          instruction: 'Pass configuration.runtime?.maxPlanSteps to ModelPlanner.',
-        },
-        {
-          path: 'nodus.config.example.json',
-          instruction: 'Add runtime.maxPlanSteps with value 8 without changing other runtime fields.',
-        },
-      ],
-    }),
-    JSON.stringify({
-      path: 'src/engine/Planner/ModelPlanner.ts',
-      operations: [
-        {
-          startLine: 2,
-          endLine: 2,
-          expected: '  public constructor(private readonly model: unknown) {}',
-          replacement: [
-            '  public constructor(',
-            '    private readonly model: unknown,',
-            '    private readonly maxPlanSteps = 8,',
-            '  ) {}',
-          ].join('\n'),
-        },
-        {
-          startLine: 5,
-          endLine: 5,
-          expected: '    return steps.slice(0, 8);',
-          replacement: '    return steps.slice(0, this.maxPlanSteps);',
-        },
-      ],
-    }),
-    JSON.stringify({
-      path: 'src/app/Bootstrap.ts',
-      operations: [{
-        startLine: 4,
-        endLine: 4,
-        expected: '  return new ModelPlanner(model);',
-        replacement: '  return new ModelPlanner(model, configuration.runtime?.maxPlanSteps);',
-      }],
-    }),
-    JSON.stringify({
-      path: 'nodus.config.example.json',
-      operations: [{
-        startLine: 3,
-        endLine: 3,
-        expected: '    \"maxWorkerAttempts\": 4',
-        replacement: ['    \"maxWorkerAttempts\": 4,', '    \"maxPlanSteps\": 8'].join('\n'),
-      }],
-    }),
+    JSON.stringify({ outcome: 'missing-information', questions: ['Where is todo title normalization and validation implemented?'] }),
+    'TodoService.create trims and validates titles in src/TodoService.ts; tests are in test/TodoService.test.ts.',
+    JSON.stringify({ outcome: 'ready', summary: 'Add the limit at the existing validation boundary and test it.', edits: [
+      { path: 'src/TodoService.ts', instruction: 'After blank-title validation, reject normalized titles longer than 80 characters with a clear error.' },
+      { path: 'test/TodoService.test.ts', instruction: 'Add a regression test that rejects an 81-character title.' },
+    ] }),
+    JSON.stringify({ path: 'src/TodoService.ts', operations: [{ startLine: 8, endLine: 10, expected: "    const normalized = title.trim();\n    if (!normalized) throw new Error('Todo title is required');\n    return this.store.add({ title: normalized });", replacement: "    const normalized = title.trim();\n    if (!normalized) throw new Error('Todo title is required');\n    if (normalized.length > 80) throw new Error('Todo title must be 80 characters or fewer');\n    return this.store.add({ title: normalized });" }] }),
+    JSON.stringify({ path: 'test/TodoService.test.ts', operations: [{ startLine: 17, endLine: 20, expected: "test('rejects blank titles', () => {\n  const service = new TodoService(new TodoStore());\n  assert.throws(() => service.create('   '), /Todo title is required/);\n});", replacement: "test('rejects blank titles', () => {\n  const service = new TodoService(new TodoStore());\n  assert.throws(() => service.create('   '), /Todo title is required/);\n});\n\ntest('rejects titles longer than 80 characters', () => {\n  const service = new TodoService(new TodoStore());\n  assert.throws(() => service.create('x'.repeat(81)), /80 characters or fewer/);\n});" }] }),
   ],
 });
