@@ -10,11 +10,18 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Project } from '@engine/Project/Project.js';
 import { callDiffFile } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
+import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 
 /** Unified-diff implementation kept as an explicit alternative editing strategy. */
 export class ChangeCodeDiffAction extends ChangeCodeAction {
   public readonly id = 'change-code-diff';
+  public readonly presentation = new ActionPresentation({
+    name: { en: 'Code change', ru: 'Изменение кода' },
+    detail: 'diff',
+  });
+  public readonly name = this.presentation.name();
+  public readonly method = this.presentation.detail();
   public readonly description = 'Apply one coherent project/code change using unified diff edits.';
 
   public constructor(
@@ -67,7 +74,7 @@ export class ChangeCodeDiffAction extends ChangeCodeAction {
         });
 
         const content = this.applicator.apply(source, response.hunks, path);
-        if (editAttempt > 1) this.logger.info('worker.edit.recovered', { strategy: 'diff', path, editAttempt });
+        if (editAttempt > 1) this.logger.info('worker.edit.recovered', { strategy: 'diff', path, editAttempt, presentation: this.editPresentation });
         return { status: 'completed', path, content };
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
@@ -77,6 +84,7 @@ export class ChangeCodeDiffAction extends ChangeCodeAction {
           editAttempt,
           maxEditAttempts: this.maxEditAttempts,
           error: lastError,
+          presentation: this.editPresentation,
         });
       }
     }

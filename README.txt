@@ -1,11 +1,10 @@
-Nodus console logging update
+Presentation migration v3
 
-Overlay these files onto the current project root.
+Extends the existing Presentation architecture to Planner, Determine, Research, Edit and Model.
+Each role owns an independent concrete Presentation class. Presentation<TEvent> remains only the renderer contract; no shared semantic base class or formatter DSL was introduced.
 
-Changed:
-- src/app/Logging/Logger.ts: semantic console hierarchy, compact model progress, muted plan details.
-- src/engine/Engine.ts: emits Planner/Determine orchestration boundary events.
-- src/app/APPLICATION.md: documents the console output contract in Russian.
-- test/unit/app/ConsoleLogger.test.ts: regression test for the new console contract.
+ConsoleLogger now renders these runtime events through the presentation object carried by the emitter. ModelPresentation owns duration/token/finishReason formatting; ResearchPresentation owns question/result formatting; EditPresentation owns change-set/edit lifecycle formatting.
 
-This patch intentionally does not include unrelated project files, so it will not overwrite the current maxPlanSteps implementation or benchmark work.
+Validation in this environment:
+- TypeScript transpile/syntax diagnostics: passed for all modified TS files.
+- Full tsc --noEmit could not run because the provided snapshot has no @types/node/node_modules.

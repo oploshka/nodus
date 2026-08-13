@@ -9,6 +9,7 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Project } from '@engine/Project/Project.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
+import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
@@ -29,6 +30,12 @@ const editSchema: ModelResponseSchema = {
 /** Full-file rewrite strategy. Added as a high-context alternative; CodeWorker does not select it by default yet. */
 export class ChangeCodeEditAction extends ChangeCodeAction {
   public readonly id = 'change-code-edit';
+  public readonly presentation = new ActionPresentation({
+    name: { en: 'Code change', ru: 'Изменение кода' },
+    detail: 'edit',
+  });
+  public readonly name = this.presentation.name();
+  public readonly method = this.presentation.detail();
   public readonly description = 'Apply one coherent project/code change by returning complete resulting file contents.';
 
   public constructor(
@@ -44,7 +51,7 @@ export class ChangeCodeEditAction extends ChangeCodeAction {
 
   protected async prepareEdit(context: ChangeCodeActionInput, edit: ChangeCodeEdit, source: string): Promise<ChangeCodePrepareResult> {
     const path = edit.path;
-    this.logger.info('worker.edit.prepare.start', { strategy: 'edit', path });
+    this.logger.info('worker.edit.prepare.start', { strategy: 'edit', path, presentation: this.editPresentation });
     const response = await callModel<EditFileResponse>(this.model, this.editModelLogger(), {
       request: {
         message: 'Apply this concrete project edit by returning the complete resulting file.',
@@ -73,7 +80,7 @@ export class ChangeCodeEditAction extends ChangeCodeAction {
     const responsePath = await this.project.resolvePath(response.path);
     if (responsePath !== path) throw new Error(`Edit path mismatch: expected ${path}, received ${responsePath}`);
     const content = this.preserveEol(source, response.content);
-    this.logger.info('worker.edit.prepare.finish', { strategy: 'edit', path, operations: 1 });
+    this.logger.info('worker.edit.prepare.finish', { strategy: 'edit', path, operations: 1, presentation: this.editPresentation });
     return { status: 'completed', path, content };
   }
 

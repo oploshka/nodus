@@ -7,6 +7,7 @@ import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js
 import type { Task } from '@engine/Task/Task.js';
 import type { Plan, PlanStepDecompositionType } from '@engine/Planner/Plan.js';
 import type { Planner } from '@engine/Planner/Planner.js';
+import { PlannerPresentation } from '@engine/Presentation/PlannerPresentation.js';
 
 interface PlannerModelResponse {
   steps: Array<{
@@ -55,11 +56,11 @@ const plannerSchema: ModelResponseSchema = {
 };
 
 export class ModelPlanner implements Planner {
+  public readonly presentation = new PlannerPresentation();
   public constructor(
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly nodusLanguage = 'en',
-    private readonly maxPlanSteps?: number,
   ) {}
 
   public async plan(task: Task): Promise<Plan> {
@@ -90,7 +91,7 @@ export class ModelPlanner implements Planner {
     });
 
     return {
-      steps: response.steps.slice(0, this.maxPlanSteps ?? 8).map((step, index) => ({
+      steps: response.steps.slice(0, 8).map((step, index) => ({
         // Step identity belongs to Nodus runtime, not to the model response.
         id: `step-${index + 1}`,
         goal: step.goal,

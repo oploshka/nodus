@@ -6,6 +6,7 @@ import type { ChangeCodeActionData, ChangeCodeActionInput, ResearchActionRequest
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import type { Worker, WorkerResult } from '@engine/Worker/Worker.js';
+import type { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import type { ModelRunSettings } from '@model/Request/ModelRun.js';
 
 interface WorkerSession {
@@ -23,8 +24,10 @@ export interface IterativeWorkerModelSettings {
  */
 export abstract class IterativeWorker implements Worker {
   public abstract readonly id: string;
+  public abstract readonly presentation: WorkerPresentation;
+  public abstract readonly name: string;
   public abstract readonly description: string;
-  public readonly actions: ReadonlyArray<{ id: string; description: string }>;
+  public readonly actions: ReadonlyArray<{ id: string; presentation: unknown; description: string }>;
 
   private readonly sessions = new Map<string, WorkerSession>();
 
@@ -52,6 +55,8 @@ export abstract class IterativeWorker implements Worker {
 
     this.logger.info('worker.start', {
       workerId: this.id,
+      workerName: this.name,
+      presentation: this.presentation,
       taskId: task.id,
       stepId: step.id,
       actions: this.actions.map((action) => action.id),
@@ -66,6 +71,9 @@ export abstract class IterativeWorker implements Worker {
           workerId: this.id,
           stepId: step.id,
           actionId: this.primaryAction.id,
+          actionName: this.primaryAction.name,
+          actionMethod: this.primaryAction.method,
+          actionPresentation: this.primaryAction.presentation,
           attempt: attempts,
         });
         result = await this.primaryAction.run({
@@ -81,6 +89,9 @@ export abstract class IterativeWorker implements Worker {
           workerId: this.id,
           stepId: step.id,
           actionId: this.primaryAction.id,
+          actionName: this.primaryAction.name,
+          actionMethod: this.primaryAction.method,
+          actionPresentation: this.primaryAction.presentation,
           attempt: attempts,
           error: lastAttemptError,
         });
@@ -91,6 +102,9 @@ export abstract class IterativeWorker implements Worker {
         workerId: this.id,
         stepId: step.id,
         actionId: this.primaryAction.id,
+        actionName: this.primaryAction.name,
+        actionMethod: this.primaryAction.method,
+        actionPresentation: this.primaryAction.presentation,
         attempt: attempts,
         result,
       });
@@ -139,6 +153,10 @@ export abstract class IterativeWorker implements Worker {
           workerId: this.id,
           stepId: step.id,
           actionId: this.researchAction.id,
+          actionName: this.researchAction.name,
+          actionPresentation: this.researchAction.presentation,
+          requestIndex: researchRequests,
+          maxRequests: this.maxResearchRequests,
           question,
         });
         const researchResult = await this.researchAction.run({
@@ -149,6 +167,8 @@ export abstract class IterativeWorker implements Worker {
           workerId: this.id,
           stepId: step.id,
           actionId: this.researchAction.id,
+          actionName: this.researchAction.name,
+          actionPresentation: this.researchAction.presentation,
           result: researchResult,
         });
 

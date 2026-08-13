@@ -1,3 +1,4 @@
+import type { DeterminePresentation } from '@engine/Presentation/DeterminePresentation.js';
 export interface DetermineOption<T> {
   id: string;
   description: string;
@@ -11,5 +12,6 @@ export interface DetermineRequest<T> {
 
 /** Atomic Engine service: choose one best option from a bounded list. */
 export interface Determine {
+  readonly presentation: DeterminePresentation;
   option<T>(request: DetermineRequest<T>): Promise<T>;
 }

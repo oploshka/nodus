@@ -1,6 +1,7 @@
 import type { Research } from '@engine/Research/Research.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { ActionModelOptions, ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
+import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
 
 export interface ResearchActionInput extends ActionModelOptions {
   question: string;
@@ -8,6 +9,8 @@ export interface ResearchActionInput extends ActionModelOptions {
 
 export class ResearchAction implements WorkerAction<ResearchActionInput, ResearchAnswer> {
   public readonly id = 'research';
+  public readonly presentation = new ResearchPresentation();
+  public readonly name = 'Research';
   public readonly description = 'Resolve one concrete project knowledge gap using cached project evidence when possible.';
 
   public constructor(

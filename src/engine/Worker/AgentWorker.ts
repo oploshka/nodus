@@ -5,9 +5,12 @@ import type { Worker, WorkerResult } from '@engine/Worker/Worker.js';
 import type { AgentRunner } from '@model/Runner/AgentRunner.js';
 import type { Tool, ToolContext } from '@model/Tool/Tool.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
+import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 
 /** General-purpose bounded agent loop. Specialized workers may outperform it. */
 export class AgentWorker implements Worker {
+  public readonly presentation = new WorkerPresentation({ name: { en: 'Agent' } });
+  public readonly name = this.presentation.name();
   public readonly id = 'agent';
   public readonly description = 'General-purpose autonomous coding agent with project tools. Useful when a specialized worker is not a clear fit.';
 
@@ -40,6 +43,7 @@ export class AgentWorker implements Worker {
 
       this.logger.info('worker.agent.finish', {
         workerId: this.id,
+        presentation: this.presentation,
         taskId: task.id,
         stepId: step.id,
         status: result.status,
@@ -51,7 +55,7 @@ export class AgentWorker implements Worker {
         : { status: 'not-completed', reason: result.reason, canContinue: true };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      this.logger.warn('worker.agent.interrupted', { workerId: this.id, taskId: task.id, stepId: step.id, reason });
+      this.logger.warn('worker.agent.interrupted', { workerId: this.id, presentation: this.presentation, taskId: task.id, stepId: step.id, reason });
       return { status: 'not-completed', reason, canContinue: true };
     }
   }

@@ -1,5 +1,6 @@
 import type { ModelRunInput } from '@model/Request/ModelRun.js';
 import type { DiffFileRunInput, ModelRunError, ModelRunner, UnifiedDiffModelResponse } from '@model/Runner/ModelRunner.js';
+import { ModelPresentation } from '@engine/Presentation/ModelPresentation.js';
 
 /**
  * Minimal logging contract intentionally kept local to this boundary.
@@ -13,6 +14,8 @@ import type { DiffFileRunInput, ModelRunError, ModelRunner, UnifiedDiffModelResp
  * ModelRunner's lifecycle. The logger is passed explicitly on purpose; hiding it
  * behind DI would add structure without removing any real responsibility.
  */
+const modelPresentation = new ModelPresentation();
+
 export interface ModelCallLogger {
   info(event: string, data?: unknown): void;
 }
@@ -26,10 +29,11 @@ export async function callModel<TOutput extends object>(
     kind: 'model',
     message: input.request.message,
     responseFormat: input.response.format,
+    presentation: modelPresentation,
   });
   try {
     const result = await runner.run<TOutput>(input);
-    logger.info('model.run', result);
+    logger.info('model.run', { ...result, presentation: modelPresentation });
     return result.data;
   } catch (error) {
     logModelFailure(logger, error);
@@ -46,10 +50,11 @@ export async function callDiffFile(
     kind: 'diff',
     path: input.path,
     message: input.request.message,
+    presentation: modelPresentation,
   });
   try {
     const result = await runner.diffFile(input);
-    logger.info('model.run', result);
+    logger.info('model.run', { ...result, presentation: modelPresentation });
     return result.data;
   } catch (error) {
     logModelFailure(logger, error);
@@ -65,5 +70,6 @@ function logModelFailure(logger: ModelCallLogger, error: unknown): void {
   logger.info('model.run.error', {
     error: { name: error.name, message: error.message },
     ...modelRun,
+    presentation: modelPresentation,
   });
 }

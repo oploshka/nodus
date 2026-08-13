@@ -5,12 +5,14 @@ import { callModel } from '@model/Runner/ModelCaller.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
+import { DeterminePresentation } from '@engine/Presentation/DeterminePresentation.js';
 
 interface DetermineModelResponse {
   optionId: string;
 }
 
 export class ModelDetermine implements Determine {
+  public readonly presentation = new DeterminePresentation();
   public constructor(
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,

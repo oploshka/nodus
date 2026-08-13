@@ -10,6 +10,7 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Project } from '@engine/Project/Project.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
+import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
@@ -41,6 +42,12 @@ const replaceSchema: ModelResponseSchema = {
 /** Primary experimental editing strategy: exact replace blocks guarded by current source text. */
 export class ChangeCodeReplaceAction extends ChangeCodeAction {
   public readonly id = 'change-code-replace';
+  public readonly presentation = new ActionPresentation({
+    name: { en: 'Code change', ru: 'Изменение кода' },
+    detail: 'replace',
+  });
+  public readonly name = this.presentation.name();
+  public readonly method = this.presentation.detail();
   public readonly description = 'Apply one coherent project/code change using exact before/after replacements with line hints.';
 
   public constructor(

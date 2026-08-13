@@ -10,6 +10,8 @@ import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
+import type { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
+import { EditPresentation } from '@engine/Presentation/EditPresentation.js';
 
 interface ChangeDecision {
   outcome: 'ready' | 'missing-information' | 'already-completed' | 'failed';
@@ -90,7 +92,9 @@ interface BufferedFile {
  */
 export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
   public abstract readonly id: string;
+  public abstract readonly presentation: ActionPresentation;
   public abstract readonly description: string;
+  protected readonly editPresentation = new EditPresentation();
 
   protected constructor(
     protected readonly project: Project,
@@ -160,7 +164,7 @@ export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionI
     const edits = (decision.edits ?? []).slice(0, this.maxEditsPerAttempt);
     if (edits.length === 0) throw new Error('Attempt was ready but returned no edits.');
 
-    this.logger.info('worker.change-set.prepare.start', { strategy: this.id, edits: edits.length });
+    this.logger.info('worker.change-set.prepare.start', { strategy: this.id, edits: edits.length, presentation: this.editPresentation });
     const files = new Map<string, BufferedFile>();
 
     for (const edit of edits) {
@@ -174,12 +178,12 @@ export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionI
 
       const result = await this.prepareEdit(context, { ...edit, path }, file.current);
       if (result.status === 'not-completed') {
-        this.logger.warn('worker.change-set.prepare.failed', { strategy: this.id, path, reason: result.reason });
+        this.logger.warn('worker.change-set.prepare.failed', { strategy: this.id, path, reason: result.reason, presentation: this.editPresentation });
         return { ...result, canContinue: true };
       }
       if (result.path !== path) throw new Error(`Prepared edit path mismatch: expected ${path}, received ${result.path}`);
       file.current = result.content;
-      this.logger.info('worker.change-set.file.prepared', { strategy: this.id, path });
+      this.logger.info('worker.change-set.file.prepared', { strategy: this.id, path, presentation: this.editPresentation });
     }
 
     const changed = [...files.values()].filter((file) => file.current !== file.original);
@@ -188,7 +192,7 @@ export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionI
     // Validate every write target before mutating any project file.
     for (const file of changed) await this.project.resolveTargetPath(file.path);
 
-    this.logger.info('worker.change-set.commit.start', { strategy: this.id, files: changed.length });
+    this.logger.info('worker.change-set.commit.start', { strategy: this.id, files: changed.length, presentation: this.editPresentation });
     const written: BufferedFile[] = [];
     try {
       for (const file of changed) {
@@ -211,7 +215,7 @@ export abstract class ChangeCodeAction implements WorkerAction<ChangeCodeActionI
       throw error;
     }
 
-    this.logger.info('worker.change-set.commit.finish', { strategy: this.id, files: changed.length });
+    this.logger.info('worker.change-set.commit.finish', { strategy: this.id, files: changed.length, presentation: this.editPresentation });
     return {
       status: 'completed',
       data: { summary: decision.summary ?? `Changed ${changed.map((file) => file.path).join(', ')}` },

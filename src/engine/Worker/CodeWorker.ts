@@ -4,8 +4,11 @@ import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import { IterativeWorker, type IterativeWorkerModelSettings } from '@engine/Worker/IterativeWorker.js';
+import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 
 export class CodeWorker extends IterativeWorker {
+  public readonly presentation = new WorkerPresentation({ name: { en: 'Code' } });
+  public readonly name = this.presentation.name();
   public readonly id = 'code';
   public readonly description = 'Implement source-code, runtime behavior, configuration, and project logic changes.';
 

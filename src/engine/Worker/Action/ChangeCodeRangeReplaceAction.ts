@@ -10,6 +10,7 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Project } from '@engine/Project/Project.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
+import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
@@ -42,6 +43,12 @@ const rangeReplaceSchema: ModelResponseSchema = {
 /** Primary replace experiment: small guarded ranges instead of large before blocks. */
 export class ChangeCodeRangeReplaceAction extends ChangeCodeAction {
   public readonly id = 'change-code-range-replace';
+  public readonly presentation = new ActionPresentation({
+    name: { en: 'Code change', ru: 'Изменение кода' },
+    detail: 'range-replace',
+  });
+  public readonly name = this.presentation.name();
+  public readonly method = this.presentation.detail();
   public readonly description = 'Apply coherent project/code changes using small guarded line-range replacements.';
 
   public constructor(
@@ -62,7 +69,7 @@ export class ChangeCodeRangeReplaceAction extends ChangeCodeAction {
     source: string,
   ): Promise<ChangeCodePrepareResult> {
     const path = edit.path;
-    this.logger.info('worker.edit.prepare.start', { strategy: 'range-replace', path });
+    this.logger.info('worker.edit.prepare.start', { strategy: 'range-replace', path, presentation: this.editPresentation });
 
     try {
       const response = await callModel<RangeReplaceFileResponse>(this.model, this.editModelLogger(), {
@@ -99,11 +106,11 @@ export class ChangeCodeRangeReplaceAction extends ChangeCodeAction {
       if (response.operations.length === 0) throw new Error(`Range replace returned no operations for ${path}`);
 
       const content = this.applicator.apply(source, response.operations, path);
-      this.logger.info('worker.edit.prepare.finish', { strategy: 'range-replace', path, operations: response.operations.length });
+      this.logger.info('worker.edit.prepare.finish', { strategy: 'range-replace', path, operations: response.operations.length, presentation: this.editPresentation });
       return { status: 'completed', path, content };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      this.logger.warn('worker.edit.prepare.failed', { strategy: 'range-replace', path, reason });
+      this.logger.warn('worker.edit.prepare.failed', { strategy: 'range-replace', path, reason, presentation: this.editPresentation });
       return { status: 'not-completed', reason: `Range replace could not prepare ${path}: ${reason}` };
     }
   }
