@@ -169,6 +169,7 @@ export abstract class IterativeWorker implements Worker {
         const researchResult = await this.researchAction.run({
           question,
           settings: this.modelSettings.research,
+          readFile: (path) => edit.read(path),
         });
         this.logger.info('worker.action.finish', {
           workerId: this.id,
