@@ -14,7 +14,10 @@ import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEdit
 import { ReplaceEditStrategy } from '@engine/Edit/Strategy/ReplaceEditStrategy.js';
 import { DiffEditStrategy } from '@engine/Edit/Strategy/DiffEditStrategy.js';
 import { FullFileEditStrategy } from '@engine/Edit/Strategy/FullFileEditStrategy.js';
-import { PassValidator } from '@engine/Validation/PassValidator.js';
+import { CommandValidationCheck } from '@engine/Validation/CommandValidationCheck.js';
+import { CompositeValidator } from '@engine/Validation/CompositeValidator.js';
+import { JsonValidationCheck } from '@engine/Validation/JsonValidationCheck.js';
+import type { ValidationCheck } from '@engine/Validation/ValidationCheck.js';
 import type { Validator } from '@engine/Validation/Validator.js';
 import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
@@ -118,10 +121,19 @@ export class Bootstrap {
         new DiffEditStrategy(model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
         new FullFileEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
       ]),
-      overrides.validator ?? new PassValidator(),
+      overrides.validator ?? createValidator(configuration, project),
       logger,
     );
   }
+}
+
+function createValidator(configuration: AppConfiguration, project: Project): Validator {
+  const checks: ValidationCheck[] = [];
+  if (configuration.validation?.json !== false) checks.push(new JsonValidationCheck(project));
+  for (const command of configuration.validation?.commands ?? []) {
+    checks.push(new CommandValidationCheck(project.root, command));
+  }
+  return new CompositeValidator(checks);
 }
 
 function resolveLanguageConfiguration(configuration: AppConfiguration): LanguageConfiguration {
