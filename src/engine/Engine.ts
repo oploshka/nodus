@@ -8,6 +8,7 @@ import type { Determine } from '@engine/Determine/Determine.js';
 import { EnginePresentation } from '@engine/Presentation/EnginePresentation.js';
 import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import type { EngineTest } from '@engine/EngineTest/EngineTest.js';
+import { ProcessInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
 
 export type EditFactory = () => ProjectEditor;
 
@@ -29,6 +30,7 @@ export class Engine {
   public async run(description: string): Promise<TaskRun> {
     const task = new Task(description, this.project.id);
     const edit = this.createEdit();
+    const instrument = new ProcessInstrument(this.project, edit);
     this.logger.info('engine.task.start', { taskId: task.id, description, presentation: this.presentation });
 
     this.logger.info('planner.plan.start', { taskId: task.id, presentation: this.planner.presentation });
@@ -58,7 +60,7 @@ export class Engine {
       this.logger.info('engine.worker.selected', { taskId: task.id, stepId: step.id, workerId: worker.id, workerName: worker.name, workerPresentation: worker.presentation });
 
       const startedAt = performance.now();
-      let result = await worker.run(task, step, edit);
+      let result = await worker.run({ task, step }, instrument);
 
       if (result.status !== 'completed') {
         edit.restore(checkpoint);
