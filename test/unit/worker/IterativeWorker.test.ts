@@ -1,15 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { NullLogger } from '@app/Logging/Logger.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
-import { Task } from '@engine/Task/Task.js';
 import type { ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import type { ChangeCodeActionData, ChangeCodeActionInput, ResearchActionRequest } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
-import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
-import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
+import { createWorkerTestContext } from '@mock/WorkerTestContext.js';
 
 class SequenceChangeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
   public readonly id = 'change-code';
@@ -32,9 +30,13 @@ class ScriptedResearchAction implements WorkerAction<ResearchActionInput, Resear
   public readonly presentation = new ResearchPresentation();
   public readonly description = 'test research action';
   public readonly asked: string[] = [];
+  public readonly readContents: string[] = [];
+
+  public constructor(private readonly readPath?: string) {}
 
   public async run(input: ResearchActionInput): Promise<ActionResult<ResearchAnswer>> {
     this.asked.push(input.question);
+    if (this.readPath && input.readFile) this.readContents.push(await input.readFile(this.readPath));
     return { status: 'completed', data: answer(input.question) };
   }
 }
@@ -42,12 +44,6 @@ class ScriptedResearchAction implements WorkerAction<ResearchActionInput, Resear
 function answer(question: string): ResearchAnswer {
   return { question, status: 'resolved', answer: `answer:${question}`, sources: [], createdAt: new Date(0).toISOString() };
 }
-
-function instrument(): WorkerInstrument {
-  return { edit: {} as ProjectEditor };
-}
-
-const step = { id: 's1', goal: 'goal', constraints: [], decompositionType: 'coherent-outcome' } as const;
 
 describe('Iterative Worker action lifecycle', () => {
   it('starts with change action, runs requested Research action, then retries the same task', async () => {
@@ -62,8 +58,9 @@ describe('Iterative Worker action lifecycle', () => {
     ]);
     const research = new ScriptedResearchAction();
     const worker = new CodeWorker(change, research, new NullLogger(), 3, 2);
+    const context = createWorkerTestContext();
 
-    const result = await worker.run({ task: new Task('task', 'p'), step }, instrument());
+    const result = await worker.run(context.data, context.instrument);
 
     expect(result.status).toBe('completed');
     expect(research.asked).toEqual(['Where is CLI dispatch?']);
@@ -74,8 +71,9 @@ describe('Iterative Worker action lifecycle', () => {
     const change = new SequenceChangeAction([{ status: 'completed', data: { summary: 'done without research' } }]);
     const research = new ScriptedResearchAction();
     const worker = new CodeWorker(change, research, new NullLogger(), 3, 2);
+    const context = createWorkerTestContext();
 
-    const result = await worker.run({ task: new Task('task', 'p'), step }, instrument());
+    const result = await worker.run(context.data, context.instrument);
 
     expect(result.status).toBe('completed');
     expect(research.asked).toHaveLength(0);
@@ -93,8 +91,29 @@ describe('Iterative Worker action lifecycle', () => {
       ],
     }]);
     const worker = new CodeWorker(change, new ScriptedResearchAction(), new NullLogger(), 3, 1);
+    const context = createWorkerTestContext();
 
-    const result = await worker.run({ task: new Task('task', 'p'), step }, instrument());
+    const result = await worker.run(context.data, context.instrument);
     expect(result.status).toBe('not-completed');
+  });
+
+  it('gives Research the current task-local Edit view', async () => {
+    const change = new SequenceChangeAction([
+      {
+        status: 'not-completed',
+        reason: 'Need current file state',
+        canContinue: true,
+        requests: [{ actionId: 'research', input: { question: 'What is in a.ts?' } }],
+      },
+      { status: 'completed', data: { summary: 'done' } },
+    ]);
+    const research = new ScriptedResearchAction('a.ts');
+    const worker = new CodeWorker(change, research, new NullLogger(), 3, 2);
+    const context = createWorkerTestContext({ files: { 'a.ts': 'task-local content' } });
+
+    const result = await worker.run(context.data, context.instrument);
+
+    expect(result.status).toBe('completed');
+    expect(research.readContents).toEqual(['task-local content']);
   });
 });
