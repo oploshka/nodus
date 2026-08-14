@@ -7,11 +7,11 @@ import type { Worker } from '@engine/Worker/Worker.js';
 import type { Determine } from '@engine/Determine/Determine.js';
 import { EnginePresentation } from '@engine/Presentation/EnginePresentation.js';
 import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
-import type { Validator } from '@engine/Validation/Validator.js';
+import type { EngineTest } from '@engine/EngineTest/EngineTest.js';
 
 export type EditFactory = () => ProjectEditor;
 
-/** Coordinator: plan -> route -> worker -> accumulated Edit -> apply -> validate. */
+/** Coordinator: plan -> route -> worker -> accumulated Edit -> apply -> EngineTest. */
 export class Engine {
   public readonly presentation = new EnginePresentation();
   private readonly pendingEdits = new Map<string, ProjectEditor>();
@@ -22,7 +22,7 @@ export class Engine {
     private readonly workers: ReadonlyArray<Worker>,
     private readonly determine: Determine,
     private readonly createEdit: EditFactory,
-    private readonly validator: Validator,
+    private readonly engineTest: EngineTest,
     private readonly logger: EngineLogger,
   ) {}
 
@@ -59,7 +59,6 @@ export class Engine {
 
       const startedAt = performance.now();
       let result = await worker.run(task, step, edit);
-      let changedPaths: string[] = [];
 
       if (result.status !== 'completed') {
         edit.restore(checkpoint);
@@ -70,29 +69,15 @@ export class Engine {
           result = { status: 'not-completed', reason: applied.reason, canContinue: true };
           this.pendingEdits.set(task.id, edit);
         } else {
-          changedPaths = applied.paths;
           this.pendingEdits.delete(task.id);
 
-          // Validation ownership is intentionally temporary here. It will be redistributed
-          // after the accumulated Edit mechanics have settled.
-          this.logger.info('validation.start', { taskId: task.id, stepId: step.id, changedPaths, presentation: this.validator.presentation });
-          const validation = await this.validator.validate({ task, step, result, changedPaths });
-          if (validation.status === 'passed') {
-            this.logger.info('validation.passed', {
-              taskId: task.id,
-              stepId: step.id,
-              checks: validation.checks,
-              presentation: this.validator.presentation,
-            });
+          this.logger.info('engine.test.start', { taskId: task.id, changedPaths: applied.paths });
+          const tested = await this.engineTest.run({ task, changedPaths: applied.paths });
+          if (tested.status === 'passed') {
+            this.logger.info('engine.test.passed', { taskId: task.id, tests: tested.tests });
           } else {
-            this.logger.warn('validation.failed', {
-              taskId: task.id,
-              stepId: step.id,
-              reason: validation.reason,
-              checks: validation.checks,
-              presentation: this.validator.presentation,
-            });
-            result = { status: 'not-completed', reason: validation.reason, canContinue: true };
+            this.logger.warn('engine.test.failed', { taskId: task.id, reason: tested.reason, tests: tested.tests });
+            result = { status: 'not-completed', reason: tested.reason, canContinue: true };
           }
         }
       }
