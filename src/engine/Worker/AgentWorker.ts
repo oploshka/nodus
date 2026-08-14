@@ -7,6 +7,7 @@ import type { Tool, ToolContext } from '@model/Tool/Tool.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
+import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 
 /** General-purpose bounded agent loop. Specialized workers may outperform it. */
 export class AgentWorker implements Worker {
@@ -26,7 +27,8 @@ export class AgentWorker implements Worker {
 
   public canHandle(_step: PlanStep): boolean { return true; }
 
-  public async run(task: Task, step: PlanStep): Promise<WorkerResult> {
+  public async run(task: Task, step: PlanStep, _edit: ProjectEditor): Promise<WorkerResult> {
+    // Agent tools still operate on the physical Project. Wiring them through task-local Edit is a later step.
     try {
       const result = await this.agent.run({
         message: [
