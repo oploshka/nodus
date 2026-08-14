@@ -62,12 +62,17 @@ export class ModelPlanner implements Planner {
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly nodusLanguage = 'en',
+    private readonly messageTemplate = '##message##',
   ) {}
 
   public async plan(task: Task): Promise<Plan> {
+    const message = renderMessageTemplate(
+      this.messageTemplate,
+      'Split this user request into the smallest useful set of executable semantic tasks.',
+    );
     const response = await callModel<PlannerModelResponse>(this.model, this.logger, {
       request: {
-        message: 'Split this user request into the smallest useful set of executable semantic tasks.',
+        message,
         data: task.description,
         format: ModelRequestFormat.Text,
         guidance: [
@@ -103,4 +108,11 @@ export class ModelPlanner implements Planner {
       })),
     };
   }
+}
+
+function renderMessageTemplate(template: string, message: string): string {
+  if (!template.includes('##message##')) {
+    throw new Error('Planner message template must contain ##message## marker.');
+  }
+  return template.replaceAll('##message##', message);
 }
