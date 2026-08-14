@@ -1,17 +1,29 @@
 # Engine
 
-`Engine.run()` координирует один task run. Он владеет исходным `Task`, global `Plan`, списком доступных Worker options и границами, где результат исполнения становится состоянием Project.
+`Engine.run()` координирует один task run. Он владеет `Task`, global `Plan`, выбором Worker, task-local Edit и моментом, когда накопленный результат становится физическим состоянием Project.
 
-Для каждого `PlanStep` Engine:
+Упрощённая логика:
 
-1. выбирает compatible Worker через `Determine`;
-2. передаёт Worker управление step;
-3. получает `WorkerResult`;
-4. если Worker подготовил semantic changes, передаёт их Engine-owned `ProjectEditor`;
-5. после успешного Edit проходит Validation boundary;
-6. реагирует на `completed / not-completed / failed` и решает, можно ли переходить к следующему step.
+```ts
+Engine(task) {
+  const edit = createEdit()
 
-Engine не знает конкретные Research-вопросы Worker, внутренний порядок Actions или provider transport. Technical Edit mechanics при этом принадлежат Engine, а не Worker.
+  for (step of plan) {
+    const checkpoint = edit.state()
+    const result = Worker.run(step, edit)
+
+    if (result.failed) {
+      edit.restore(checkpoint)
+      break
+    }
+  }
+
+  edit.apply()
+  EngineTest.run()
+}
+```
+
+Engine не знает конкретные Research-вопросы Worker, внутренний порядок Actions или provider transport. Он передаёт Worker task-local Edit как execution tool, но ownership `state / restore / apply` остаётся у Engine.
 
 ## Services
 
@@ -29,32 +41,34 @@ Engine не знает конкретные Research-вопросы Worker, вн
 
 Настоящий continuation API пока не реализован: новая пользовательская команда `продолжить` не является resume предыдущего Worker instance.
 
-## Execution samples
-
-Engine пишет execution samples и task statistics: task/step, candidates, выбранный Worker, outcomes, duration и доступные runtime metrics. Эти данные являются основой для будущих измерений Worker/Determine и model-capability экспериментов, но пока не образуют автоматическую execution policy.
-
 ## Edit ownership
 
-Worker возвращает `ProjectEditRequest` с semantic `path + instruction` и может указать preferred strategy. `ProjectEditor`:
+Один `ProjectEditor` живёт на протяжении Task. Worker может через него читать накопленное состояние и добавлять semantic changes, но Engine управляет checkpoint/restore/apply.
 
-- получает authoritative source;
-- применяет зарегистрированную `EditStrategy`;
-- держит coherent multi-file state в памяти;
+`ProjectEditor`:
+
+- materialize semantic intent через зарегистрированные `EditStrategy`;
 - выполняет technical recovery/fallback без повторного semantic reasoning Worker;
-- проверяет target paths и stale source перед записью;
-- начинает commit только после успешной подготовки полного набора;
+- готовит batch отдельно от накопленного state;
+- запускает `EditValidator` до принятия batch;
+- накапливает успешные изменения между PlanStep;
+- физически пишет их только в `apply()`;
 - при ошибке записи выполняет best-effort rollback уже записанных файлов.
 
 `range-replace`, exact `replace`, unified `diff` и full-file `edit` являются Engine EditStrategy, а не Worker Actions.
 
-Task-wide virtual workspace пока не реализован. Это отдельный следующий уровень ownership, где Engine потенциально сможет коммитить изменения только после завершения всей Task.
+## EngineTest
 
-## Validation
+После успешного `Edit.apply()` Engine запускает `EngineTest` — project-level проверку итогового результата Task.
 
-После Worker/Edit Engine проходит отдельную Validation boundary. Сейчас `PassValidator` только закрепляет lifecycle и всегда возвращает `passed`.
+`ResolveEngineTest` явно означает отсутствие реальной проверки. `TypecheckEngineTest` и `UnitEngineTest` выполняют настроенные пользователем команды; несколько проверок объединяются через `CompositeEngineTest`.
 
-Реальные validators, failure/recovery semantics и связь с commit/workspace ещё открыты. Подробности: [`validation.md`](validation.md).
+Проверка prepared changes до apply относится не к EngineTest, а к `EditValidator`.
+
+## Execution samples
+
+Engine пишет execution samples и task statistics: task/step, candidates, выбранный Worker, outcomes, duration и доступные runtime metrics. Эти данные являются основой для будущих измерений Worker/Determine и model-capability экспериментов, но пока не образуют автоматическую execution policy.
 
 ## Interaction / control points
 
-Engine является естественной control boundary между автономным execution и пользователем. Proposal approval, correction, async interrupt, pause/resume и timeout semantics пока не являются завершённым runtime API и остаются отдельным направлением разработки.
+Engine является естественной control boundary между автономным execution и пользователем. Partial apply после незавершённой Task, proposal approval, correction, async interrupt, pause/resume и timeout semantics пока не являются завершённым runtime API.
