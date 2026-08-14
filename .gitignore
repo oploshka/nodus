@@ -1,6 +1,6 @@
 node_modules/
 dist/
 .nodus/
-test/logs/*.log
+/log/**/*.log
 /target/benchmark/model-capabilities/runs/
 ./diff.txt
