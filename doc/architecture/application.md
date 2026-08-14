@@ -1,64 +1,66 @@
 # Application layer
 
-`app` is the process/composition layer. It reads external startup input, creates concrete services and starts Engine. It does not own task reasoning.
+`app` — process/composition layer. Он читает внешний startup input, создаёт concrete services и запускает Engine. Task reasoning этому слою не принадлежит.
 
 ## Startup
 
-`Main.ts` owns process-level input. The current CLI startup path is:
+`Main.ts` владеет process-level input. Текущий CLI startup path:
 
-1. parse command-line arguments;
-2. load external configuration;
-3. create app-level implementations such as the logger;
-4. create/open the shared Project instance needed by the CLI administrative `/scan` command;
-5. ask `Bootstrap.createEngine(...)` to compose and return Engine;
-6. start CLI with the ready Engine.
+1. разобрать command-line arguments;
+2. загрузить внешнюю configuration;
+3. создать app-level implementations, например logger;
+4. создать/открыть общий Project, необходимый административной CLI-команде `/scan`;
+5. вызвать `Bootstrap.createEngine(...)`, который собирает и возвращает Engine;
+6. запустить CLI с готовым Engine.
 
-`ConfigurationLoader` only reads/minimally validates external configuration and resolves the project root relative to the config file. Runtime defaults are intentionally not injected by the loader.
+`ConfigurationLoader` только читает и минимально валидирует внешний config и разрешает project root относительно config-файла. Runtime defaults намеренно не подмешиваются loader'ом.
 
-`Bootstrap` is the Engine composition root. It creates/wires model, Research, Planner and Worker dependencies and returns only `Engine`. Optional overrides exist for alternative startup configurations and tests.
+`Bootstrap` — composition root Engine. Он создаёт и связывает model, Research, Planner, Worker, Edit и Validation dependencies и наружу возвращает Engine. Overrides используются для альтернативной startup configuration и тестов.
 
-The temporary `/scan` command remains app-level administration and is not part of `Engine.run()` orchestration.
-
+Временная команда `/scan` остаётся app-level administration и не является частью `Engine.run()` orchestration.
 
 ## Language configuration
 
-The application accepts three independent language hints:
+Application принимает три независимых language hints:
 
-- `language.project` — preferred language for human-authored project text such as documentation and comments;
-- `language.nodus` — machine-facing language for Planner goals, constraints, Worker/Action contracts, Research questions/answers, edit instructions, summaries/reasons consumed by Nodus and other internal orchestration data;
-- `language.response` — language only for text whose direct consumer is the user, plus deterministic user-facing errors, interactions and console labels.
+- `language.project` — предпочтительный язык human-authored текста проекта: документации, комментариев и похожего содержимого;
+- `language.nodus` — machine-facing язык Planner goals/constraints, Worker/Action contracts, Research questions/answers, edit instructions и других внутренних orchestration данных;
+- `language.response` — язык текста, непосредственным потребителем которого является пользователь, включая deterministic user-facing errors и console labels.
 
-Language is selected by the consumer of generated data, not by a field name. In particular, a `summary` or `reason` passed from a Worker back to Engine is `language.nodus`, while human-authored documentation/comments written into the project use `language.project`.
+Язык определяется потребителем данных, а не названием поля. Например, `summary`, который Worker возвращает Engine, относится к `language.nodus`, а комментарий, записываемый в пользовательский проект, — к `language.project`.
 
-The current recommended/default internal Nodus language is English because project identifiers and source-code search terms are usually English. The user task itself may be written in any language. Central enforcement of this default is planned for the model layer; some callers still add the language guidance themselves.
+Рекомендуемый/default internal language Nodus — English, поскольку identifiers и source-code search terms обычно английские. Пользовательская task может быть написана на любом языке. Общая machine-facing policy централизована в model layer; component-specific prompts отвечают только за собственную semantic guidance.
 
 ## Logging
 
-Concrete logger implementations live in `app/Logging`. Engine owns only the shared logging contract in `engine/Type`. `ConsoleLogger` renders compact human progress (`Engine / Planner / Worker / Research / Model`), while `FileLogger` keeps the full diagnostic event payload including model exchange data.
+Concrete logger implementations находятся в `app/Logging`. Engine владеет только общим logging contract в `engine/Type`.
+
+`ConsoleLogger` показывает компактный human-readable progress, а `FileLogger` сохраняет полный diagnostic event payload, включая model exchange.
+
 ## CLI input
 
-Interactive CLI input is multiline: `Enter` inserts a new line, while `Ctrl+Enter` or `Ctrl+D` submits the buffered task. `Ctrl+C` cancels the current input. Terminal task status and deterministic execution metrics are emitted by Engine/Console presentation rather than duplicated by the CLI after `Engine.run()`.
+Interactive CLI input поддерживает multiline режим:
 
+- `Enter` добавляет новую строку;
+- `Ctrl+Enter` или `Ctrl+D` отправляет task;
+- `Ctrl+C` отменяет непустой input;
+- `Ctrl+C` на пустом prompt завершает CLI;
+- `/exit` остаётся явной командой выхода.
 
-## CLI diagnostics and startup flags
+Terminal task status и deterministic execution metrics формируются Engine/Presentation и не дублируются CLI после `Engine.run()`.
 
-The interactive CLI keeps console output intentionally compact, while a `FileLogger`
-records the complete nested event payload (including model request/response exchange)
-into one timestamped `.nodus/logs/*-nodus.log` file for the process run. The file path
-is printed at startup so the log can be attached directly when debugging.
+## CLI diagnostics и startup flags
 
-Supported startup flags:
+`FileLogger` пишет один timestamped `.nodus/logs/*-nodus.log` для process run. Путь к нему показывается при startup.
 
-- `--clear-cache` removes the persisted project index and Research cache before opening the project;
-- `--clear-logs` removes previous `.nodus/logs` before creating the current run log;
-- `--scan` forces a scan when the project is configured with manual scanning. With `scanMode: on-open`, opening the project already performs a fresh scan.
+Поддерживаемые flags:
 
-The project index is not only diagnostic state: Research candidate-file selection uses
-it directly, so an available/current scan affects runtime Research behavior.
+- `--clear-cache` удаляет persisted project index и Research cache перед открытием Project;
+- `--clear-logs` удаляет предыдущие `.nodus/logs` перед созданием текущего run log;
+- `--scan` принудительно запускает scan при manual scan mode. При `scanMode: on-open` Project и так сканируется при открытии.
 
-In raw multiline mode, `Ctrl+C` cancels a non-empty input. Pressing `Ctrl+C` at an
-empty prompt exits the CLI. `/exit` remains available as an explicit command.
+Project index является runtime dependency Research candidate selection, а не только диагностическим состоянием.
 
 ## Console output
 
-Полный контракт человекочитаемого вывода, иерархии, Presentation, Model metrics, Edit-блоков и task-level summary зафиксирован отдельно в [`doc/CONSOLE-OUTPUT.md`](../../doc/CONSOLE-OUTPUT.md). `ConsoleLogger` остаётся renderer-ом; диагностические payload и model exchange принадлежат `FileLogger`.
+Контракт human-readable вывода, Presentation hierarchy, Model metrics, Edit blocks и task-level summary описан в [`console-output.md`](console-output.md). `ConsoleLogger` остаётся renderer'ом, а полный diagnostic payload и model exchange принадлежат `FileLogger`.
