@@ -1,5 +1,6 @@
 import type { ProjectConfiguration, WorkerConfiguration } from '@engine/Type/EngineConfiguration.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
+import type { ValidationConfiguration } from '@engine/Validation/ValidationConfiguration.js';
 import type { ModelConfiguration } from '@model/Type/ModelConfiguration.js';
 
 /**
@@ -10,5 +11,6 @@ export interface AppConfiguration {
   project: ProjectConfiguration;
   model: ModelConfiguration;
   runtime?: WorkerConfiguration;
+  validation?: ValidationConfiguration;
   language?: Partial<LanguageConfiguration>;
 }
