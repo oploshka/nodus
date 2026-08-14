@@ -1,4 +1,4 @@
-# Model tests
+# Тестирование с реальной моделью
 
 Тесты с реальной моделью используют тот же `target/test-framework` и Scenario contracts, что deterministic integration suite.
 
@@ -11,3 +11,5 @@ npm run test:model
 ```
 
 Model tests не должны менять Scenario contract только ради конкретной модели; model-specific настройки передаются через configuration/harness.
+
+Сейчас отдельный набор файлов в `test/model` не закреплён: команда сохраняется как явная test boundary и может оставаться пустой до появления актуальных model scenarios.
