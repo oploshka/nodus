@@ -43,7 +43,6 @@ npm run dev:project
 - [Edit](doc/architecture/edit.md)
 - [EngineTest](doc/architecture/engine-test.md)
 - [Model](doc/architecture/model.md)
-- [Validation](doc/architecture/validation.md)
 - [Roadmap](doc/development/roadmap.md)
 - [Принципы разработки](doc/project/principles.md)
 - [Глоссарий](doc/project/glossary.md)
