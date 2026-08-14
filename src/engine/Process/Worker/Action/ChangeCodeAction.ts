@@ -25,6 +25,7 @@ interface ChangeDecision {
 export interface ChangeCodeActionProfile {
   purpose: string;
   guidance: string;
+  adaptationGuidance?: ReadonlyArray<string>;
   language: LanguageConfiguration;
   strategy: EditStrategyId;
 }
@@ -92,6 +93,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
         format: ModelRequestFormat.Json,
         guidance: [
           this.profile.guidance,
+          ...(this.profile.adaptationGuidance ?? []),
           ...new ModelLanguagePolicy(this.profile.language).mixedProjectEdit(),
           'This Action only describes what must change. Do not generate diff, replacement blocks, line ranges, or complete file contents.',
           'Treat summary and reason as internal Nodus fields.',
