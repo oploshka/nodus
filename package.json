@@ -12,6 +12,7 @@
     "test:integration": "vitest run --project integration",
     "test:model": "vitest run --project model --passWithNoTests",
     "test:e2e": "vitest run --project e2e --passWithNoTests",
+    "check:docs": "tsx scripts/check-docs.ts",
     "dev": "tsx src/app/Main.ts",
     "benchmark:raw-agent": "tsx target/benchmark/RawAgentBenchmark.ts",
     "benchmark:model-capabilities": "tsx target/benchmark/model-capabilities/ModelCapabilityBenchmark.ts",
