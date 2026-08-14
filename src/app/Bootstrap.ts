@@ -14,11 +14,12 @@ import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEdit
 import { ReplaceEditStrategy } from '@engine/Edit/Strategy/ReplaceEditStrategy.js';
 import { DiffEditStrategy } from '@engine/Edit/Strategy/DiffEditStrategy.js';
 import { FullFileEditStrategy } from '@engine/Edit/Strategy/FullFileEditStrategy.js';
-import { CommandValidationCheck } from '@engine/Validation/CommandValidationCheck.js';
-import { CompositeValidator } from '@engine/Validation/CompositeValidator.js';
-import { JsonValidationCheck } from '@engine/Validation/JsonValidationCheck.js';
-import type { ValidationCheck } from '@engine/Validation/ValidationCheck.js';
-import type { Validator } from '@engine/Validation/Validator.js';
+import type { EngineTest } from '@engine/EngineTest/EngineTest.js';
+import { ResolveEngineTest } from '@engine/EngineTest/ResolveEngineTest.js';
+import { CompositeEngineTest } from '@engine/EngineTest/CompositeEngineTest.js';
+import { UnitEngineTest } from '@engine/EngineTest/UnitEngineTest.js';
+import { TypecheckEngineTest } from '@engine/EngineTest/TypecheckEngineTest.js';
+import type { CommandEngineTest } from '@engine/EngineTest/CommandEngineTest.js';
 import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import { DocumentationWorker } from '@engine/Worker/DocumentationWorker.js';
@@ -39,7 +40,7 @@ export interface BootstrapOverrides {
   logger?: EngineLogger;
   model?: ModelAdapter;
   project?: Project;
-  validator?: Validator;
+  engineTest?: EngineTest;
 }
 
 /** Composition root for Engine dependencies. */
@@ -123,19 +124,17 @@ export class Bootstrap {
       workers,
       new ModelDetermine(model, logger, language.nodus),
       createEdit,
-      overrides.validator ?? createValidator(configuration, project),
+      overrides.engineTest ?? createEngineTest(configuration, project),
       logger,
     );
   }
 }
 
-function createValidator(configuration: AppConfiguration, project: Project): Validator {
-  const checks: ValidationCheck[] = [];
-  if (configuration.validation?.json !== false) checks.push(new JsonValidationCheck(project));
-  for (const command of configuration.validation?.commands ?? []) {
-    checks.push(new CommandValidationCheck(project.root, command));
-  }
-  return new CompositeValidator(checks);
+function createEngineTest(configuration: AppConfiguration, project: Project): EngineTest {
+  const tests: CommandEngineTest[] = [];
+  if (configuration.engineTest?.typecheck) tests.push(new TypecheckEngineTest(project.root, configuration.engineTest.typecheck));
+  if (configuration.engineTest?.unit) tests.push(new UnitEngineTest(project.root, configuration.engineTest.unit));
+  return tests.length === 0 ? new ResolveEngineTest() : new CompositeEngineTest(tests);
 }
 
 function resolveLanguageConfiguration(configuration: AppConfiguration): LanguageConfiguration {
