@@ -4,6 +4,7 @@ import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import { FileLogger } from '@app/Logging/Logger.js';
 import { Project } from '@engine/Project/Project.js';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
+import { ProcessInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
@@ -79,7 +80,6 @@ const PROFILE = {
   ].join('\n'),
   language: LANGUAGE,
 };
-
 
 /**
  * Benchmark-only Project implementation.
@@ -441,7 +441,6 @@ async function runCase(
   const project = new InMemoryBenchmarkProject(`model-capability-${benchmarkCase.id}`, benchmarkCase.files, logger);
 
   try {
-
     const delegate = new OpenAICompatibleModelAdapter(
       configuration.model.endpoint,
       configuration.model.apiKey,
@@ -458,16 +457,17 @@ async function runCase(
       constraints: ['Apply exactly the supplied benchmark edit.', 'Do not change unrelated content.'],
       decompositionType: 'coherent-outcome',
     };
+    const editor = new ProjectEditor(project, logger, [createEditStrategy(strategy, project, model, logger)]);
+    const instrument = new ProcessInstrument(project, editor);
 
     logger.info('benchmark.case.start', { strategy, caseId: benchmarkCase.id, repeat, edits: benchmarkCase.edits });
     const startedAt = performance.now();
     let run: WorkerResult;
     try {
-      run = await worker.run(task, step);
-      if (run.status === 'completed' && run.edit) {
+      run = await worker.run({ task, step }, instrument);
+      if (run.status === 'completed') {
         const summary = run.summary;
-        const editor = new ProjectEditor(project, logger, [createEditStrategy(strategy, project, model, logger)]);
-        const editResult = await editor.apply(task, step, run.edit);
+        const editResult = await editor.apply();
         run = editResult.status === 'completed'
           ? { status: 'completed', summary }
           : { status: 'not-completed', reason: editResult.reason, canContinue: true };
@@ -514,7 +514,6 @@ async function runCase(
     // Project state exists only in memory; only the three run artifacts are persisted.
   }
 }
-
 
 async function appendEditDiagnostics(
   editsLogPath: string,
