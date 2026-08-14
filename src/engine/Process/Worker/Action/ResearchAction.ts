@@ -16,12 +16,12 @@ export class ResearchAction implements WorkerAction<ResearchActionInput, Researc
 
   public constructor(
     private readonly research: Pick<Research, 'ask'>,
-    private readonly guidance = [
-      'Answer exactly one bounded implementation question about the current project.',
-      'Do not broaden the task, propose unrelated changes, or invent project facts.',
-      'Prefer concrete file paths, identifiers, existing APIs and current project conventions.',
-    ].join('\n'),
-  ) {}
+    guidance: ReadonlyArray<string> = [],
+  ) {
+    this.guidance = guidance.join('\n');
+  }
+
+  private readonly guidance: string;
 
   public async run(input: ResearchActionInput): Promise<ActionResult<ResearchAnswer>> {
     try {
