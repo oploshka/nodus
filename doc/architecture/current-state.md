@@ -7,7 +7,7 @@
 Верхние слои:
 
 - `app` — startup, composition, CLI и concrete logging;
-- `engine` — task lifecycle, Planner, Determine, Worker, Research, Edit и Validation;
+- `engine` — task lifecycle, Planner, Determine, Worker, Research, Edit и EngineTest;
 - `model` — граница с LLM/provider transport, response formats/schema, `ModelRunner`/`ModelCaller` и model capabilities.
 
 Текущая логика Engine:
@@ -28,7 +28,7 @@ Engine(task) {
   // ...
 
   edit.apply()
-  Validation.run() // временная post-apply граница
+  EngineTest.run()
 }
 ```
 
@@ -45,7 +45,7 @@ Planner строит небольшой semantic plan. `PlanStep` описыва
 - `dependency`;
 - `separate-deliverable`.
 
-Файлы, слои, Research, Validation и другие technical phases сами по себе не являются причиной создавать отдельный `PlanStep`.
+Файлы, слои, Research, Edit validation и EngineTest сами по себе не являются причиной создавать отдельный `PlanStep`.
 
 ## Worker / Actions
 
@@ -69,12 +69,12 @@ Research, вызванный из `IterativeWorker`, может читать sou
 
 ## Engine-owned Edit
 
-`ProjectEditor` создаётся отдельно для Task и хранит простую map существующих изменённых файлов: original content + current task-local content.
+`ProjectEditor` создаётся отдельно для Task и хранит map существующих изменённых файлов: original content + current task-local content.
 
 Основные операции:
 
 - `read(path)` — task-local content, затем Project;
-- `change(...)` — materialize semantic intent через EditStrategy и накопить результат;
+- `change(...)` — materialize semantic intent через EditStrategy, проверить batch через `EditValidator` и только потом накопить результат;
 - `state()` / `restore()` — step-level checkpoint;
 - `apply(state?)` — физически записать накопленное состояние.
 
@@ -87,13 +87,22 @@ Research, вызванный из `IterativeWorker`, может читать sou
 
 Technical recovery/fallback остаётся внутри Edit. Последующие изменения одного файла работают относительно уже накопленного content.
 
+`EditValidator` проверяет подготовленный batch до попадания в task-local state. `JsonEditValidationCheck` сейчас трактует strict JSON parse failure как warning, а не blocking failure.
+
 `AgentWorker` также подключает `file-system read/write` к Edit. Search/Terminal/Git пока продолжают видеть физический Project. Create/delete/move в task-local Edit пока не поддержаны.
 
-## Validation
+## EngineTest
 
-Обычный Bootstrap использует `CompositeValidator` с bounded deterministic `ValidationCheck` (`JsonValidationCheck`, configured `CommandValidationCheck`; `PassValidator` остаётся compatibility/test implementation).
+После успешного `Edit.apply()` Engine запускает `EngineTest` — общую project-level проверку результата Task.
 
-Validation пока оставлена после `Edit.apply()` как временная граница. Распределение между будущим `EditValidator`, Worker-level testing и итоговыми Engine checks ещё не определено и сознательно отложено до стабилизации Edit mechanics.
+Текущие реализации:
+
+- `ResolveEngineTest` — явный no-op success;
+- `TypecheckEngineTest` — configured typecheck command;
+- `UnitEngineTest` — configured unit-test command;
+- `CompositeEngineTest` — последовательный запуск нескольких EngineTest.
+
+Конкретные команды задаются конфигурацией. Старый общий слой `Validation` больше не является runtime boundary: его обязанности разделены между `EditValidator` и `EngineTest`.
 
 ## Project paths и internal storage
 
@@ -131,8 +140,8 @@ Deterministic integration scenarios фиксируют runtime boundaries, а н
 ## Ближайшие направления
 
 1. стабилизировать task-local Edit mechanics и чтение накопленного состояния;
-2. перераспределить Validation после того, как станет понятна новая граница Edit;
-3. определить partial apply / user decision при незавершённой Task;
+2. определить partial apply / user decision при незавершённой Task;
+3. решить, нужна ли Worker-level TestAction как optional capability;
 4. Research v2 и task-local cache/hash semantics при реальной необходимости;
 5. Planner decomposition и будущий replanning;
 6. model capability measurements;
