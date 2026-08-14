@@ -7,6 +7,17 @@ export default defineConfig({
   resolve: {
     alias: {
       '@app': `${root}src/app`,
+      '@engine/Planner': `${root}src/engine/Process/Planner`,
+      '@engine/Determine': `${root}src/engine/Process/Determine`,
+      '@engine/Worker': `${root}src/engine/Process/Worker`,
+      '@engine/Research': `${root}src/engine/Process/Research`,
+      '@engine/Edit': `${root}src/engine/Process/Edit`,
+      '@engine/EngineTest': `${root}src/engine/Process/EngineTest`,
+      '@engine/Task': `${root}src/engine/Common/Task`,
+      '@engine/Project': `${root}src/engine/Common/Project`,
+      '@engine/Presentation': `${root}src/engine/Common/Presentation`,
+      '@engine/Language': `${root}src/engine/Common/Language`,
+      '@engine/Metrics': `${root}src/engine/Common/Metrics`,
       '@engine': `${root}src/engine`,
       '@model': `${root}src/model`,
       '@test': `${root}test`,
