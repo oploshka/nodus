@@ -1,14 +1,34 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
-    // Явно подключаем типы Node для этой папки
-    "types": ["node"],
     "paths": {
-      "@core/*": ["src/core/*"],
-      "@knowledge/*": ["src/knowledge/*"],
-      "@project/*": ["src/project/*"],
-      "@model/*": ["src/model/*"],
-      "@tool/*": ["src/tool/*"]
+      "@app/*": [
+        "src/app/*"
+      ],
+      "@engine/*": [
+        "src/engine/*"
+      ],
+      "@model/*": [
+        "src/model/*"
+      ],
+      "@test/*": [
+        "test/*"
+      ],
+      "@target/*": [
+        "target/*"
+      ],
+      "@benchmark/*": [
+        "target/benchmark/*"
+      ],
+      "@mock/*": [
+        "target/mock/*"
+      ],
+      "@project/*": [
+        "target/project/*"
+      ],
+      "@test-framework/*": [
+        "target/test-framework/*"
+      ]
     }
   }
 }

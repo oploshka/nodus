@@ -1,3 +1,11 @@
+import type { ModelRequest } from '@model/Request/ModelRequest.js';
+
+export interface RawModelResponse {
+  content: string;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  finishReason?: string;
+}
+
 export interface ModelAdapter {
-  send(prompt: string): Promise<string>;
+  complete(request: ModelRequest): Promise<RawModelResponse>;
 }

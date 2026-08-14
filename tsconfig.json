@@ -2,28 +2,30 @@
   "extends": "./tsconfig.paths.json",
   "compilerOptions": {
     "target": "ES2022",
-
-    // Разрешает опускать расширения .js/.ts внутри динамических импортов
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    // "allowSyntheticDefaultImports": true, // Разрешает импорт ESM модулей в CJS рантайме
-
-    //
-    "lib": ["ES2022"],
-//    "ignoreDeprecations": "6.0",
-    "declaration": true,
-    "emitDeclarationOnly": false,
-    "outDir": "dist"
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": [
+      "node"
+    ]
   },
   "include": [
-    "src/**/*",
-    "test/**/*",
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "target/benchmark/**/*.ts",
+    "target/test-framework/**/*.ts",
+    "target/mock/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
     "dist",
+    "node_modules"
   ]
 }

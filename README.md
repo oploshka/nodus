@@ -1,156 +1,65 @@
-# Nodus
+# Nodus 0.4
 
-> Understand before you generate.
+Nodus — экспериментальный runtime для локальных coding-моделей. Проект исследует, где должна проходить граница между semantic reasoning модели и обязанностями, которые надёжнее выполнять или контролировать на уровне runtime. Для решений, остающихся за моделью, отдельная задача Nodus — предоставить релевантное понимание конкретного проекта: существующие реализации, ограничения, соглашения и другие знания, необходимые для задачи.
 
-Nodus — экспериментальная среда разработки, предназначенная для работы человека и LLM с учетом контекста, структуры и инженерных знаний конкретного проекта.
+Nodus не предполагает, что правильное разделение ответственности между моделью и runtime известно заранее. Текущие границы `Engine`, `Planner`, `Determine`, `Worker`, `Research`, Engine-owned Edit и Validation являются результатом экспериментов и продолжают проверяться реальными задачами и benchmark'ами.
 
-Главная идея Nodus — не заставить LLM генерировать больше кода, а дать ей возможность **понимать существующий проект и работать по его образцу**.
+Версия 0.4 обозначает следующий этап этого исследования: после формирования основных runtime boundaries проект отдельно фиксирует причины их появления, восстанавливает линию Project Understanding и начинает явнее разделять current architecture, research hypotheses, failure classes и исторические решения.
 
-## Основная идея
+Подробнее исходная мотивация и две исторические линии проекта — runtime control и Project Understanding — описаны в [`doc/history/origin.md`](doc/history/origin.md).
 
-Современная LLM хорошо умеет решать отдельные задачи, но плохо знает конкретный проект:
+## Быстрый старт
 
-- почему архитектура устроена именно так;
-- какие решения уже существуют;
-- какие подходы приняты в проекте;
-- какие существуют исключения;
-- как обычно реализуются похожие задачи;
-- какие изменения безопасны, а какие могут нарушить существующие договоренности.
+```bash
+npm install
+npm run test:unit
+npm run test:integration
+npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
+npm run dev:project
+```
 
-Nodus должен постепенно формировать и поддерживать это понимание.
-
-Вместо:
-
-~~~text
-Task → LLM → Code
-~~~
-
-целевая модель выглядит примерно так:
-
-~~~text
-Task
-  ↓
-Project Knowledge
-  ↓
-Relevant Context
-  ↓
-Existing Examples
-  ↓
-LLM
-  ↓
-Tools
-  ↓
-Verification
-~~~
-
-## Что Nodus пытается решить
-
-Nodus исследует возможность вынести часть инженерного понимания проекта из головы разработчиков в систему, которую могут использовать как человек, так и различные LLM.
-
-Цель — не заменить разработчика и не создать «идеального AI-архитектора».
-
-Цель — сделать так, чтобы модель могла:
-
-1. понять, как устроен конкретный проект;
-2. найти существующие решения, похожие на текущую задачу;
-3. следовать существующим паттернам вместо изобретения новых;
-4. изменять проект через инструменты;
-5. проверять результат;
-6. задавать вопросы, когда существующего знания недостаточно;
-7. постепенно накапливать новое понимание проекта.
-
-## Принципы
-
-### Project first
-
-Nodus не должен навязывать проекту абстрактную «правильную архитектуру».
-
-Существующий проект и его реальные решения являются главным источником контекста.
-
-### Examples over rules
-
-Предпочтение отдается существующим примерам и паттернам проекта.
-
-Жесткие правила используются только там, где они действительно необходимы.
-
-### Model agnostic
-
-LLM является заменяемым компонентом.
-
-Nodus не должен зависеть от конкретной модели или поставщика API.
-
-### Uncertainty is information
-
-Если система не понимает, почему принято определенное решение, она не должна автоматически считать свое предположение фактом.
-
-Неизвестность должна быть явной и при необходимости превращаться в вопрос.
-
-### Human in the loop
-
-Nodus помогает принимать и выполнять решения, но не предполагает безусловную автономность.
-
-Разработчик остается частью процесса.
-
-## Основной сценарий первой версии
-
-Первый практический сценарий Nodus:
-
-> Добавить новую сущность в существующий проект по образцу уже реализованных сущностей.
-
-Например:
-
-~~~text
-Новая сущность
-    ↓
-Найти похожие реализации
-    ↓
-Изучить существующий паттерн
-    ↓
-Сформировать план изменений
-    ↓
-Изменить проект
-    ↓
-Проверить результат
-    ↓
-Показать diff
-~~~
-
-Этот сценарий используется как первая проверка основной гипотезы Nodus.
-
-## Основные компоненты
-
-На текущем этапе предполагаются следующие концепции:
-
-- **Knowledge** — знания о проекте;
-- **File Understanding** — понимание назначения и роли файлов;
-- **Context Builder** — формирование контекста для LLM;
-- **Policies** — мягкие правила и предпочтения проекта;
-- **Tools** — операции над проектом;
-- **Model Adapter** — абстракция над конкретной LLM;
-- **Agent Runtime** — цикл выполнения задачи;
-- **Verification** — проверка результата.
-
-Архитектура и определения этих компонентов находятся в `docs/`.
-
-## Статус
-
-Проект находится на стадии формирования архитектуры и проверки концепции.
-
-Текущая задача — определить минимальный набор компонентов, необходимый для первого рабочего прототипа, не создавая преждевременно сложную инфраструктуру.
+Для локальной модели example config ожидает OpenAI-compatible endpoint. Полный runtime log создаётся в `.nodus/logs/`.
 
 ## Документация
 
-- [План разработки](docs/PLAN.md)
-- [Архитектура](docs/ARCHITECTURE.md)
-- [Основные концепции](docs/CONCEPTS.md)
-- [Принятые решения](docs/DECISIONS.md)
+Документация разделена по статусу знания:
 
-## Название
+- [`doc/architecture/`](doc/architecture/) — как Nodus работает сейчас;
+- [`doc/development/`](doc/development/) — roadmap, benchmark practice и активная разработка;
+- [`doc/project/`](doc/project/) — conventions, terminology и устойчивые правила разработки Nodus;
+- [`doc/history/`](doc/history/) — происхождение проекта, архитектурная эволюция, решения и прошлые сценарии;
+- [`doc/research/`](doc/research/) — гипотезы, failure classes и ещё не утверждённые направления.
 
-**Nodus** — от латинского *nodus*, «узел».
+Правила структуры, языка и именования описаны в [`doc/project/documentation.md`](doc/project/documentation.md).
 
-Название отражает идею проекта как системы взаимосвязанных знаний, решений, компонентов и зависимостей.
+### Основные документы
 
----
+- [Текущее состояние](doc/architecture/current-state.md)
+- [Архитектура](doc/architecture/architecture.md)
+- [Application](doc/architecture/application.md)
+- [Engine](doc/architecture/engine.md)
+- [Planner](doc/architecture/planner.md)
+- [Worker](doc/architecture/worker.md)
+- [Edit](doc/architecture/edit.md)
+- [Model](doc/architecture/model.md)
+- [Validation](doc/architecture/validation.md)
+- [Roadmap](doc/development/roadmap.md)
+- [Принципы разработки](doc/project/principles.md)
+- [Глоссарий](doc/project/glossary.md)
+- [Conventions проекта](doc/project/conventions.md)
+- [Происхождение Nodus](doc/history/origin.md)
+- [Эволюция проекта](doc/history/evolution.md)
+- [Журнал архитектурных решений](doc/history/decisions.md)
+- [Архитектурная эволюция / research](doc/research/architecture-evolution.md)
+- [Каталог failure classes](doc/research/failure-catalog.md)
 
-> Nodus is an experiment in making project understanding a first-class part of software development.
+### Тестирование и benchmark
+
+- [Target workspace](target/target-workspace.md)
+- [Test framework](target/test-framework/test-framework.md)
+- [Testing](test/testing.md)
+- [Model tests](test/model/model-tests.md)
+- [E2E tests](test/e2e/e2e-tests.md)
+- [Benchmarking](doc/development/benchmarking.md)
+- [Raw-agent benchmark](target/benchmark/raw-agent.md)
+- [Model capabilities](target/benchmark/model-capabilities/model-capabilities.md)
