@@ -1,7 +1,12 @@
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
-import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
+import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
+
+export interface WorkerRunData {
+  task: Task;
+  step: PlanStep;
+}
 
 export type WorkerResult =
   | { status: 'completed'; summary: string }
@@ -20,8 +25,8 @@ export interface Worker {
 
   canHandle(step: PlanStep): boolean;
   /**
-   * Edit is a task-local Engine tool. Workers may use it during execution, but Engine keeps
-   * ownership of checkpoint/restore/apply. The interface can be narrowed later when usage stabilizes.
+   * Process data and Engine-owned instruments are separate contracts. Worker only sees the
+   * capabilities declared by WorkerInstrument; Engine keeps checkpoint/restore/apply ownership.
    */
-  run(task: Task, step: PlanStep, edit: ProjectEditor): Promise<WorkerResult>;
+  run(data: WorkerRunData, instrument: WorkerInstrument): Promise<WorkerResult>;
 }

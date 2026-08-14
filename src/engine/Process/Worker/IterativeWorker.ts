@@ -1,14 +1,13 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
-import type { Task } from '@engine/Task/Task.js';
 import type { ChangeCodeActionData, ChangeCodeActionInput, ResearchActionRequest } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
-import type { Worker, WorkerResult } from '@engine/Worker/Worker.js';
+import type { Worker, WorkerResult, WorkerRunData } from '@engine/Worker/Worker.js';
 import type { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import type { ModelRunSettings } from '@model/Request/ModelRun.js';
-import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
+import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
 
 interface WorkerSession {
   knowledge: ResearchAnswer[];
@@ -45,7 +44,9 @@ export abstract class IterativeWorker implements Worker {
 
   public canHandle(_step: PlanStep): boolean { return true; }
 
-  public async run(task: Task, step: PlanStep, edit: ProjectEditor): Promise<WorkerResult> {
+  public async run(data: WorkerRunData, instrument: WorkerInstrument): Promise<WorkerResult> {
+    const { task, step } = data;
+    const { edit } = instrument;
     const sessionKey = `${task.id}:${step.id}`;
     const session = this.sessions.get(sessionKey) ?? { knowledge: [] };
     this.sessions.set(sessionKey, session);

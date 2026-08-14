@@ -1,13 +1,12 @@
 import type { PlanStep } from '@engine/Planner/Plan.js';
-import type { Task } from '@engine/Task/Task.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { Worker, WorkerResult } from '@engine/Worker/Worker.js';
+import type { Worker, WorkerResult, WorkerRunData } from '@engine/Worker/Worker.js';
 import type { AgentRunner } from '@model/Runner/AgentRunner.js';
 import type { Tool, ToolContext } from '@model/Tool/Tool.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
-import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
+import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
 
 /** General-purpose bounded agent loop. Specialized workers may outperform it. */
 export class AgentWorker implements Worker {
@@ -27,7 +26,9 @@ export class AgentWorker implements Worker {
 
   public canHandle(_step: PlanStep): boolean { return true; }
 
-  public async run(task: Task, step: PlanStep, edit: ProjectEditor): Promise<WorkerResult> {
+  public async run(data: WorkerRunData, instrument: WorkerInstrument): Promise<WorkerResult> {
+    const { task, step } = data;
+    const { edit } = instrument;
     try {
       const result = await this.agent.run({
         message: [

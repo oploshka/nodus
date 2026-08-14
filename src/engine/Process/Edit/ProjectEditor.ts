@@ -95,8 +95,6 @@ export class ProjectEditor {
       return { status: 'not-completed', reason: `Unknown edit strategy: ${request.strategy}` };
     }
 
-    // Prepare the complete request against a draft copy. Accumulated Edit state changes only
-    // after the whole batch has materialized and EditValidator has accepted it.
     const draft = this.cloneFiles(this.files);
     const touched = new Set<string>();
     let operations = 0;
@@ -162,7 +160,7 @@ export class ProjectEditor {
 
     const candidates: EditCandidate[] = [...touched]
       .map((path) => draft.get(path))
-      .filter((file): file is BufferedFile => Boolean(file) && file.current !== file.original)
+      .filter((file): file is BufferedFile => file !== undefined && file.current !== file.original)
       .map((file) => ({ path: file.path, content: file.current }));
     if (candidates.length === 0) {
       return { status: 'not-completed', reason: 'Edit preparation produced no project changes.' };
@@ -175,8 +173,6 @@ export class ProjectEditor {
       return { status: 'not-completed', reason: this.validationFailureReason(failed) };
     }
 
-    // Atomic batch accumulation: warnings are preserved in logs, but only blocking validation
-    // prevents the prepared request from becoming the next Edit state.
     this.files = draft;
 
     this.logger.info('engine.edit.prepare.finish', {
@@ -196,17 +192,14 @@ export class ProjectEditor {
     };
   }
 
-  /** Snapshot the accumulated task-local changes for step-level rollback. */
   public state(): EditState {
     return this.cloneFiles(this.files);
   }
 
-  /** Restore a previously captured task-local state. */
   public restore(state: EditState): void {
     this.files = this.cloneFiles(state);
   }
 
-  /** Physically write the accumulated task-local changes to Project. */
   public async apply(state: EditState = this.state()): Promise<ProjectEditResult> {
     const changes: PreparedProjectChange[] = [...state.values()]
       .filter((file) => file.current !== file.original)

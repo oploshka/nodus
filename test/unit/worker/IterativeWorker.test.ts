@@ -8,6 +8,8 @@ import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.j
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
+import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
+import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
 
 class SequenceChangeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
   public readonly id = 'change-code';
@@ -41,6 +43,12 @@ function answer(question: string): ResearchAnswer {
   return { question, status: 'resolved', answer: `answer:${question}`, sources: [], createdAt: new Date(0).toISOString() };
 }
 
+function instrument(): WorkerInstrument {
+  return { edit: {} as ProjectEditor };
+}
+
+const step = { id: 's1', goal: 'goal', constraints: [], decompositionType: 'coherent-outcome' } as const;
+
 describe('Iterative Worker action lifecycle', () => {
   it('starts with change action, runs requested Research action, then retries the same task', async () => {
     const change = new SequenceChangeAction([
@@ -55,7 +63,7 @@ describe('Iterative Worker action lifecycle', () => {
     const research = new ScriptedResearchAction();
     const worker = new CodeWorker(change, research, new NullLogger(), 3, 2);
 
-    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [], decompositionType: 'coherent-outcome' });
+    const result = await worker.run({ task: new Task('task', 'p'), step }, instrument());
 
     expect(result.status).toBe('completed');
     expect(research.asked).toEqual(['Where is CLI dispatch?']);
@@ -67,7 +75,7 @@ describe('Iterative Worker action lifecycle', () => {
     const research = new ScriptedResearchAction();
     const worker = new CodeWorker(change, research, new NullLogger(), 3, 2);
 
-    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [], decompositionType: 'coherent-outcome' });
+    const result = await worker.run({ task: new Task('task', 'p'), step }, instrument());
 
     expect(result.status).toBe('completed');
     expect(research.asked).toHaveLength(0);
@@ -86,7 +94,7 @@ describe('Iterative Worker action lifecycle', () => {
     }]);
     const worker = new CodeWorker(change, new ScriptedResearchAction(), new NullLogger(), 3, 1);
 
-    const result = await worker.run(new Task('task', 'p'), { id: 's1', goal: 'goal', constraints: [], decompositionType: 'coherent-outcome' });
+    const result = await worker.run({ task: new Task('task', 'p'), step }, instrument());
     expect(result.status).toBe('not-completed');
   });
 });
