@@ -1,8 +1,10 @@
 # Архитектурная эволюция: рабочие гипотезы
 
+**Статус:** рабочий research-документ; описанные направления не являются текущим runtime contract.
+
 Этот документ сохраняет направления, возникшие при разборе истории Nodus, но ещё не являющиеся текущей архитектурой. Он нужен, чтобы полезные ранние идеи не потерялись при переписывании runtime.
 
-## Project Understanding как first-class проблема
+## Project understanding как first-class проблема
 
 Одна из исходных идей Nodus: модели недостаточно видеть только файлы текущей задачи. В зрелом проекте важны локальные правила — почему архитектура устроена именно так, какие решения уже существуют, какие исключения приняты и как в проекте обычно решаются похожие задачи.
 
@@ -18,23 +20,9 @@
 
 Classifier потенциально может также различать простые задачи. Это не обязательно означает нулевой overhead: дополнительная классификация и проверки стоят model call/time, но могут покупать предсказуемость. Нужны измерения, прежде чем превращать это в runtime contract.
 
-## Prompt, policy, examples и context — не одно и то же
-
-В ранних концептах эти виды input намеренно разделялись:
-
-- Prompt/Profile — как выполнять данный класс semantic operation;
-- Project Policy — какое ограничение или предпочтение действует в этом проекте;
-- Pattern/Example — как похожая задача уже решена здесь;
-- Context — конкретные данные, нужные этому вызову;
-- Model Profile — особенности общения с конкретной моделью.
-
-Сам набор ранних `OperationProfile / PolicyResolver / PatternResolver / ContextSelector` не следует возвращать автоматически. Но различие полезно сохранить: task-specific prompt не должен подменять project knowledge, а длинная project policy не должна подменять хорошие canonical examples.
-
-Практическая гипотеза — собирать effective Worker context из нескольких небольших источников, выбранных под задачу, а не поддерживать один глобальный system prompt «про весь проект».
-
 ## Capability зависит от модели
 
-Одна и та же task classification не гарантирует одинакового execution path для разных моделей. То, что можно безопасно считать простой задачей для одной модели, может требовать более узких contracts, Research или другой Edit strategy для другой.
+Одна и та же task classification не гарантирует одинакового execution path для разных моделей. То, что можно безопасно считать простой задачей для более сильной модели, может требовать более узких contracts, Research или другой Edit strategy для меньшей/квантованной модели.
 
 Поэтому в будущем возможна связь:
 
@@ -45,75 +33,51 @@ task classification
 -> execution policy
 ```
 
-Classifier при этом описывает саму задачу, а не должен знать конкретный список моделей пользователя. Capability profile — отдельный input будущей execution policy.
+Но эти слои не следует преждевременно смешивать. Model-capability benchmark уже может давать локальные данные о способности выражать edits; classifier и project expertise пока остаются отдельными гипотезами.
 
-Model-capability benchmark уже может давать локальные данные о способности выражать edits; task classifier и project expertise пока остаются отдельными гипотезами.
+## Knowledge lifetime и promotion
 
-## Knowledge lifecycle, а не просто cache
+Ранняя архитектура различала observation и знание. Human answer, успешное изменение, Verification result или observation модели не обязаны автоматически становиться persistent Project Knowledge.
 
-Ранний Project Knowledge предполагал более богатую semantics, чем текущий Research cache. В частности, обсуждалась идея `KnowledgeCandidate`: observation, successful change, Verification result или human answer сначала являются только кандидатом на сохранение, а не новым project fact.
+Полезная долгосрочная гипотеза — промежуточный `KnowledgeCandidate` с provenance, scope, confidence и возможным review/promotion. Отдельно важно различать:
 
-Особенно полезны несколько различий:
+- **Observed** — что можно достаточно уверенно вывести из текущего кода/состояния Project;
+- **Declared** — архитектурное `why`, policy или намерение, которое часто требует документации или человека.
 
-- `execution` scope против `project` scope;
-- Observed knowledge против Declared knowledge;
-- code хорошо подтверждает **WHAT**, но не всегда может доказать **WHY**;
-- confidence/source должны отражать происхождение знания, а не создавать псевдоматематическую уверенность;
-- разные типы знания требуют разной invalidation semantics;
-- повторяющиеся observations могут со временем promotion'иться в Pattern.
+Эта taxonomy пока не означает необходимость отдельной Knowledge subsystem. Она сохраняет проблему качества и lifetime знания, если Project Understanding вернётся в runtime.
 
-Пример проблемы: ответ пользователя на ambiguity может быть правилом всего проекта, а может быть решением только текущей Task. Автоматически сохранять его навечно опасно.
+## Persistent knowledge, task state и transient context
 
-Это далёкое направление. Текущий source-hash Research cache остаётся правильной простой реализацией для bounded answers. Более широкий Knowledge lifecycle стоит возвращать только при появлении повторяющейся необходимости сохранять знания между задачами.
+Ранние версии смешивали project knowledge, execution/task state и историю в одном state. Позже стало понятно, что это разные lifetime.
 
-## Transient context не равен Project Knowledge
+Дополнительно transient user/session context — active file, selection, open files, UI context — может быть полезным сигналом для текущей задачи, но не должен автоматически становиться persistent Project Knowledge.
 
-Раннее обсуждение IDE boundary отделяло active file, selection, open files, cursor и recent files от долговременного Knowledge. Это transient user context: хороший сигнал для выбора релевантной информации, но плохой кандидат на сохранение как факт проекта.
-
-Даже без IDE это различие полезно сохранить на будущее:
-
-```text
-persistent project knowledge
-!=
-task execution state
-!=
-transient user/session context
-```
-
-Virtual workspace добавляет четвёртый тип состояния — uncommitted project view конкретной Task.
+Будущий Virtual Workspace добавляет ещё один lifetime: виртуальное состояние Project внутри Task. Эти категории желательно не смешивать даже если конкретные storage abstractions пока не определены.
 
 ## Project Policy и Execution Policy
 
-В ранней истории явно разделялись два разных вида ограничений.
+Project-specific правило и runtime control rule — разные типы знания.
 
-Project Policy отвечает на вопросы вроде: «предпочитай существующий EntityManager», «следуй текущему form lifecycle».
+`Используй существующий EntityManager` относится к Project Policy. `Удаление требует approval`, `max model calls` или `validation required` относятся к Execution Policy/runtime control.
 
-Execution Policy отвечает на управление риском и runtime: можно ли писать/удалять файлы, требуется ли approval, сколько model calls допустимо, обязательна ли Verification, сколько файлов можно менять за один run.
+Будущий classifier/project expertise не должен незаметно становиться единственным policy engine для обеих задач.
 
-Современный Nodus частично содержит execution limits/write policy и отдельно обсуждает project-specific expertise. Эти две линии не стоит смешивать в будущем classifier/context system.
+## Validation failure semantics
 
-## Verification failure как отдельное решение
+Ранняя Verification-гипотеза уже отмечала, что `validation failed -> снова попросить модель исправить` — не универсальная recovery strategy. В зависимости от failure class возможны fix, rollback, adjust plan, ask human или stop.
 
-Ранняя схема уже отмечала опасность бесконечного `test failed -> ask model to fix -> repeat`. Вместо этого Verification result должен позволять runtime выбрать разный следующий ход: technical fix, semantic retry, replan, rollback, ask human или stop.
+Проверки также могут отличаться по природе: deterministic static/behavioral checks и более сложный review requested scope/project policy/architecture consistency. Validation v2 должен начинаться с реальных validators и failure cases, но полезно не потерять это различие.
 
-Текущий Validation skeleton ещё не решает эту задачу. При проектировании Validation v2 полезно сохранить саму taxonomy проблемы, не обязательно ранние классы или flow.
+## Human control boundary
 
-## Human boundary
-
-Человек в ранних концептах находился над runtime, а не внутри tool list модели. Причины взаимодействия различались: clarification, approval, choice, conflict, risk, knowledge confirmation.
-
-Это хорошо совпадает с современным направлением Engine interaction/control points. В будущем важно не свести все случаи к одному generic `ask user`: причина ожидания влияет на resume semantics и на то, можно ли использовать ответ как Project Knowledge.
+Clarification, approval, conflict, risk и knowledge confirmation исторически рассматривались как отдельная Human boundary, а не как ещё один tool модели. Текущий Engine interaction API пока не реализован, но эта проблема не является новой feature-идеей — она осталась нерешённой после ранних архитектурных версий.
 
 ## Capability-gap logging
 
-Была также более далёкая идея: если системе регулярно не хватает определённого интеллектуального способа работы, не обязательно сразу проектировать новый класс. Можно сначала логировать capability gaps и смотреть реальные повторения: например, `compare-implementations`, `inspect-lifecycle`, `analyze-data-flow`.
+Если Nodus регулярно не хватает некоторой операции или expertise, не обязательно сразу создавать новый Action/subsystem. Возможный подход — фиксировать повторяющиеся capability gaps и различать случаи, где достаточно prompt/profile/context change, от случаев, где действительно нужен новый deterministic tool или runtime contract.
 
-Тогда расширение prompt/profile или новая deterministic capability появляется из накопленных случаев, а не из предварительного архитектурного списка. Самоавтоматическое изменение runtime кода рассматривалось только с human approval и сейчас не является направлением разработки.
-
-Эта идея хорошо сочетается с текущим правилом «новые Actions — только по реальным задачам» и execution samples, но пока не требует отдельного механизма.
+Это хорошо сочетается с execution samples и правилом добавлять Actions только из подтверждённых задач.
 
 ## Почему не фиксировать готовое решение сейчас
 
-Проблемы Project Understanding, knowledge lifetime, task classification и capability-aware execution выглядят устойчивыми, но конкретные storage/index/classifier/profile designs ещё не проверены.
-
-Раннее создание сложной knowledge architecture может снова привести к системе, построенной раньше реальных требований. Следующий полезный шаг — сохранять реальные случаи, где обычного Research или текущего Worker context недостаточно, и по ним выделять повторяющиеся классы expertise, state и execution policy.
+Проблема Project Understanding выглядит устойчивой, но конкретный storage/index/classifier design ещё не проверен. Раннее создание сложной knowledge architecture может снова привести к системе, построенной раньше реальных требований. Следующий полезный шаг — сохранять реальные случаи, где обычного Research недостаточно, и по ним выделять повторяющиеся классы expertise.
