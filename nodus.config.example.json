@@ -23,9 +23,15 @@
     "maxResearchRequests": 4,
     "maxAgentRounds": 12
   },
-  "validation": {
-    "json": true,
-    "commands": []
+  "engineTest": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "timeoutMs": 120000
+    },
+    "unit": {
+      "command": "npm test",
+      "timeoutMs": 120000
+    }
   },
   "language": {
     "project": "en",
