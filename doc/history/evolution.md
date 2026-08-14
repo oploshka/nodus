@@ -70,11 +70,21 @@ Verification присутствовал ещё в ранних концепта�
 
 ## Архитектурные переходы 0.3
 
-В ходе spike закрепились верхние слои `app / engine / model`, semantic Planner, bounded Determine и Research, Worker lifecycle и единая model boundary.
+В ходе 0.3 spike закрепились верхние слои `app / engine / model`, semantic Planner, bounded Determine и Research, Worker lifecycle и единая model boundary.
 
 Отдельный важный переход произошёл в Edit. Сначала технические способы изменения файла жили ближе к Worker/Actions. Затем граница была перенесена в Engine: Worker сообщает semantic intent изменения, а Engine-owned `ProjectEditor` владеет authoritative source, стратегией materialization, recovery, buffering и commit. Это отделяет вопрос «что изменить» от «как и когда изменение становится состоянием проекта».
 
 Validation появился сначала как lifecycle boundary с `PassValidator`, а не как заранее спроектированная система проверок. Реальные validators должны появляться из фактических сценариев.
+
+## Переход 0.3 -> 0.4
+
+Переход к 0.4 не обозначает один крупный feature или завершённую новую subsystem. Это смена этапа проекта после того, как основные execution boundaries 0.3 стали достаточно понятными, чтобы отдельно пересмотреть их происхождение и более широкий смысл Nodus.
+
+В 0.4 были явнее зафиксированы две параллельные линии проекта: поиск границы ответственности между model/runtime и Project Understanding для semantic решений, остающихся за моделью. Документация была разделена по статусу знания на current architecture, development, project rules, history и research; восстановлены origin, архитектурная эволюция, decision log и каталог failure classes.
+
+Эта версия также фиксирует более осторожный способ дальнейшей разработки: не превращать каждую перспективную идею в runtime contract, а сохранять hypothesis отдельно и двигать boundary после наблюдаемого failure/capability gap или подтверждённой необходимости.
+
+Поэтому 0.4 следует понимать как новую фазу исследования и осознания проекта, а не как заявление о production maturity.
 
 ## Presentation migration
 
