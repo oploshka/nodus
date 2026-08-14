@@ -13,10 +13,9 @@
     "test:model": "vitest run --project model --passWithNoTests",
     "test:e2e": "vitest run --project e2e --passWithNoTests",
     "check:docs": "tsx target/script/check-docs.ts",
-    "dev": "tsx src/app/Main.ts",
+    "nodus:project": "tsx src/app/Main.ts target/project/nodus.config.json --clear-cache --clear-logs --scan",
     "benchmark:raw-agent": "tsx target/benchmark/RawAgentBenchmark.ts",
-    "benchmark:model-capabilities": "tsx target/benchmark/model-capabilities/ModelCapabilityBenchmark.ts",
-    "dev:project": "tsx src/app/Main.ts nodus.todo.config.example.json"
+    "benchmark:model-capabilities": "tsx target/benchmark/model-capabilities/ModelCapabilityBenchmark.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
