@@ -1,8 +1,12 @@
-# Nodus 0.3
+# Nodus 0.4
 
-Nodus — экспериментальный runtime для управляемого coding-agent. Основная идея текущей ветки: вынести orchestration из LLM, оставить модели ограниченные задачи с явными контрактами и дать runtime возможность контролировать планирование, исполнителей, действия, Research и взаимодействие с пользователем.
+Nodus — экспериментальный runtime для локальных coding-моделей. Проект исследует, где должна проходить граница между semantic reasoning модели и обязанностями, которые надёжнее выполнять или контролировать на уровне runtime. Для решений, остающихся за моделью, отдельная задача Nodus — предоставить релевантное понимание конкретного проекта: существующие реализации, ограничения, соглашения и другие знания, необходимые для задачи.
 
-Сейчас проект находится в активном архитектурном spike. Код уже проходит через `Engine -> Planner -> Determine -> Worker -> Action`, но ряд границ намеренно ещё считается экспериментальным: Validation, продолжение `not-completed`, user interaction/control points, разделение internal storage и model-editable paths, а также централизованная языковая policy.
+Nodus не предполагает, что правильное разделение ответственности между моделью и runtime известно заранее. Текущие границы `Engine`, `Planner`, `Determine`, `Worker`, `Research`, Engine-owned Edit и Validation являются результатом экспериментов и продолжают проверяться реальными задачами и benchmark'ами.
+
+Версия 0.4 обозначает следующий этап этого исследования: после формирования основных runtime boundaries проект отдельно фиксирует причины их появления, восстанавливает линию Project Understanding и начинает явнее разделять current architecture, research hypotheses, failure classes и исторические решения.
+
+Подробнее исходная мотивация и две исторические линии проекта — runtime control и Project Understanding — описаны в [`doc/history/origin.md`](doc/history/origin.md).
 
 ## Быстрый старт
 
@@ -11,42 +15,51 @@ npm install
 npm run test:unit
 npm run test:integration
 npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
-# disposable target project
 npm run dev:project
 ```
 
-Для локальной модели example config ожидает OpenAI-compatible endpoint. Полный runtime log создаётся в `.nodus/logs/` и предназначен для разбора model request/response и execution trace.
+Для локальной модели example config ожидает OpenAI-compatible endpoint. Полный runtime log создаётся в `.nodus/logs/`.
 
 ## Документация
 
-### Текущее состояние
+Документация разделена по статусу знания:
 
-- [Current state / handoff](doc/CURRENT-STATE.md)
-- [Architecture](doc/ARCHITECTURE.md)
-- [Roadmap](doc/ROADMAP.md)
-- [Current design questions](doc/NOTES.md)
-- [Project conventions](doc/CONVENTIONS.md)
-- [Console output contract](doc/CONSOLE-OUTPUT.md)
+- [`doc/architecture/`](doc/architecture/) — как Nodus работает сейчас;
+- [`doc/development/`](doc/development/) — roadmap, benchmark practice и активная разработка;
+- [`doc/project/`](doc/project/) — conventions, terminology и устойчивые правила разработки Nodus;
+- [`doc/history/`](doc/history/) — происхождение проекта, архитектурная эволюция, решения и прошлые сценарии;
+- [`doc/research/`](doc/research/) — гипотезы, failure classes и ещё не утверждённые направления.
 
-### Слои
+Правила структуры, языка и именования описаны в [`doc/project/documentation.md`](doc/project/documentation.md).
 
-- [Application](src/app/APPLICATION.md)
-- [Engine](src/engine/ENGINE.md)
-  - [Planner](src/engine/Planner/PLANNER.md)
-  - [Worker / Actions](src/engine/Worker/WORKER.md)
-- [Model](src/model/MODEL.md)
-  - [Response formats](src/model/RESPONSE-FORMATS.md)
+### Основные документы
+
+- [Текущее состояние](doc/architecture/current-state.md)
+- [Архитектура](doc/architecture/architecture.md)
+- [Application](doc/architecture/application.md)
+- [Engine](doc/architecture/engine.md)
+- [Planner](doc/architecture/planner.md)
+- [Worker](doc/architecture/worker.md)
+- [Edit](doc/architecture/edit.md)
+- [Model](doc/architecture/model.md)
+- [Validation](doc/architecture/validation.md)
+- [Roadmap](doc/development/roadmap.md)
+- [Принципы разработки](doc/project/principles.md)
+- [Глоссарий](doc/project/glossary.md)
+- [Conventions проекта](doc/project/conventions.md)
+- [Происхождение Nodus](doc/history/origin.md)
+- [Эволюция проекта](doc/history/evolution.md)
+- [Журнал архитектурных решений](doc/history/decisions.md)
+- [Архитектурная эволюция / research](doc/research/architecture-evolution.md)
+- [Каталог failure classes](doc/research/failure-catalog.md)
 
 ### Тестирование и benchmark
 
-- [Target workspace](target/README.md)
-- [Test framework](target/test-framework/README.md)
-- [Testing](test/TESTING.md)
-- [Model tests](test/model/MODEL_TESTS.md)
-- [E2E tests](test/e2e/E2E_TESTS.md)
-- [Benchmarks](doc/BENCHMARKS.md)
-- [Raw-agent benchmark](target/benchmark/RAW-AGENT.md)
-
-### Исторические/сценарные заметки
-
-- [Status scenario](doc/STATUS-SCENARIO.md)
+- [Target workspace](target/target-workspace.md)
+- [Test framework](target/test-framework/test-framework.md)
+- [Testing](test/testing.md)
+- [Model tests](test/model/model-tests.md)
+- [E2E tests](test/e2e/e2e-tests.md)
+- [Benchmarking](doc/development/benchmarking.md)
+- [Raw-agent benchmark](target/benchmark/raw-agent.md)
+- [Model capabilities](target/benchmark/model-capabilities/model-capabilities.md)
