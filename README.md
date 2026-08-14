@@ -1,8 +1,10 @@
 # Nodus 0.3
 
-Nodus — экспериментальный runtime для управляемого coding-agent. Основная идея текущего spike: выносить из LLM те части execution, которые можно сделать явными и контролируемыми, оставляя модели ограниченные задачи с понятными контрактами.
+Nodus — экспериментальный runtime для локальных coding-моделей. Проект исследует, где должна проходить граница между semantic reasoning модели и обязанностями, которые надёжнее выполнять или контролировать на уровне runtime. Для решений, остающихся за моделью, отдельная задача Nodus — предоставить релевантное понимание конкретного проекта: существующие реализации, ограничения, соглашения и другие знания, необходимые для задачи.
 
-Текущий runtime строится вокруг `Engine -> Planner -> Determine -> Worker`, bounded Research, Engine-owned Edit и отдельной Validation boundary. Проект остаётся экспериментальным: архитектурные границы проверяются реальными задачами и benchmark'ами, а не считаются compatibility contract заранее.
+Nodus не предполагает, что правильное разделение ответственности между моделью и runtime известно заранее. Текущие границы `Engine`, `Planner`, `Determine`, `Worker`, `Research`, Engine-owned Edit и Validation являются результатом экспериментов и продолжают проверяться реальными задачами и benchmark'ами.
+
+Подробнее исходная мотивация и две исторические линии проекта — runtime control и Project Understanding — описаны в [`doc/history/origin.md`](doc/history/origin.md).
 
 ## Быстрый старт
 
@@ -23,7 +25,7 @@ npm run dev:project
 - [`doc/architecture/`](doc/architecture/) — как Nodus работает сейчас;
 - [`doc/development/`](doc/development/) — roadmap, benchmark practice и активная разработка;
 - [`doc/project/`](doc/project/) — conventions и правила документации;
-- [`doc/history/`](doc/history/) — прошлые состояния и сценарии;
+- [`doc/history/`](doc/history/) — происхождение проекта, архитектурная эволюция и прошлые сценарии;
 - [`doc/research/`](doc/research/) — гипотезы и ещё не утверждённые направления.
 
 Правила структуры, языка и именования описаны в [`doc/project/documentation.md`](doc/project/documentation.md).
@@ -38,6 +40,7 @@ npm run dev:project
 - [Validation](doc/architecture/validation.md)
 - [Roadmap](doc/development/roadmap.md)
 - [Project conventions](doc/project/conventions.md)
+- [Project origin](doc/history/origin.md)
 - [Project evolution](doc/history/evolution.md)
 - [Architecture evolution / research](doc/research/architecture-evolution.md)
 
