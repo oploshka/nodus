@@ -5,6 +5,7 @@ import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import type { EditStrategyId, PreparedProjectChange, ProjectEditRequest, EditPrepareResult, EditPreparationContext } from '@engine/Edit/EditTypes.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
+import { EditValidator, type EditCandidate, type EditValidationResult } from '@engine/Edit/Validation/EditValidator.js';
 
 export type ProjectEditResult =
   | { status: 'completed'; files: number; operations: number; strategy: EditStrategyId; paths: string[] }
@@ -45,6 +46,7 @@ export class ProjectEditor {
     private readonly project: Project,
     private readonly logger: EngineLogger,
     strategies: ReadonlyArray<EditStrategy>,
+    private readonly validator: EditValidator = new EditValidator(),
     private readonly fallbacks: Readonly<Record<EditStrategyId, ReadonlyArray<EditStrategyId>>> = DEFAULT_FALLBACKS,
   ) {
     for (const strategy of strategies) this.strategies.set(strategy.id, strategy);
@@ -63,6 +65,11 @@ export class ProjectEditor {
    */
   public async write(path: string, content: string): Promise<void> {
     const projectPath = await this.project.resolvePath(path);
+    const validation = await this.validator.validate([{ path: projectPath, content }]);
+    this.logValidation(validation);
+    const failed = validation.filter((result) => result.status === 'failed');
+    if (failed.length > 0) throw new Error(this.validationFailureReason(failed));
+
     const existing = this.files.get(projectPath);
     if (existing) {
       existing.current = content;
@@ -88,6 +95,9 @@ export class ProjectEditor {
       return { status: 'not-completed', reason: `Unknown edit strategy: ${request.strategy}` };
     }
 
+    // Prepare the complete request against a draft copy. Accumulated Edit state changes only
+    // after the whole batch has materialized and EditValidator has accepted it.
+    const draft = this.cloneFiles(this.files);
     const touched = new Set<string>();
     let operations = 0;
     this.logger.info('engine.edit.prepare.start', {
@@ -101,11 +111,11 @@ export class ProjectEditor {
       const path = await this.project.resolvePath(edit.path);
       touched.add(path);
 
-      let file = this.files.get(path);
+      let file = draft.get(path);
       if (!file) {
         const source = await this.project.read(path);
         file = { path, original: source, current: source, strategy: request.strategy };
-        this.files.set(path, file);
+        draft.set(path, file);
       }
 
       this.logger.info('engine.edit.file.start', {
@@ -150,38 +160,50 @@ export class ProjectEditor {
       });
     }
 
-    const changedPaths = [...touched].filter((path) => {
-      const file = this.files.get(path);
-      return file && file.current !== file.original;
-    });
-    if (changedPaths.length === 0) {
+    const candidates: EditCandidate[] = [...touched]
+      .map((path) => draft.get(path))
+      .filter((file): file is BufferedFile => Boolean(file) && file.current !== file.original)
+      .map((file) => ({ path: file.path, content: file.current }));
+    if (candidates.length === 0) {
       return { status: 'not-completed', reason: 'Edit preparation produced no project changes.' };
     }
 
+    const validation = await this.validator.validate(candidates);
+    this.logValidation(validation);
+    const failed = validation.filter((result) => result.status === 'failed');
+    if (failed.length > 0) {
+      return { status: 'not-completed', reason: this.validationFailureReason(failed) };
+    }
+
+    // Atomic batch accumulation: warnings are preserved in logs, but only blocking validation
+    // prevents the prepared request from becoming the next Edit state.
+    this.files = draft;
+
     this.logger.info('engine.edit.prepare.finish', {
       strategy: request.strategy,
-      files: changedPaths.length,
+      files: candidates.length,
       operations,
       bufferedFiles: this.files.size,
+      warnings: validation.filter((result) => result.status === 'warning').length,
       presentation: this.presentation,
     });
     return {
       status: 'completed',
-      files: changedPaths.length,
+      files: candidates.length,
       operations,
       strategy: request.strategy,
-      paths: changedPaths,
+      paths: candidates.map((candidate) => candidate.path),
     };
   }
 
   /** Snapshot the accumulated task-local changes for step-level rollback. */
   public state(): EditState {
-    return new Map([...this.files.entries()].map(([path, file]) => [path, { ...file }]));
+    return this.cloneFiles(this.files);
   }
 
   /** Restore a previously captured task-local state. */
   public restore(state: EditState): void {
-    this.files = new Map([...state.entries()].map(([path, file]) => [path, { ...file }]));
+    this.files = this.cloneFiles(state);
   }
 
   /** Physically write the accumulated task-local changes to Project. */
@@ -208,6 +230,34 @@ export class ProjectEditor {
       strategy: changes.at(-1)?.strategy ?? 'edit',
       paths: commit.paths,
     };
+  }
+
+  private cloneFiles(state: ReadonlyMap<string, Readonly<BufferedFile>>): Map<string, BufferedFile> {
+    return new Map([...state.entries()].map(([path, file]) => [path, { ...file }]));
+  }
+
+  private logValidation(results: ReadonlyArray<EditValidationResult>): void {
+    for (const result of results) {
+      if (result.status === 'warning') {
+        this.logger.warn('engine.edit.validation.warning', {
+          checkId: result.checkId,
+          path: result.path,
+          reason: result.reason,
+          presentation: this.presentation,
+        });
+      } else if (result.status === 'failed') {
+        this.logger.warn('engine.edit.validation.failed', {
+          checkId: result.checkId,
+          path: result.path,
+          reason: result.reason,
+          presentation: this.presentation,
+        });
+      }
+    }
+  }
+
+  private validationFailureReason(results: ReadonlyArray<Extract<EditValidationResult, { status: 'failed' }>>): string {
+    return results.map((result) => `${result.checkId} (${result.path}): ${result.reason}`).join('\n');
   }
 
   private async prepareWithFallback(
