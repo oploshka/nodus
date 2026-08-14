@@ -50,24 +50,34 @@ export class Engine {
       this.logger.info('engine.worker.selected', { taskId: task.id, stepId: step.id, workerId: worker.id, workerName: worker.name, workerPresentation: worker.presentation });
 
       const startedAt = performance.now();
+      let changedPaths: string[] = [];
       let result = await worker.run(task, step);
       if (result.status === 'completed' && result.edit) {
         const summary = result.summary;
         const editResult = await this.editor.apply(task, step, result.edit);
-        result = editResult.status === 'completed'
-          ? { status: 'completed', summary }
-          : { status: 'not-completed', reason: editResult.reason, canContinue: true };
+        if (editResult.status === 'completed') {
+          changedPaths = editResult.paths;
+          result = { status: 'completed', summary };
+        } else {
+          result = { status: 'not-completed', reason: editResult.reason, canContinue: true };
+        }
       }
       if (result.status === 'completed') {
-        this.logger.info('validation.start', { taskId: task.id, stepId: step.id, presentation: this.validator.presentation });
-        const validation = await this.validator.validate({ task, step, result });
+        this.logger.info('validation.start', { taskId: task.id, stepId: step.id, changedPaths, presentation: this.validator.presentation });
+        const validation = await this.validator.validate({ task, step, result, changedPaths });
         if (validation.status === 'passed') {
-          this.logger.info('validation.passed', { taskId: task.id, stepId: step.id, presentation: this.validator.presentation });
+          this.logger.info('validation.passed', {
+            taskId: task.id,
+            stepId: step.id,
+            checks: validation.checks,
+            presentation: this.validator.presentation,
+          });
         } else {
           this.logger.warn('validation.failed', {
             taskId: task.id,
             stepId: step.id,
             reason: validation.reason,
+            checks: validation.checks,
             presentation: this.validator.presentation,
           });
           result = { status: 'not-completed', reason: validation.reason, canContinue: true };

@@ -75,11 +75,19 @@ Worker возвращает semantic `ProjectEditRequest` (`path + instruction` 
 
 Technical recovery выполняется внутри Edit layer без повторного запуска Worker. Для `range-replace` есть один bounded localization retry. После неуспешной подготовки Editor может перейти к следующей зарегистрированной стратегии, сохраняя исходный semantic intent. Базовые цепочки: `range-replace -> diff -> edit`, `replace -> diff -> edit`, `diff -> edit`.
 
+`ProjectEditor` после commit возвращает canonical paths реально изменённых файлов; они используются следующей Validation boundary.
+
 ## Validation
 
-Validation уже является отдельной Engine-owned lifecycle boundary после Worker/Edit. Текущая реализация `PassValidator` всегда возвращает `passed` и нужна только для фиксации слоя.
+Обычный Bootstrap теперь использует `CompositeValidator`, который собирает несколько bounded deterministic `ValidationCheck`.
 
-Реальные validators, порядок pre/post-commit validation, recovery и rollback semantics ещё не определены. См. [`validation.md`](validation.md).
+Первый вариант включает:
+
+- `JsonValidationCheck` — по умолчанию парсит изменённые `.json`;
+- `CommandValidationCheck` — запускает trusted user-configured project commands;
+- `PassValidator` остаётся явной compatibility/test implementation.
+
+Todo dogfooding config включает `npm run typecheck` и `npm test`. Validation сейчас post-commit: failure превращает step в `not-completed`, но автоматического rollback/recovery пока нет. См. [`validation.md`](validation.md).
 
 ## Project paths и internal storage
 
@@ -118,7 +126,7 @@ Deterministic integration scenarios фиксируют runtime boundaries, а н
 
 Актуальный порядок и более длинный список находятся в [`../development/roadmap.md`](../development/roadmap.md). Основные открытые темы сейчас:
 
-1. Validation v2;
+1. живой прогон нового Validation и наблюдение failure/recovery semantics;
 2. дальнейшая проверка Engine-owned Edit и strategy behavior на mock project;
 3. virtual workspace / task-wide commit;
 4. Research v2;

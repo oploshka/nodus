@@ -7,7 +7,7 @@ import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
 
 export type ProjectEditResult =
-  | { status: 'completed'; files: number; operations: number; strategy: EditStrategyId }
+  | { status: 'completed'; files: number; operations: number; strategy: EditStrategyId; paths: string[] }
   | { status: 'not-completed'; reason: string };
 
 interface BufferedFile { path: string; original: string; current: string; strategy: EditStrategyId }
@@ -35,7 +35,7 @@ export class ProjectEditor {
   }
 
   public async apply(task: Task, step: PlanStep, request: ProjectEditRequest): Promise<ProjectEditResult> {
-    if (request.edits.length === 0) return { status: 'completed', files: 0, operations: 0, strategy: request.strategy };
+    if (request.edits.length === 0) return { status: 'completed', files: 0, operations: 0, strategy: request.strategy, paths: [] };
     if (!this.strategies.has(request.strategy)) return { status: 'not-completed', reason: `Unknown edit strategy: ${request.strategy}` };
 
     const files = new Map<string, BufferedFile>();
@@ -87,7 +87,7 @@ export class ProjectEditor {
 
     const commit = await this.commit(changes);
     if (commit.status === 'not-completed') return commit;
-    return { status: 'completed', files: changes.length, operations, strategy: request.strategy };
+    return { status: 'completed', files: changes.length, operations, strategy: request.strategy, paths: commit.paths };
   }
 
   private async prepareWithFallback(
@@ -127,7 +127,7 @@ export class ProjectEditor {
     return { status: 'not-completed', reason: lastReason };
   }
 
-  private async commit(changes: ReadonlyArray<PreparedProjectChange>): Promise<{ status: 'completed'; files: number } | { status: 'not-completed'; reason: string }> {
+  private async commit(changes: ReadonlyArray<PreparedProjectChange>): Promise<{ status: 'completed'; files: number; paths: string[] } | { status: 'not-completed'; reason: string }> {
     const unique = new Map<string, PreparedProjectChange>();
     for (const change of changes) {
       const path = await this.project.resolvePath(change.path);
@@ -159,7 +159,7 @@ export class ProjectEditor {
     }
 
     this.logger.info('engine.edit.commit.finish', { files: unique.size, presentation: this.presentation });
-    return { status: 'completed', files: unique.size };
+    return { status: 'completed', files: unique.size, paths: [...unique.keys()] };
   }
 }
 

@@ -23,6 +23,10 @@
     "maxResearchRequests": 4,
     "maxAgentRounds": 12
   },
+  "validation": {
+    "json": true,
+    "commands": []
+  },
   "language": {
     "project": "en",
     "nodus": "en",

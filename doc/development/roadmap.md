@@ -15,7 +15,8 @@ Roadmap фиксирует уже собранные boundaries и следую�
 - [x] `range-replace`, exact `replace`, unified `diff`, full-file `edit` как `EditStrategy`.
 - [x] Buffered coherent multi-file preparation, stale-source guard и atomic-ish commit/rollback.
 - [x] Bounded Edit recovery и fallback без повторного semantic reasoning Worker.
-- [x] Engine-owned Validation boundary с `PassValidator`.
+- [x] Engine-owned Validation boundary.
+- [x] Первый Validation v2 draft: composite checks, changed-file JSON parsing и configured project commands.
 - [x] Canonical project-root-relative paths и `ProjectPathResolver`.
 - [x] Разделение `language.project / language.nodus / language.response` и общий `ModelLanguagePolicy`.
 - [x] Human-readable console + полный file log.
@@ -27,14 +28,14 @@ Roadmap фиксирует уже собранные boundaries и следую�
 
 ## Ближайшие направления
 
-1. **Validation v2.** Определить реальные validators (typecheck, tests, config/schema parsing), порядок относительно commit, failure semantics, recovery и rollback. Текущий `PassValidator` остаётся intentional skeleton.
+1. **Validation live run / semantics.** Прогнать Todo mock-project с JSON/typecheck/tests checks и посмотреть реальные failure cases. После этого решить pre/post-commit validation, rollback, recovery, blocking/non-blocking checks и selection policy.
 2. **Edit strategy verification.** Прогнать реальные mock-project задачи через Engine-owned Editor, проверить recovery/fallback и разделять semantic correctness, contract correctness и apply success.
 3. **Virtual workspace / task-wide commit.** Исследовать in-memory overlay, где последующие Worker/Research видят виртуально изменённое состояние, а Engine пишет реальный Project после успешного завершения Task. Подробности: [`../research/virtual-workspace.md`](../research/virtual-workspace.md).
 4. **Research v2.** Semantic dedupe перефразированных вопросов, более точные evidence dependencies/invalidation и корректная работа поверх будущего Workspace.
 5. **Planner decomposition.** Проверять coherent outcomes на реальных задачах; позже отдельно рассмотреть nested steps, replanning и отношения между steps, если появится подтверждённая необходимость.
 6. **Model capability measurements.** Продолжить измерения `range-replace / replace / diff / edit`, отделяя понимание изменения, выражение contract и semantic correctness результата.
 7. **Language policy live run.** Проверить реальный лог при `language.nodus=en` и различать prompt bug от непослушания конкретной модели.
-8. **Task statistics v2.** После появления реального Validation и устойчивой Edit semantics добавить validation runs/failures и более точную Edit statistics.
+8. **Task statistics v2.** Добавить validation runs/failures/duration и более точную Edit statistics после первого живого прогона нового Validation.
 9. **Console dogfooding.** Прогнать Todo mock-project через полный `Planner -> Worker -> Research -> Edit -> Validation -> summary` и менять Presentation только по наблюдаемым проблемам.
 10. **Disposable project rule.** Не использовать рабочий Nodus repository как основной destructive target; закрепить безопасный dogfooding/benchmark workflow.
 
