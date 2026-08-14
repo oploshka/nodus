@@ -10,8 +10,20 @@ export type ProjectEditResult =
   | { status: 'completed'; files: number; operations: number; strategy: EditStrategyId; paths: string[] }
   | { status: 'not-completed'; reason: string };
 
-interface BufferedFile { path: string; original: string; current: string; strategy: EditStrategyId }
-interface PreparedWithStrategy { status: 'completed'; result: Extract<EditPrepareResult, { status: 'completed' }>; strategy: EditStrategy }
+interface BufferedFile {
+  path: string;
+  original: string;
+  current: string;
+  strategy: EditStrategyId;
+}
+
+export type EditState = ReadonlyMap<string, Readonly<BufferedFile>>;
+
+interface PreparedWithStrategy {
+  status: 'completed';
+  result: Extract<EditPrepareResult, { status: 'completed' }>;
+  strategy: EditStrategy;
+}
 
 const DEFAULT_FALLBACKS: Readonly<Record<EditStrategyId, ReadonlyArray<EditStrategyId>>> = {
   'range-replace': ['diff', 'edit'],
@@ -20,10 +32,14 @@ const DEFAULT_FALLBACKS: Readonly<Record<EditStrategyId, ReadonlyArray<EditStrat
   edit: [],
 };
 
-/** Engine-owned edit boundary: serialize intent, recover/fallback technical strategies, prepare in memory, then commit atomically. */
+/**
+ * Engine-owned task-local edit state.
+ * Worker receives this object as a temporary execution tool; apply/restore ownership remains with Engine.
+ */
 export class ProjectEditor {
   public readonly presentation = new EditPresentation();
   private readonly strategies = new Map<EditStrategyId, EditStrategy>();
+  private files = new Map<string, BufferedFile>();
 
   public constructor(
     private readonly project: Project,
@@ -34,26 +50,47 @@ export class ProjectEditor {
     for (const strategy of strategies) this.strategies.set(strategy.id, strategy);
   }
 
-  public async apply(task: Task, step: PlanStep, request: ProjectEditRequest): Promise<ProjectEditResult> {
-    if (request.edits.length === 0) return { status: 'completed', files: 0, operations: 0, strategy: request.strategy, paths: [] };
-    if (!this.strategies.has(request.strategy)) return { status: 'not-completed', reason: `Unknown edit strategy: ${request.strategy}` };
+  /** Read the current task-local content first, then fall back to the physical Project. */
+  public async read(path: string): Promise<string> {
+    const projectPath = await this.project.resolvePath(path);
+    return this.files.get(projectPath)?.current ?? this.project.read(projectPath);
+  }
 
-    const files = new Map<string, BufferedFile>();
-    const uniquePaths = new Set<string>();
-    for (const edit of request.edits) uniquePaths.add(await this.project.resolvePath(edit.path));
-    this.logger.info('engine.edit.prepare.start', { strategy: request.strategy, files: uniquePaths.size, edits: request.edits.length, presentation: this.presentation });
+  /** Add one semantic edit request to the current task-local state without writing Project files. */
+  public async change(task: Task, step: PlanStep, request: ProjectEditRequest): Promise<ProjectEditResult> {
+    if (request.edits.length === 0) {
+      return { status: 'completed', files: 0, operations: 0, strategy: request.strategy, paths: [] };
+    }
+    if (!this.strategies.has(request.strategy)) {
+      return { status: 'not-completed', reason: `Unknown edit strategy: ${request.strategy}` };
+    }
 
+    const touched = new Set<string>();
     let operations = 0;
+    this.logger.info('engine.edit.prepare.start', {
+      strategy: request.strategy,
+      edits: request.edits.length,
+      bufferedFiles: this.files.size,
+      presentation: this.presentation,
+    });
+
     for (const edit of request.edits) {
       const path = await this.project.resolvePath(edit.path);
-      let file = files.get(path);
+      touched.add(path);
+
+      let file = this.files.get(path);
       if (!file) {
         const source = await this.project.read(path);
         file = { path, original: source, current: source, strategy: request.strategy };
-        files.set(path, file);
+        this.files.set(path, file);
       }
 
-      this.logger.info('engine.edit.file.start', { strategy: request.strategy, path, presentation: this.presentation });
+      this.logger.info('engine.edit.file.start', {
+        strategy: request.strategy,
+        path,
+        presentation: this.presentation,
+      });
+
       const context: EditPreparationContext = {
         task,
         step,
@@ -63,11 +100,21 @@ export class ProjectEditor {
       };
       const prepared = await this.prepareWithFallback(request.strategy, context);
       if (prepared.status === 'not-completed') {
-        this.logger.warn('engine.edit.file.failed', { strategy: request.strategy, path, reason: prepared.reason, presentation: this.presentation });
-        this.logger.warn('engine.edit.prepare.failed', { strategy: request.strategy, path, presentation: this.presentation });
+        this.logger.warn('engine.edit.file.failed', {
+          strategy: request.strategy,
+          path,
+          reason: prepared.reason,
+          presentation: this.presentation,
+        });
         return prepared;
       }
-      if (prepared.result.path !== path) return { status: 'not-completed', reason: `Prepared edit path mismatch: expected ${path}, received ${prepared.result.path}` };
+      if (prepared.result.path !== path) {
+        return {
+          status: 'not-completed',
+          reason: `Prepared edit path mismatch: expected ${path}, received ${prepared.result.path}`,
+        };
+      }
+
       file.current = prepared.result.content;
       file.strategy = prepared.strategy.id;
       operations += prepared.result.operations ?? 1;
@@ -80,14 +127,64 @@ export class ProjectEditor {
       });
     }
 
-    const changes: PreparedProjectChange[] = [...files.values()]
+    const changedPaths = [...touched].filter((path) => {
+      const file = this.files.get(path);
+      return file && file.current !== file.original;
+    });
+    if (changedPaths.length === 0) {
+      return { status: 'not-completed', reason: 'Edit preparation produced no project changes.' };
+    }
+
+    this.logger.info('engine.edit.prepare.finish', {
+      strategy: request.strategy,
+      files: changedPaths.length,
+      operations,
+      bufferedFiles: this.files.size,
+      presentation: this.presentation,
+    });
+    return {
+      status: 'completed',
+      files: changedPaths.length,
+      operations,
+      strategy: request.strategy,
+      paths: changedPaths,
+    };
+  }
+
+  /** Snapshot the accumulated task-local changes for step-level rollback. */
+  public state(): EditState {
+    return new Map([...this.files.entries()].map(([path, file]) => [path, { ...file }]));
+  }
+
+  /** Restore a previously captured task-local state. */
+  public restore(state: EditState): void {
+    this.files = new Map([...state.entries()].map(([path, file]) => [path, { ...file }]));
+  }
+
+  /** Physically write the accumulated task-local changes to Project. */
+  public async apply(state: EditState = this.state()): Promise<ProjectEditResult> {
+    const changes: PreparedProjectChange[] = [...state.values()]
       .filter((file) => file.current !== file.original)
-      .map((file) => ({ path: file.path, expected: file.original, content: file.current, strategy: file.strategy }));
-    if (changes.length === 0) return { status: 'not-completed', reason: 'Edit preparation produced no project changes.' };
+      .map((file) => ({
+        path: file.path,
+        expected: file.original,
+        content: file.current,
+        strategy: file.strategy,
+      }));
+
+    if (changes.length === 0) {
+      return { status: 'completed', files: 0, operations: 0, strategy: 'edit', paths: [] };
+    }
 
     const commit = await this.commit(changes);
     if (commit.status === 'not-completed') return commit;
-    return { status: 'completed', files: changes.length, operations, strategy: request.strategy, paths: commit.paths };
+    return {
+      status: 'completed',
+      files: changes.length,
+      operations: changes.length,
+      strategy: changes.at(-1)?.strategy ?? 'edit',
+      paths: commit.paths,
+    };
   }
 
   private async prepareWithFallback(
@@ -127,7 +224,9 @@ export class ProjectEditor {
     return { status: 'not-completed', reason: lastReason };
   }
 
-  private async commit(changes: ReadonlyArray<PreparedProjectChange>): Promise<{ status: 'completed'; files: number; paths: string[] } | { status: 'not-completed'; reason: string }> {
+  private async commit(
+    changes: ReadonlyArray<PreparedProjectChange>,
+  ): Promise<{ status: 'completed'; files: number; paths: string[] } | { status: 'not-completed'; reason: string }> {
     const unique = new Map<string, PreparedProjectChange>();
     for (const change of changes) {
       const path = await this.project.resolvePath(change.path);
@@ -138,7 +237,12 @@ export class ProjectEditor {
     for (const change of unique.values()) {
       await this.project.resolveTargetPath(change.path);
       const current = await this.project.read(change.path);
-      if (current !== change.expected) return { status: 'not-completed', reason: `Prepared change is stale for ${change.path}; project content changed before commit.` };
+      if (current !== change.expected) {
+        return {
+          status: 'not-completed',
+          reason: `Prepared change is stale for ${change.path}; project content changed before commit.`,
+        };
+      }
     }
 
     this.logger.info('engine.edit.commit.start', { files: unique.size, presentation: this.presentation });
@@ -150,9 +254,13 @@ export class ProjectEditor {
       }
     } catch (error) {
       for (const change of written.reverse()) {
-        try { await this.project.write(change.path, change.expected); }
-        catch (rollbackError) {
-          this.logger.error('engine.edit.rollback.failed', { path: change.path, error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError) });
+        try {
+          await this.project.write(change.path, change.expected);
+        } catch (rollbackError) {
+          this.logger.error('engine.edit.rollback.failed', {
+            path: change.path,
+            error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+          });
         }
       }
       return { status: 'not-completed', reason: error instanceof Error ? error.message : String(error) };
