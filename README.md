@@ -24,9 +24,9 @@ npm run dev:project
 
 - [`doc/architecture/`](doc/architecture/) — как Nodus работает сейчас;
 - [`doc/development/`](doc/development/) — roadmap, benchmark practice и активная разработка;
-- [`doc/project/`](doc/project/) — conventions и правила документации;
-- [`doc/history/`](doc/history/) — происхождение проекта, архитектурная эволюция и прошлые сценарии;
-- [`doc/research/`](doc/research/) — гипотезы и ещё не утверждённые направления.
+- [`doc/project/`](doc/project/) — conventions, terminology и устойчивые правила разработки Nodus;
+- [`doc/history/`](doc/history/) — происхождение проекта, архитектурная эволюция, решения и прошлые сценарии;
+- [`doc/research/`](doc/research/) — гипотезы, failure classes и ещё не утверждённые направления.
 
 Правила структуры, языка и именования описаны в [`doc/project/documentation.md`](doc/project/documentation.md).
 
@@ -42,10 +42,14 @@ npm run dev:project
 - [Model](doc/architecture/model.md)
 - [Validation](doc/architecture/validation.md)
 - [Roadmap](doc/development/roadmap.md)
+- [Принципы разработки](doc/project/principles.md)
+- [Глоссарий](doc/project/glossary.md)
 - [Conventions проекта](doc/project/conventions.md)
 - [Происхождение Nodus](doc/history/origin.md)
 - [Эволюция проекта](doc/history/evolution.md)
+- [Журнал архитектурных решений](doc/history/decisions.md)
 - [Архитектурная эволюция / research](doc/research/architecture-evolution.md)
+- [Каталог failure classes](doc/research/failure-catalog.md)
 
 ### Тестирование и benchmark
 
