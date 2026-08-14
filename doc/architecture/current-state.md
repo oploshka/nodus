@@ -1,34 +1,35 @@
-# Current state / handoff
+# Текущее состояние / handoff
 
-Этот файл предназначен как короткая точка восстановления контекста при новом чате или после длинной паузы. Он описывает не историю всех решений, а текущее состояние spike и ближайшие незакрытые вопросы.
+Этот документ — короткая точка восстановления контекста. Он описывает текущее состояние Nodus 0.3, а не историю всех архитектурных решений.
 
 ## Архитектурная модель
 
-Три верхних слоя:
+Верхние слои:
 
-- `app` — startup/composition/CLI/logging;
-- `engine` — task lifecycle, Planner, Determine, Research, Worker и Actions;
-- `model` — единая граница с LLM/provider transport, response formats/schema, ModelRunner/ModelCaller и tools.
+- `app` — startup, composition, CLI и concrete logging;
+- `engine` — task lifecycle, Planner, Determine, Worker, Research, Edit и Validation;
+- `model` — граница с LLM/provider transport, response formats/schema, `ModelRunner`/`ModelCaller` и model capabilities.
 
 Основной путь:
 
 ```text
-CLI/App
+App / CLI
   -> Engine.run(task)
   -> Planner -> Plan
-  -> Determine -> Worker
-  -> Worker -> Action
-       -> ChangeCodeAction -> ProjectEditRequest
-       -> ResearchAction when explicitly requested
-  -> WorkerResult
-  -> Engine reaction
+  -> для каждого PlanStep:
+       Determine -> Worker
+       Worker -> bounded Actions / Research when needed
+       Worker -> WorkerResult + semantic ProjectEditRequest
+       Engine -> ProjectEditor -> prepare / recover / fallback / commit
+       Engine -> Validation
+       Engine -> следующий PlanStep
 ```
 
-Engine не должен знать внутреннюю механику Worker. Worker выполняет один `PlanStep` и координирует ограниченный набор доступных Actions. Action — исполняемая capability с собственным input/output contract; это не просто prompt description.
+Engine не управляет внутренними attempts Worker и не должен понимать конкретные Research-вопросы. При этом границы, где результат Worker становится состоянием Project, принадлежат Engine.
 
 ## Planner
 
-Planner строит маленький semantic plan. `PlanStep` описывает outcome, explicit constraints и причину декомпозиции.
+Planner строит небольшой semantic plan. `PlanStep` описывает outcome, explicit constraints и причину декомпозиции.
 
 Используются фиксированные decomposition types:
 
@@ -37,87 +38,64 @@ Planner строит маленький semantic plan. `PlanStep` описыва
 - `dependency`;
 - `separate-deliverable`.
 
-Файлы, слои, Research, validation и технические фазы не являются причиной делить задачу. Если отдельной причины нет, Planner должен вернуть один coherent step.
+Файлы, слои, Research, Validation и другие technical phases сами по себе не являются причиной создавать отдельный `PlanStep`.
 
 ## Worker / Actions
 
-Текущий `CodeWorker` намеренно тестирует replace-стратегию и работает через:
+Worker выполняет один `PlanStep` через ограниченный набор Actions.
 
-```text
-change-code -> research (по запросу action) -> change-code retry
-```
-
-`ChangeCodeAction` теперь описывает только semantic edits (`path + instruction`). Технические стратегии `range-replace`, `replace`, `diff` и full-file `edit` перенесены в `src/engine/Edit` и реализуют общий `EditStrategy` contract. Текущий Code Worker запрашивает `range-replace`, Documentation Worker — `diff`, но serialization и применение выполняет Engine-owned `ProjectEditor`.
-
-Все edits одного Worker result сначала готовятся в памяти; несколько edits одного файла видят buffered результат предыдущего. Только полностью подготовленный набор проходит stale-source validation и atomic commit.
-
-`ResearchAction` вызывается только когда основной Action явно вернул конкретные missing-information requests. Research не запускается превентивно.
+`ChangeCodeAction` определяет semantic edit intent и может запросить конкретную недостающую информацию через `ResearchAction`. Техническая materialization изменения не принадлежит Worker.
 
 Worker возвращает Engine:
 
 - `completed`;
-- `not-completed` + `canContinue: true`;
+- `not-completed` + возможность будущего continuation;
 - `failed`.
 
-Настоящий resume/continue того же Worker пока не реализован.
+Настоящий resume того же Worker instance пока не реализован.
 
 ## Research
 
-Research — bounded service с persistent cache. Cache entry хранит source files + hashes и считается актуальной, пока эти hashes не изменились.
+Research — bounded service с persistent cache. Cache entry хранит source files и hashes; ответ используется повторно, пока связанные sources остаются актуальными. `not-found` не кешируется.
 
-Текущий принцип:
+Текущая открытая область — semantic dedupe похожих вопросов, более точная фиксация фактически использованных evidence и будущая работа Research поверх virtual workspace.
 
-```text
-Research.ask(question)
-  -> cache lookup
-  -> validate source hashes
-  -> hit: return cached answer
-  -> stale/miss: resolve again
-  -> persist resolved answer
-```
+## Engine-owned Edit
 
-`not-found` не кешируется.
+Worker возвращает semantic `ProjectEditRequest` (`path + instruction` и optional preferred strategy). `ProjectEditor` владеет authoritative source, EditStrategy, applicator, buffered state и commit.
 
-## Project paths
+Текущие стратегии:
 
-Все пути между Engine/Worker/Action должны быть canonical project-root-relative paths, например:
+- `range-replace`;
+- exact `replace`;
+- unified `diff`;
+- full-file `edit`.
 
-```text
-src/engine/Planner/ModelPlanner.ts
-nodus.config.example.json
-```
+Все изменения одного coherent result сначала готовятся в памяти. Несколько edits одного файла видят buffered результат предыдущих edits. До первой записи проверяются target paths и stale-source guards.
 
-`ProjectPathResolver` принимает потенциально грязные model paths, нормализует абсолютные/file URL/decorated references, проверяет root boundary, существование файла для existing operations и умеет чинить неверный prefix через project index только при одном однозначном совпадении.
+Technical recovery выполняется внутри Edit layer без повторного запуска Worker. Для `range-replace` есть один bounded localization retry. После неуспешной подготовки Editor может перейти к следующей зарегистрированной стратегии, сохраняя исходный semantic intent. Базовые цепочки: `range-replace -> diff -> edit`, `replace -> diff -> edit`, `diff -> edit`.
 
-Hard write blocks сейчас: `node_modules` и `.git`. Project exclude rules также блокируют model writes, кроме временного исключения `.nodus` — см. planned work ниже.
+## Validation
 
-## Model layer
+Validation уже является отдельной Engine-owned lifecycle boundary после Worker/Edit. Текущая реализация `PassValidator` всегда возвращает `passed` и нужна только для фиксации слоя.
 
-Runtime model calls идут через `ModelRunner`; обычные engine components используют `ModelCaller`, который логирует полный `ModelRunResult` и возвращает только `data`.
+Реальные validators, порядок pre/post-commit validation, recovery и rollback semantics ещё не определены. См. [`validation.md`](validation.md).
 
-Schema единая object-schema; operation-specific schema classes не используются. `option` используется вместо технического enum, когда модели нужно описание выбора.
+## Project paths и internal storage
 
-`ModelRunner.diffFile(...)` — thin specialized facade над общим runner contract.
+Внутри engine используются canonical project-root-relative paths. Model-provided paths считаются untrusted input и проходят через `ProjectPathResolver`.
 
-## Языки
+Hard-protected paths и project excludes участвуют в write policy. Разделение Nodus-owned internal storage (`.nodus`) и model-editable project paths остаётся отдельной незакрытой задачей.
 
-Конфиг уже содержит три понятия:
+## Языковая policy
 
-```json
-{
-  "language": {
-    "project": "en",
-    "nodus": "en",
-    "response": "ru"
-  }
-}
-```
+Конфиг разделяет:
 
-- `project` — язык human-authored docs/comments и другого создаваемого человеком текста внутри проекта;
-- `nodus` — язык всех machine-facing данных Planner/Determine/Worker/Action/Research, включая внутренние summary/reason и edit instructions;
-- `response` — только текст, непосредственным потребителем которого является пользователь, а также локализация deterministic UI/console.
+- `language.project` — human-authored текст внутри проекта;
+- `language.nodus` — machine-facing данные Nodus;
+- `language.response` — user-facing текст.
 
-Язык выбирается по потребителю данных, а не по названию поля. Общие model-facing инструкции централизованы в `ModelLanguagePolicy`; конкретные prompts остаются у своих Planner/Action/Research компонентов.
+Общая machine-facing policy централизована в `ModelLanguagePolicy`; конкретные Planner/Worker/Research prompts сохраняют только собственную semantic guidance. Идентификаторы, пути и code symbols не переводятся.
 
 ## CLI / logs
 
@@ -125,63 +103,29 @@ Multiline input:
 
 - `Enter` — новая строка;
 - `Ctrl+Enter` или `Ctrl+D` — submit;
-- `Ctrl+C` — cancel input; на пустом input — exit;
-- `/exit` остаётся явной командой.
+- `Ctrl+C` — cancel; на пустом input — exit;
+- `/exit` — явный выход.
 
-Console показывает человекочитаемый progress с `[Engine] [Planner] [Model] [Research] [Worker]`. Полный model exchange и nested diagnostic payload пишутся в timestamped `.nodus/logs/*-nodus.log`.
+Console показывает человекочитаемый progress. Полный model exchange и diagnostic payload пишутся в `.nodus/logs/*-nodus.log`.
 
-Полезный запуск:
+## Tests и benchmark
 
-```bash
-npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
-```
+Vitest projects: `unit`, `integration`, `model`, `e2e`.
 
-## Tests
+Deterministic integration scenarios фиксируют runtime boundaries, а не intelligence модели. Отдельные benchmark'и используются для model/edit capability и raw-agent comparison.
 
-Vitest projects:
+## Ближайшие направления
 
-- unit;
-- integration;
-- model;
-- e2e.
+Актуальный порядок и более длинный список находятся в [`../development/roadmap.md`](../development/roadmap.md). Основные открытые темы сейчас:
 
-Ключевые deterministic integration scenarios:
-
-- `/status`;
-- `runtime.maxPlanSteps`.
-
-Их задача — фиксировать архитектурный проход и signatures, а не интеллект модели.
-
-## Планируемые работы / известные проблемы
-
-1. **Internal storage boundary.** Сейчас `.nodus` одновременно находится в project excludes и используется Nodus для Research cache/index/logs. Временно `.nodus` исключён из write-policy check, чтобы internal cache снова работал. Нужно разделить model-editable project paths и Nodus-owned internal storage отдельным API/storage boundary. После этого `.nodus` снова должен быть недоступен model Actions.
-2. **Central language policy.** Перенести default internal language enforcement в model layer. `nodus` default — English; project/response меняются по config/use case.
-3. **Worker continuation.** Реализовать настоящий `/continue`/Engine resume для `not-completed`, сохраняя instance/state, а не создавая новую user task.
-4. **User interaction/control points.** Proposal approval, correction, async interrupt, `required/timeout/none`, configurable timeout action.
-5. **Validation layer.** Пока намеренно отсутствует.
-6. **Research precision.** Уточнить evidence dependencies: cache может зависеть от всех candidate files, а не только от реально использованных источников.
-7. **Edit routing.** После benchmark на mock project решить, как Engine Editor выбирает/fallback-ит между `range-replace`, `replace`, `diff` и full-file `edit`; Worker не должен владеть этой технической маршрутизацией.
-8. **AgentWorker semantics.** Различать настоящий completed от ответа модели вида «нужен пользовательский контекст».
-9. **Experience data.** Продолжать логировать task/worker/action outcomes для будущего task clustering и более дешёвого Determine.
-10. **Worker Workspace / task-level commit (идея, не утверждена).** Рассмотреть модель, где Worker работает только с виртуальным `ProjectView`/Workspace, ChangeCode меняет buffered файлы, Research видит эти buffered версии, а Engine применяет итоговый ChangeSet к реальному Project только после успешного завершения всех PlanStep пользовательской задачи. Первый кандидат хранения — in-memory overlay; `.nodus/fileCache` рассматривать только при реальной необходимости persistence/spill/resume. Persistent Research cache поверх виртуального Workspace требует отдельной semantics/versioning.
-
-## Последнее наблюдаемое состояние тестов/debug
-
-До изменения project write-policy unit и integration suites были зелёными. Следующий integration run упал потому, что Research успешно получил ответы, но сохранение `.nodus/research-cache.json` было заблокировано новой write-policy. В этом snapshot для `.nodus` оставлено временное исключение; локально нужно повторно прогнать `npx tsc --noEmit`, unit и integration.
-
-
-## Engine-owned Edit commit
-
-Edit serialization и commit перенесены в `src/engine/Edit`. Worker возвращает semantic `ProjectEditRequest`; Engine-owned `ProjectEditor` готовит изменения выбранной стратегией, валидирует stale source и атомарно применяет набор. Virtual task-wide workspace остаётся будущим направлением.
-
-
-## Validation
-
-Engine теперь имеет отдельный Validation boundary после успешного выполнения шага. `PassValidator` всегда подтверждает результат и нужен только для фиксации слоя; реальные validation strategies пока не определены.
-
-
-## Edit recovery
-
-Technical edit failures are recovered inside the Engine-owned Edit layer. `range-replace` gets one bounded localization retry using the authoritative buffered file, the original semantic instruction, previous operations, and the applicator error. Worker is not rerun for this recovery.
-
-If a strategy still cannot prepare the edit, `ProjectEditor` may fall back to another registered strategy while keeping the same semantic intent. The default chain is `range-replace -> diff -> edit`, `replace -> diff -> edit`, and `diff -> edit`. Preparation remains in memory; commit starts only after the complete coherent edit set is ready.
+1. Validation v2;
+2. дальнейшая проверка Engine-owned Edit и strategy behavior на mock project;
+3. virtual workspace / task-wide commit;
+4. Research v2;
+5. Planner decomposition и будущий replanning;
+6. model capability measurements;
+7. language policy live-run verification;
+8. task statistics v2;
+9. console dogfooding;
+10. disposable-project rule;
+11. internal storage boundary, Worker continuation и user interaction/control points — отдельные отложенные runtime-задачи.
