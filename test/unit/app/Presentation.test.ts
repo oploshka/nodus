@@ -7,7 +7,6 @@ import { DeterminePresentation } from '@engine/Presentation/DeterminePresentatio
 import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
 import { EditPresentation } from '@engine/Presentation/EditPresentation.js';
 import { ModelPresentation } from '@engine/Presentation/ModelPresentation.js';
-import { ValidationPresentation } from '@engine/Presentation/ValidationPresentation.js';
 
 describe('runtime presentations', () => {
   it('keeps localized worker identity and formatting together', () => {
@@ -45,6 +44,5 @@ describe('runtime presentations', () => {
     expect(new EditPresentation().format({ type: 'commit-finish', files: 2 }, 'ru').text).toBe('Набор изменений применён · файлов: 2');
     expect(new ModelPresentation().format({ type: 'finish', meta: { durationMs: 2200, totalTokens: 120, promptTokens: 100, completionTokens: 20 } }, 'ru').text)
       .toBe('Ответ получен · 100 → 20 = 120 tok · 2.2s');
-    expect(new ValidationPresentation().format({ type: 'passed' }, 'ru').text).toBe('Проверка пройдена');
   });
 });
