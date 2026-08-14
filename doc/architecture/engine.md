@@ -1,78 +1,60 @@
 # Engine
 
-`Engine.run()` координирует один task run. Он владеет исходным `Task`, global `Plan` и списком доступных Worker options.
+`Engine.run()` координирует один task run. Он владеет исходным `Task`, global `Plan`, списком доступных Worker options и границами, где результат исполнения становится состоянием Project.
 
 Для каждого `PlanStep` Engine:
 
 1. выбирает compatible Worker через `Determine`;
 2. передаёт Worker управление step;
 3. получает `WorkerResult`;
-4. если Worker подготовил изменения, передаёт их engine-owned `ProjectEditor`;
-5. только после успешного атомарного commit считает step завершённым;
-6. реагирует на `completed / not-completed / failed`.
+4. если Worker подготовил semantic changes, передаёт их Engine-owned `ProjectEditor`;
+5. после успешного Edit проходит Validation boundary;
+6. реагирует на `completed / not-completed / failed` и решает, можно ли переходить к следующему step.
 
-Engine не знает, какие Research вопросы задавал Worker, какие Actions выполнялись, сколько diff recovery было сделано и как устроен provider transport. При этом физическая мутация Project теперь принадлежит Engine через `ProjectEditor`: Worker может подготовить изменения, но не коммитит их сам.
+Engine не знает конкретные Research-вопросы Worker, внутренний порядок Actions или provider transport. Technical Edit mechanics при этом принадлежат Engine, а не Worker.
 
 ## Services
 
-`Planner`, `Research` и `Determine` рассматриваются как bounded services с конкретным ожидаемым результатом. Они могут использовать модель, но не владеют всем task lifecycle.
+`Planner`, `Research` и `Determine` — bounded services с конкретным ожидаемым результатом. Они могут использовать модель, но не владеют всем task lifecycle.
 
-`Determine` выбирает один option из ограниченного набора. Сейчас Engine использует его для Worker routing, но сервис не должен быть Worker-specific.
+`Determine` выбирает один option из ограниченного набора. Сейчас Engine использует его для Worker routing, но сервис не является Worker-specific abstraction.
 
-`Research` отвечает на bounded project question и владеет cache/hash invalidation. Он не является Worker.
+`Research` отвечает на bounded project question и владеет persistent cache/hash invalidation. Он не является Worker и не запускается как обязательная стадия каждого шага.
 
 ## Worker results
 
-- `completed` — Worker считает PlanStep выполненным; Engine может перейти дальше;
-- `not-completed` — текущая попытка закончилась, состояние/instance потенциально полезны для continuation;
+- `completed` — Worker считает semantic работу PlanStep завершённой;
+- `not-completed` — текущая попытка закончилась, но состояние потенциально пригодно для continuation;
 - `failed` — execution path terminal.
 
-Настоящий continuation API пока не реализован: текст `продолжить` сейчас был бы новой task, а не resume старого run.
+Настоящий continuation API пока не реализован: новая пользовательская команда `продолжить` не является resume предыдущего Worker instance.
 
 ## Execution samples
 
-Engine пишет `engine.execution.sample`: task, PlanStep, candidates, selected Worker, result и duration. Это raw material для будущего task clustering, Worker success statistics и более дешёвого/стабильного Determine.
-
-## Interaction / control points
-
-Engine — естественная control boundary между автономным Worker и пользователем. Концепт уже зафиксирован, runtime API пока отложен.
-
-Планируемая форма включает:
-
-```ts
-interface Interaction {
-  id: string;
-  type: 'change-approval' | 'question' | 'notification';
-  message: string;
-  tags?: string[];
-  wait: InteractionWait;
-}
-
-type InteractionWait =
-  | { mode: 'required' }
-  | { mode: 'timeout'; timeoutMs: number; onTimeout: 'continue' | 'pause' | 'cancel' }
-  | { mode: 'none' };
-```
-
-Нужны proposal approval/correction, async user interrupt и возможность timeout continuation для некритических состояний. Worker не должен владеть CLI/UI transport.
-
+Engine пишет execution samples и task statistics: task/step, candidates, выбранный Worker, outcomes, duration и доступные runtime metrics. Эти данные являются основой для будущих измерений Worker/Determine и model-capability экспериментов, но пока не образуют автоматическую execution policy.
 
 ## Edit ownership
 
-Edit теперь полностью находится на уровне Engine. Worker возвращает `ProjectEditRequest` с semantic `path + instruction`; `ProjectEditor` выбирает зарегистрированную `EditStrategy`, читает authoritative source, готовит все изменения в памяти и только затем атомарно коммитит набор.
+Worker возвращает `ProjectEditRequest` с semantic `path + instruction` и может указать preferred strategy. `ProjectEditor`:
 
-`range-replace`, `replace`, `diff` и full-file `edit` больше не являются Worker Actions. Их model contracts и applicators живут в `src/engine/Edit`. Перед первой записью `ProjectEditor` проверяет canonical target path и соответствие buffered `expected` текущему содержимому. Ошибка подготовки не пишет ничего; ошибка записи после начала commit вызывает best-effort rollback.
+- получает authoritative source;
+- применяет зарегистрированную `EditStrategy`;
+- держит coherent multi-file state в памяти;
+- выполняет technical recovery/fallback без повторного semantic reasoning Worker;
+- проверяет target paths и stale source перед записью;
+- начинает commit только после успешной подготовки полного набора;
+- при ошибке записи выполняет best-effort rollback уже записанных файлов.
 
-Task-wide virtual workspace/commit после всех PlanSteps отдельно не реализован; это следующий независимый уровень ownership, а не часть текущего Editor.
+`range-replace`, exact `replace`, unified `diff` и full-file `edit` являются Engine EditStrategy, а не Worker Actions.
 
+Task-wide virtual workspace пока не реализован. Это отдельный следующий уровень ownership, где Engine потенциально сможет коммитить изменения только после завершения всей Task.
 
 ## Validation
 
-После успешного Worker/Edit результата Engine вызывает отдельный `Validator`. Сейчас `PassValidator` только закрепляет lifecycle boundary и всегда подтверждает результат; будущий контракт описан в [`Validation/VALIDATION.md`](Validation/VALIDATION.md).
+После Worker/Edit Engine проходит отдельную Validation boundary. Сейчас `PassValidator` только закрепляет lifecycle и всегда возвращает `passed`.
 
+Реальные validators, failure/recovery semantics и связь с commit/workspace ещё открыты. Подробности: [`validation.md`](validation.md).
 
-## Edit recovery
+## Interaction / control points
 
-Technical edit failures are recovered inside the Engine-owned Edit layer. `range-replace` gets one bounded localization retry using the authoritative buffered file, the original semantic instruction, previous operations, and the applicator error. Worker is not rerun for this recovery.
-
-If a strategy still cannot prepare the edit, `ProjectEditor` may fall back to another registered strategy while keeping the same semantic intent. The default chain is `range-replace -> diff -> edit`, `replace -> diff -> edit`, and `diff -> edit`. Preparation remains in memory; commit starts only after the complete coherent edit set is ready.
+Engine является естественной control boundary между автономным execution и пользователем. Proposal approval, correction, async interrupt, pause/resume и timeout semantics пока не являются завершённым runtime API и остаются отдельным направлением разработки.
