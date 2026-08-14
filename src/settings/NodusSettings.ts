@@ -1,5 +1,10 @@
 import type { EditStrategyId } from '@engine/Edit/EditTypes.js';
 
+export interface PlannerProcessAdaptation {
+  /** Шаблон сообщения Planner. Маркер ##message## заменяется исходным сообщением Process. */
+  template: string;
+}
+
 export interface ChangeProcessAdaptation {
   /** Поведенческие подсказки для решения, когда Worker уже должен действовать, а когда действительно нужен Research. */
   guidance: ReadonlyArray<string>;
@@ -19,6 +24,7 @@ export interface ResearchProcessAdaptation {
 }
 
 export interface ProcessAdaptation {
+  planner: PlannerProcessAdaptation;
   worker: {
     change: ChangeProcessAdaptation;
     research: ResearchProcessAdaptation;
