@@ -17,7 +17,7 @@ interface StartupOptions {
 async function main(args: string[]): Promise<void> {
   const options = parseStartupOptions(args);
   const configuration = await ConfigurationLoader.load(options.configPath);
-  const logDirectory = resolve(configuration.project.root, '.nodus/logs');
+  const logDirectory = resolve(process.cwd(), 'log', 'runtime', configuration.project.id);
 
   if (options.clearLogs) await rm(logDirectory, { recursive: true, force: true });
 
