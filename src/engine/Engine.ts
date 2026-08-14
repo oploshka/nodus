@@ -54,11 +54,13 @@ export class Engine {
       let result = await worker.run(task, step);
       if (result.status === 'completed' && result.edit) {
         const summary = result.summary;
-        changedPaths = Array.from(new Set(result.edit.edits.map((edit) => edit.path)));
         const editResult = await this.editor.apply(task, step, result.edit);
-        result = editResult.status === 'completed'
-          ? { status: 'completed', summary }
-          : { status: 'not-completed', reason: editResult.reason, canContinue: true };
+        if (editResult.status === 'completed') {
+          changedPaths = editResult.paths;
+          result = { status: 'completed', summary };
+        } else {
+          result = { status: 'not-completed', reason: editResult.reason, canContinue: true };
+        }
       }
       if (result.status === 'completed') {
         this.logger.info('validation.start', { taskId: task.id, stepId: step.id, changedPaths, presentation: this.validator.presentation });
