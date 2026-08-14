@@ -1,4 +1,4 @@
-# Nodus 0.3 roadmap
+# Nodus 0.4 roadmap
 
 Roadmap фиксирует уже собранные boundaries и следующие направления работы. Он не является полным описанием архитектуры и не превращает research-гипотезы в обязательный план реализации.
 
@@ -23,6 +23,7 @@ Roadmap фиксирует уже собранные boundaries и следую�
 - [x] Raw-agent control benchmark и model-capabilities benchmark harness.
 - [x] Базовая task/execution statistics.
 - [x] Disposable Todo mock-project для безопасного dogfooding.
+- [x] Документация разделена на current architecture, development, project rules, history и research; восстановлены origin/evolution, decision log и failure catalog.
 
 ## Ближайшие направления
 
