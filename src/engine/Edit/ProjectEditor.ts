@@ -50,10 +50,33 @@ export class ProjectEditor {
     for (const strategy of strategies) this.strategies.set(strategy.id, strategy);
   }
 
-  /** Read the current task-local content first, then fall back to the physical Project. */
+  /** Read task-local content first, then fall back to the physical Project. */
   public async read(path: string): Promise<string> {
     const projectPath = await this.project.resolvePath(path);
     return this.files.get(projectPath)?.current ?? this.project.read(projectPath);
+  }
+
+  /**
+   * Store already materialized file content in the task-local state.
+   * This is primarily an adapter for Worker tools that already operate on complete file content.
+   * Create/delete semantics are intentionally not handled yet.
+   */
+  public async write(path: string, content: string): Promise<void> {
+    const projectPath = await this.project.resolvePath(path);
+    const existing = this.files.get(projectPath);
+    if (existing) {
+      existing.current = content;
+      existing.strategy = 'edit';
+      return;
+    }
+
+    const original = await this.project.read(projectPath);
+    this.files.set(projectPath, {
+      path: projectPath,
+      original,
+      current: content,
+      strategy: 'edit',
+    });
   }
 
   /** Add one semantic edit request to the current task-local state without writing Project files. */
