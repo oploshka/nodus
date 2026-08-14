@@ -1,27 +1,36 @@
-# Benchmarks and experiments
+# Benchmark и эксперименты
 
-Этот файл сохраняет контекст прошлых экспериментов, но не объявляет результаты универсальными свойствами Nodus.
+Этот документ описывает benchmark practice Nodus и сохраняет только ограниченный контекст прошлых наблюдений. Он не объявляет локальные результаты универсальными свойствами проекта или моделей.
 
-На простом `/status` сценарии старая 14B-конфигурация после ограничения research/edit pipeline показывала существенно меньший runtime, чем та же модель в свободном agent loop. Основной эффект был получен не за счёт «улучшения интеллекта» модели, а за счёт переноса поиска, состояния, ограничений, retries и patch mechanics в Nodus.
+## Что измеряем
 
-Эти результаты используются только как мотивация архитектуры. Новая 0.3 реализация должна заново измеряться на одинаковых Scenario contracts.
+Для каждого прогона полезно фиксировать:
 
-При benchmark важно фиксировать:
-
-- model/configuration;
-- scenario id;
+- model и configuration, включая quantization, если она известна;
+- scenario/task id;
+- execution mode;
 - число model calls;
 - wall-clock duration;
+- token metrics, если доступны;
 - success/failure;
+- contract/schema/apply failures;
 - execution log;
-- изменённые файлы.
+- итоговое состояние изменённых файлов.
 
-Model benchmarks следует запускать последовательно (`concurrency=1`).
+Model benchmarks запускаются последовательно (`concurrency=1`), если несколько прогонов конкурировали бы за один локальный endpoint/GPU.
 
+Важно по возможности разделять разные capability:
+
+- модель поняла требуемое semantic изменение;
+- модель смогла выразить изменение в выбранном contract;
+- технический edit применился;
+- итоговое состояние семантически корректно.
+
+Один exact expected output не должен автоматически считаться единственным корректным решением, если задача допускает эквивалентные реализации.
 
 ## Raw-agent control group
 
-`target/benchmark/RawAgentBenchmark.ts` намеренно обходит Engine/Planner/Research/Worker orchestration и запускает свободный tool loop на той же model/project configuration. Это контрольная группа для сравнения с Nodus, а не correctness test.
+`target/benchmark/RawAgentBenchmark.ts` намеренно обходит Engine/Planner/Research/Worker orchestration и запускает свободный tool loop на той же model/project configuration. Это контрольная группа, а не correctness test Nodus.
 
 Запуск:
 
@@ -29,23 +38,29 @@ Model benchmarks следует запускать последовательн�
 npm run benchmark:raw-agent -- nodus.config.json
 ```
 
-Подробности transport/tool loop находятся в `target/benchmark/RAW-AGENT.md`.
+Подробности: [`../../target/benchmark/raw-agent.md`](../../target/benchmark/raw-agent.md).
 
-## Raw-agent control
+## Model capability benchmark
 
-`target/benchmark/RawAgentBenchmark.ts` intentionally bypasses Engine/Planner/Research/Worker orchestration and remains a control group for comparing the same model and project tools against Nodus. Benchmark code is not a Vitest suite: correctness/regression belongs to `test/`, while timing/token/tool-call comparisons belong here.
+`target/benchmark/model-capabilities` используется для более узких экспериментов с конкретными model capabilities, в частности с выражением изменений через разные Edit contracts. Его задача — отделять edit mechanics от Planner/Research noise, насколько это позволяет текущий harness.
+
+Результаты конкретной модели не считаются глобальным рейтингом. Они нужны прежде всего для локального выбора и дальнейших runtime-гипотез.
+
+## Исторические наблюдения
+
+До текущей 0.3 архитектуры отдельные ручные прогоны `/status` показывали, что более ограниченный research/edit pipeline может заметно отличаться от свободного agent loop по времени и поведению. Эти наблюдения были одной из мотиваций дальнейшей работы, но не являются воспроизводимым benchmark evidence текущей версии и не должны использоваться как доказанная характеристика Nodus.
 
 ## TODO: стоимость языка внутренних запросов
 
-Проверить стоимость одинаковых machine-facing запросов при `language.nodus = en` и `language.nodus = ru`. Это отдельный benchmark-эксперимент, а не часть runtime language policy.
+Отдельный простой эксперимент — сравнить одинаковые machine-facing запросы при `language.nodus = en` и `language.nodus = ru`.
 
-Для сравнения использовать одинаковые model/configuration, input data, response schema и sampling settings. Начать с нескольких небольших вызовов: Planner, Determine, Worker attempt и Research.
+Для сравнения использовать одинаковые model/configuration, input data, response schema и sampling settings. Начать с небольших вызовов Planner, Determine, Worker attempt и Research.
 
-Фиксировать отдельно:
+Фиксировать:
 
 - prompt tokens;
 - completion tokens;
 - total tokens;
 - duration.
 
-Не считать заранее, что английский экономит примерно `2x`: вывод должен следовать из измерений.
+Не предполагать заранее конкретный коэффициент экономии: вывод должен следовать из измерений.
