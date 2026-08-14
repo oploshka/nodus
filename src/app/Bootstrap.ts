@@ -110,17 +110,19 @@ export class Bootstrap {
       ));
     }
 
+    const createEdit = () => new ProjectEditor(project, logger, [
+      new RangeReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+      new ReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+      new DiffEditStrategy(model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+      new FullFileEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+    ]);
+
     return new Engine(
       project,
       new ModelPlanner(model, logger, language.nodus),
       workers,
       new ModelDetermine(model, logger, language.nodus),
-      new ProjectEditor(project, logger, [
-        new RangeReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-        new ReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-        new DiffEditStrategy(model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-        new FullFileEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-      ]),
+      createEdit,
       overrides.validator ?? createValidator(configuration, project),
       logger,
     );
