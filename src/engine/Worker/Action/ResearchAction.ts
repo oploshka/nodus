@@ -5,6 +5,7 @@ import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.
 
 export interface ResearchActionInput extends ActionModelOptions {
   question: string;
+  readFile?: (path: string) => Promise<string>;
 }
 
 export class ResearchAction implements WorkerAction<ResearchActionInput, ResearchAnswer> {
@@ -27,6 +28,7 @@ export class ResearchAction implements WorkerAction<ResearchActionInput, Researc
       const answer = await this.research.ask(input.question, {
         guidance: this.guidance,
         settings: input.settings,
+        readFile: input.readFile,
       });
       return { status: 'completed', data: answer };
     } catch (error) {

@@ -7,6 +7,7 @@ import type { Tool, ToolContext } from '@model/Tool/Tool.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
+import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 
 /** General-purpose bounded agent loop. Specialized workers may outperform it. */
 export class AgentWorker implements Worker {
@@ -26,7 +27,7 @@ export class AgentWorker implements Worker {
 
   public canHandle(_step: PlanStep): boolean { return true; }
 
-  public async run(task: Task, step: PlanStep): Promise<WorkerResult> {
+  public async run(task: Task, step: PlanStep, edit: ProjectEditor): Promise<WorkerResult> {
     try {
       const result = await this.agent.run({
         message: [
@@ -38,7 +39,15 @@ export class AgentWorker implements Worker {
           'Your final summary is consumed by Nodus and is therefore internal orchestration output, not a direct user response.',
         ].filter(Boolean).join('\n\n'),
         tools: this.tools,
-        context: this.context,
+        context: {
+          ...this.context,
+          // Agent sees the same task-local file state as specialized Workers.
+          // Create/delete semantics remain intentionally outside Edit for now.
+          fileAccess: {
+            read: (path) => edit.read(path),
+            write: (path, content) => edit.write(path, content),
+          },
+        },
         maxRounds: this.maxRounds,
       });
 

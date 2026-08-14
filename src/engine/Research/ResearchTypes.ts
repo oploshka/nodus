@@ -23,6 +23,8 @@ export interface ResolvedResearch {
 export interface ResearchResolveOptions {
   guidance?: string;
   settings?: ModelRunSettings;
+  /** Optional task-local file reader. Cache/hash semantics remain Project-based for now. */
+  readFile?: (path: string) => Promise<string>;
 }
 
 export interface ResearchResolver {

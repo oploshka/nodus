@@ -10,22 +10,29 @@
 - `engine` — task lifecycle, Planner, Determine, Worker, Research, Edit и Validation;
 - `model` — граница с LLM/provider transport, response formats/schema, `ModelRunner`/`ModelCaller` и model capabilities.
 
-Основной путь:
+Текущая логика Engine:
 
-```text
-App / CLI
-  -> Engine.run(task)
-  -> Planner -> Plan
-  -> для каждого PlanStep:
-       Determine -> Worker
-       Worker -> bounded Actions / Research when needed
-       Worker -> WorkerResult + semantic ProjectEditRequest
-       Engine -> ProjectEditor -> prepare / recover / fallback / commit
-       Engine -> Validation
-       Engine -> следующий PlanStep
+```ts
+Engine(task) {
+  const edit = createEdit()
+
+  // несколько PlanStep используют один task-local Edit
+  Worker.run(step1, edit)
+  checkpoint = edit.state()
+
+  Worker.run(step2, edit)
+
+  if (step2.failed)
+    edit.restore(checkpoint)
+
+  // ...
+
+  edit.apply()
+  Validation.run() // временная post-apply граница
+}
 ```
 
-Engine не управляет внутренними attempts Worker и не должен понимать конкретные Research-вопросы. При этом границы, где результат Worker становится состоянием Project, принадлежат Engine.
+Engine не управляет внутренними attempts Worker и не должен понимать конкретные Research-вопросы. Он владеет task-level Edit, checkpoints и моментом физического apply.
 
 ## Planner
 
@@ -42,9 +49,9 @@ Planner строит небольшой semantic plan. `PlanStep` описыва
 
 ## Worker / Actions
 
-Worker выполняет один `PlanStep` через ограниченный набор Actions.
+Worker выполняет один `PlanStep` через ограниченный набор Actions и получает task-local Edit как execution tool.
 
-`ChangeCodeAction` определяет semantic edit intent и может запросить конкретную недостающую информацию через `ResearchAction`. Техническая materialization изменения не принадлежит Worker.
+`ChangeCodeAction` определяет semantic edit intent. `IterativeWorker` передаёт intent в `Edit.change()`, а Research при необходимости читает файлы через `Edit.read()`.
 
 Worker возвращает Engine:
 
@@ -52,17 +59,24 @@ Worker возвращает Engine:
 - `not-completed` + возможность будущего continuation;
 - `failed`.
 
-Настоящий resume того же Worker instance пока не реализован.
+Engine не должен знать, какие Actions Worker счёл необходимыми. Настоящий resume того же Worker instance пока не реализован.
 
 ## Research
 
-Research — bounded service с persistent cache. Cache entry хранит source files и hashes; ответ используется повторно, пока связанные sources остаются актуальными. `not-found` не кешируется.
+Research — bounded service с persistent cache. Cache entry хранит source files и hashes; `not-found` не кешируется.
 
-Текущая открытая область — semantic dedupe похожих вопросов, более точная фиксация фактически использованных evidence и будущая работа Research поверх virtual workspace.
+Research, вызванный из `IterativeWorker`, может читать source content через текущий Edit, поэтому следующий step способен увидеть накопленные изменения предыдущего. Cache/hash semantics пока остаются основанными на физическом Project и могут не учитывать task-local content.
 
 ## Engine-owned Edit
 
-Worker возвращает semantic `ProjectEditRequest` (`path + instruction` и optional preferred strategy). `ProjectEditor` владеет authoritative source, EditStrategy, applicator, buffered state и commit.
+`ProjectEditor` создаётся отдельно для Task и хранит простую map существующих изменённых файлов: original content + current task-local content.
+
+Основные операции:
+
+- `read(path)` — task-local content, затем Project;
+- `change(...)` — materialize semantic intent через EditStrategy и накопить результат;
+- `state()` / `restore()` — step-level checkpoint;
+- `apply(state?)` — физически записать накопленное состояние.
 
 Текущие стратегии:
 
@@ -71,23 +85,15 @@ Worker возвращает semantic `ProjectEditRequest` (`path + instruction` 
 - unified `diff`;
 - full-file `edit`.
 
-Все изменения одного coherent result сначала готовятся в памяти. Несколько edits одного файла видят buffered результат предыдущих edits. До первой записи проверяются target paths и stale-source guards.
+Technical recovery/fallback остаётся внутри Edit. Последующие изменения одного файла работают относительно уже накопленного content.
 
-Technical recovery выполняется внутри Edit layer без повторного запуска Worker. Для `range-replace` есть один bounded localization retry. После неуспешной подготовки Editor может перейти к следующей зарегистрированной стратегии, сохраняя исходный semantic intent. Базовые цепочки: `range-replace -> diff -> edit`, `replace -> diff -> edit`, `diff -> edit`.
-
-`ProjectEditor` после commit возвращает canonical paths реально изменённых файлов; они используются следующей Validation boundary.
+`AgentWorker` также подключает `file-system read/write` к Edit. Search/Terminal/Git пока продолжают видеть физический Project. Create/delete/move в task-local Edit пока не поддержаны.
 
 ## Validation
 
-Обычный Bootstrap теперь использует `CompositeValidator`, который собирает несколько bounded deterministic `ValidationCheck`.
+Обычный Bootstrap использует `CompositeValidator` с bounded deterministic `ValidationCheck` (`JsonValidationCheck`, configured `CommandValidationCheck`; `PassValidator` остаётся compatibility/test implementation).
 
-Первый вариант включает:
-
-- `JsonValidationCheck` — по умолчанию парсит изменённые `.json`;
-- `CommandValidationCheck` — запускает trusted user-configured project commands;
-- `PassValidator` остаётся явной compatibility/test implementation.
-
-Todo dogfooding config включает `npm run typecheck` и `npm test`. Validation сейчас post-commit: failure превращает step в `not-completed`, но автоматического rollback/recovery пока нет. См. [`validation.md`](validation.md).
+Validation пока оставлена после `Edit.apply()` как временная граница. Распределение между будущим `EditValidator`, Worker-level testing и итоговыми Engine checks ещё не определено и сознательно отложено до стабилизации Edit mechanics.
 
 ## Project paths и internal storage
 
@@ -124,12 +130,10 @@ Deterministic integration scenarios фиксируют runtime boundaries, а н
 
 ## Ближайшие направления
 
-Актуальный порядок и более длинный список находятся в [`../development/roadmap.md`](../development/roadmap.md). Основные открытые темы сейчас:
-
-1. живой прогон нового Validation и наблюдение failure/recovery semantics;
-2. дальнейшая проверка Engine-owned Edit и strategy behavior на mock project;
-3. virtual workspace / task-wide commit;
-4. Research v2;
+1. стабилизировать task-local Edit mechanics и чтение накопленного состояния;
+2. перераспределить Validation после того, как станет понятна новая граница Edit;
+3. определить partial apply / user decision при незавершённой Task;
+4. Research v2 и task-local cache/hash semantics при реальной необходимости;
 5. Planner decomposition и будущий replanning;
 6. model capability measurements;
 7. language policy live-run verification;

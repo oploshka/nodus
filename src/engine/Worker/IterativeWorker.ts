@@ -8,6 +8,7 @@ import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import type { Worker, WorkerResult } from '@engine/Worker/Worker.js';
 import type { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import type { ModelRunSettings } from '@model/Request/ModelRun.js';
+import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 
 interface WorkerSession {
   knowledge: ResearchAnswer[];
@@ -44,7 +45,7 @@ export abstract class IterativeWorker implements Worker {
 
   public canHandle(_step: PlanStep): boolean { return true; }
 
-  public async run(task: Task, step: PlanStep): Promise<WorkerResult> {
+  public async run(task: Task, step: PlanStep, edit: ProjectEditor): Promise<WorkerResult> {
     const sessionKey = `${task.id}:${step.id}`;
     const session = this.sessions.get(sessionKey) ?? { knowledge: [] };
     this.sessions.set(sessionKey, session);
@@ -110,8 +111,14 @@ export abstract class IterativeWorker implements Worker {
       });
 
       if (result.status === 'completed') {
+        if (result.data.edit) {
+          const editResult = await edit.change(task, step, result.data.edit);
+          if (editResult.status === 'not-completed') {
+            return { status: 'not-completed', reason: editResult.reason, canContinue: true };
+          }
+        }
         this.sessions.delete(sessionKey);
-        return { status: 'completed', summary: result.data.summary, edit: result.data.edit };
+        return { status: 'completed', summary: result.data.summary };
       }
 
       if (result.status === 'failed') {
@@ -162,6 +169,7 @@ export abstract class IterativeWorker implements Worker {
         const researchResult = await this.researchAction.run({
           question,
           settings: this.modelSettings.research,
+          readFile: (path) => edit.read(path),
         });
         this.logger.info('worker.action.finish', {
           workerId: this.id,

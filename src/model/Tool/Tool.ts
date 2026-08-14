@@ -1,6 +1,11 @@
 export interface ToolContext {
   projectRoot: string;
   exclude: string[];
+  /** Optional task-local file access supplied by Engine/Worker execution. */
+  fileAccess?: {
+    read(path: string): Promise<string>;
+    write(path: string, content: string): Promise<void>;
+  };
 }
 
 export interface ToolDefinition {
