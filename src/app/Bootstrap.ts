@@ -14,6 +14,8 @@ import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEdit
 import { ReplaceEditStrategy } from '@engine/Edit/Strategy/ReplaceEditStrategy.js';
 import { DiffEditStrategy } from '@engine/Edit/Strategy/DiffEditStrategy.js';
 import { FullFileEditStrategy } from '@engine/Edit/Strategy/FullFileEditStrategy.js';
+import { EditValidator } from '@engine/Edit/Validation/EditValidator.js';
+import { JsonEditValidationCheck } from '@engine/Edit/Validation/JsonEditValidationCheck.js';
 import type { EngineTest } from '@engine/EngineTest/EngineTest.js';
 import { ResolveEngineTest } from '@engine/EngineTest/ResolveEngineTest.js';
 import { CompositeEngineTest } from '@engine/EngineTest/CompositeEngineTest.js';
@@ -111,12 +113,15 @@ export class Bootstrap {
       ));
     }
 
+    const editValidator = new EditValidator([
+      new JsonEditValidationCheck(),
+    ]);
     const createEdit = () => new ProjectEditor(project, logger, [
       new RangeReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
       new ReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
       new DiffEditStrategy(model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
       new FullFileEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-    ]);
+    ], editValidator);
 
     return new Engine(
       project,
