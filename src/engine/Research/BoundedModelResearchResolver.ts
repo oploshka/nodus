@@ -37,8 +37,9 @@ export class BoundedModelResearchResolver implements ResearchResolver {
 
     const sourceBlocks: string[] = [];
     const paths: string[] = [];
+    const readFile = options?.readFile ?? ((path: string) => this.project.read(path));
     for (const candidate of candidates) {
-      const content = await this.project.read(candidate.path);
+      const content = await readFile(candidate.path);
       paths.push(candidate.path);
       sourceBlocks.push(`FILE ${candidate.path}\n${content.slice(0, this.maxCharsPerFile)}`);
     }
