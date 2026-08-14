@@ -1,5 +1,5 @@
-import type { ProjectEditRequest, ProjectEditResult } from '@engine/Edit/EditTypes.js';
-import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
+import type { ProjectEditRequest } from '@engine/Edit/EditTypes.js';
+import type { ProjectEditor, ProjectEditResult } from '@engine/Edit/ProjectEditor.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import { Task } from '@engine/Task/Task.js';
 import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
