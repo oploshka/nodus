@@ -12,7 +12,7 @@ export class ResearchAction implements WorkerAction<ResearchActionInput, Researc
   public readonly id = 'research';
   public readonly presentation = new ResearchPresentation();
   public readonly name = 'Research';
-  public readonly description = 'Resolve one concrete project knowledge gap using cached project evidence when possible.';
+  public readonly description = 'Synthesize one bounded piece of project knowledge from multiple relevant sources.';
 
   public constructor(
     private readonly research: Pick<Research, 'ask'>,
