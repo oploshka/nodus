@@ -25,24 +25,28 @@ export const defaultNodusSettings: NodusSettings = {
         guidance: [
           // Работай только в границах текущего шага плана и не исследуй будущие шаги заранее.
           'Work only within the current PlanStep. Do not investigate entities that belong only to later PlanSteps.',
-          // Не запрашивай Research просто ради большей уверенности: используй его только если без факта нельзя назвать конкретное изменение.
-          'Do not request Research merely to increase confidence. Request it only when a missing project fact prevents a concrete edit for the current PlanStep.',
+          // Research — дорогая операция анализа нескольких источников. Не используй её для поиска файла, чтения известного файла, получения сигнатуры или другого прямого lookup.
+          'Research is an expensive multi-source analysis operation. Do not request Research for file discovery, reading a known file, method signatures, or other direct lookups.',
+          // Не запрашивай Research ради уверенности. Он допустим только когда конкретный вывод о проекте нельзя получить из одного прямого источника.
+          'Do not request Research merely to increase confidence. Request it only when the current PlanStep requires a project-level conclusion that cannot be obtained from one direct source.',
           // Уже полученные ответы Research и найденные candidate files считаются рабочим контекстом; не запрашивай тот же смысл повторно без противоречия.
-          'Treat supplied Research knowledge and candidate files as usable evidence. Do not request the same fact again unless the supplied evidence is contradictory or insufficient for a concrete edit.',
+          'Treat supplied Research knowledge and candidate files as usable evidence. Do not request the same conclusion again unless the supplied evidence is contradictory or insufficient.',
           // Если информации достаточно для безопасного минимального изменения — переходи к edit intent, а не продолжай исследование.
           'When the available evidence is sufficient for a safe minimal change, produce edit intents instead of continuing discovery.',
         ],
       },
       research: {
         guidance: [
-          // Отвечай ровно на один ограниченный вопрос о текущем проекте.
-          'Answer exactly one bounded implementation question about the current project.',
+          // Research должен синтезировать одно конкретное знание о проекте из нескольких релевантных источников.
+          'Synthesize one bounded piece of project knowledge from multiple relevant sources.',
+          // Прямой lookup пути, содержимого одного известного файла или сигнатуры не является Research-задачей.
+          'Do not treat direct file lookup, reading one known source, or extracting a method signature as Research.',
           // Не расширяй задачу и не придумывай факты, которых нет в проекте.
           'Do not broaden the task, propose unrelated changes, or invent project facts.',
-          // Предпочитай конкретные пути файлов, идентификаторы, существующие API и соглашения проекта.
-          'Prefer concrete file paths, identifiers, existing APIs and current project conventions.',
-          // Если простой факт уже подтверждён одним надёжным источником, не расширяй поиск без необходимости.
-          'For a simple factual lookup, stop once the answer is supported by sufficient concrete project evidence.',
+          // Предпочитай вывод, который объясняет project convention, architecture или другое отношение между источниками.
+          'Prefer conclusions about project conventions, architecture, or relationships between sources over restating raw file content.',
+          // Остановись, когда для вывода уже есть достаточно конкретных подтверждений.
+          'Stop once the requested conclusion is supported by sufficient concrete project evidence.',
         ],
       },
       profiles: {

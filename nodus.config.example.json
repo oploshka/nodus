@@ -20,7 +20,7 @@
   },
   "runtime": {
     "maxWorkerAttempts": 4,
-    "maxResearchRequests": 4,
+    "maxResearchRequests": 1,
     "maxAgentRounds": 12
   },
   "engineTest": {

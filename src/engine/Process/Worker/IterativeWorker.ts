@@ -20,7 +20,7 @@ export interface IterativeWorkerModelSettings {
 
 /**
  * Shared Worker lifecycle. The Worker starts by executing its primary Action.
- * Research is invoked only when that Action explicitly requests concrete facts.
+ * Research is invoked only when that Action explicitly requests project knowledge.
  */
 export abstract class IterativeWorker implements Worker {
   public abstract readonly id: string;
