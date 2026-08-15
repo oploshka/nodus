@@ -16,20 +16,28 @@ nodus.config.json
 
 ## Process adaptation
 
-Первым вынесенным разделом является адаптация поведения Worker:
+Текущая структура адаптации:
 
 ```text
-process.worker
-  change
-    guidance
+process
+  planner
+    template
 
-  research
-    guidance
+  worker
+    change
+      guidance
 
-  profiles
-    code
-    documentation
+    research
+      guidance
+
+    profiles
+      code
+      documentation
 ```
+
+`planner.template` является обычным текстовым шаблоном сообщения Planner. Маркер `##message##` заменяется сообщением, которое сформировал сам Process. Template не знает структуру `Task`, `PlanStep` или других данных и может только оборачивать исходное сообщение дополнительной model-specific policy.
+
+Встроенный Planner template сейчас сильнее подчёркивает минимальное количество достаточно крупных смысловых шагов: один пользовательский outcome не должен дробиться по файлам, архитектурным слоям, методам или отдельным похожим test cases.
 
 `change.guidance` задаёт поведенческие правила для `ChangeCodeAction`: держать границы текущего `PlanStep`, не запускать Research только ради дополнительной уверенности и переходить к edit intent, когда имеющихся данных достаточно.
 

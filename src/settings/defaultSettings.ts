@@ -6,6 +6,20 @@ import type { NodusSettings } from './NodusSettings.js';
  */
 export const defaultNodusSettings: NodusSettings = {
   process: {
+    planner: {
+      template: [
+        // Строй минимальное количество достаточно крупных смысловых шагов, которые Worker способен выполнить как одно связное изменение.
+        'Create the smallest number of coherent semantic PlanSteps that can be executed safely by a Worker.',
+        // Не дроби один пользовательский результат по файлам, архитектурным слоям, методам или отдельным техническим действиям.
+        'Do not split one user-visible outcome by files, architectural layers, methods, or implementation mechanics.',
+        // Изменения, которые имеют смысл только вместе, должны оставаться одним шагом.
+        'Keep changes that are only meaningful together in the same PlanStep.',
+        // Близкие проверки одного поведения не нужно превращать в отдельные шаги только из-за разных сценариев.
+        'Keep closely related checks of the same behavior together instead of creating one PlanStep per test case.',
+        '',
+        '##message##',
+      ].join('\n'),
+    },
     worker: {
       change: {
         guidance: [
