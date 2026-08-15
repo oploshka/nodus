@@ -36,7 +36,7 @@ export abstract class IterativeWorker implements Worker {
     private readonly researchAction: WorkerAction<ResearchActionInput, ResearchAnswer>,
     private readonly logger: EngineLogger,
     private readonly maxAttempts = 4,
-    private readonly maxResearchRequests = 4,
+    private readonly maxResearchRequests = 1,
     private readonly modelSettings: IterativeWorkerModelSettings = {},
   ) {
     this.actions = [primaryAction, researchAction];
