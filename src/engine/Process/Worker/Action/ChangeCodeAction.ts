@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
+import type { iProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { ActionModelOptions, ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
@@ -73,7 +73,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
 
   public constructor(
     private readonly fileSystem: FileSystem,
-    private readonly fileIndex: ProjectFileIndex,
+    private readonly fileIndex: iProjectFileIndex,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly profile: ChangeCodeActionProfile,
