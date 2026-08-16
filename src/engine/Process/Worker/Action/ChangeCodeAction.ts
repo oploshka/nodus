@@ -14,14 +14,14 @@ import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import type { EditStrategyId, ProjectEditRequest } from '@engine/Edit/EditTypes.js';
 import type { tWorkerContextItem } from '@engine/Worker/WorkerContext.js';
-import type { sSearchProjectActionInput } from './SearchProjectAction.js';
+import type { sFindFileActionInput } from './FindFileAction.js';
 
 interface ChangeDecision {
   outcome: 'ready' | 'missing-information' | 'already-completed' | 'failed';
   summary?: string;
   reason?: string;
-  searchQueries?: string[];
-  readPaths?: string[];
+  findFiles?: string[];
+  readFiles?: string[];
   questions?: string[];
   edits?: Array<{ path: string; instruction: string }>;
 }
@@ -30,6 +30,7 @@ export interface ChangeCodeActionProfile {
   purpose: string;
   guidance: string;
   adaptationGuidance?: ReadonlyArray<string>;
+  adaptationTemplate?: string;
   language: LanguageConfiguration;
   strategy: EditStrategyId;
 }
@@ -45,8 +46,8 @@ const decisionSchema: ModelResponseSchema = {
     ] },
     summary: { type: 'string', optional: true },
     reason: { type: 'string', optional: true },
-    searchQueries: { type: 'array', items: { type: 'string' }, optional: true },
-    readPaths: { type: 'array', items: { type: 'string' }, optional: true },
+    findFiles: { type: 'array', items: { type: 'string' }, optional: true, description: 'File names or concepts whose project paths are not yet known. FindFile returns paths only.' },
+    readFiles: { type: 'array', items: { type: 'string' }, optional: true, description: 'Already known project paths whose contents are required.' },
     questions: { type: 'array', items: { type: 'string' }, optional: true },
     edits: { type: 'array', optional: true, items: { type: 'object', fields: { path: { type: 'string' }, instruction: { type: 'string' } } } },
   },
@@ -61,7 +62,7 @@ export interface ChangeCodeActionInput extends ActionModelOptions {
 export interface ChangeCodeActionData { summary: string; edit?: ProjectEditRequest }
 export interface ResearchActionRequest { question: string }
 export interface ReadActionRequest { path: string }
-export type tChangeCodeActionRequest = ResearchActionRequest | ReadActionRequest | sSearchProjectActionInput;
+export type tChangeCodeActionRequest = ResearchActionRequest | ReadActionRequest | sFindFileActionInput;
 
 /** Worker-side change intent producer. Technical edit serialization belongs to Engine/Edit. */
 export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, tChangeCodeActionRequest> {
@@ -89,9 +90,13 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
   }
 
   public async run(context: ChangeCodeActionInput): Promise<ActionResult<ChangeCodeActionData, tChangeCodeActionRequest>> {
+    const message = renderMessageTemplate(
+      this.profile.adaptationTemplate ?? '##message##',
+      'Determine the concrete project edits required to complete the assigned PlanStep now.',
+    );
     const decision = await callModel<ChangeDecision>(this.model, this.logger, {
       request: {
-        message: 'Determine the concrete project edits required to complete the assigned PlanStep now.',
+        message,
         data: {
           task: context.task.description,
           step: context.step,
@@ -106,10 +111,10 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
           ...new ModelLanguagePolicy(this.profile.language).mixedProjectEdit(),
           'This Action only describes what must change. Do not generate diff, replacement blocks, line ranges, or complete file contents.',
           'Treat summary and reason as internal Nodus fields.',
-          'When information is missing, request the cheapest sufficient operation: searchQueries to locate files, readPaths to inspect known files, and questions only for cross-file analysis or project knowledge that cannot be answered by direct retrieval.',
-          'Do not use questions to ask for a file path, exact signature, type fields, or file contents when search/read can answer it.',
-          'Read paths must come from candidateFiles, prior search results, or prior context; do not invent paths.',
-          'Return at most 3 missing-information requests in total.',
+          'When information is missing, request the cheapest sufficient operation: findFiles only when a required project path is unknown, readFiles when an already known file must be inspected, and questions only for cross-file analysis or project knowledge that cannot be answered by direct retrieval.',
+          'Do not use questions to ask for a file path, exact signature, type fields, or file contents when FindFile/ReadFile can answer it.',
+          'readFiles entries must come from candidateFiles, prior FindFile results, or prior context; do not invent paths.',
+          'Request only the minimum information needed for the next decision. Do not fill an arbitrary request count.',
           'Every edit.path must be relative to the project root.',
           'Each edit.instruction must describe the required semantic result for exactly that file, without prescribing an edit serialization format.',
           'One coherent change may edit multiple files when required for the same outcome.',
@@ -125,8 +130,8 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     if (decision.outcome === 'failed') return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed under the supplied constraints.', canContinue: false };
     if (decision.outcome === 'missing-information') {
       const requests = [
-        ...(decision.searchQueries ?? []).map((query) => ({ actionId: 'search', input: { query: query.trim() } })),
-        ...(decision.readPaths ?? []).map((path) => ({ actionId: 'read', input: { path: path.trim() } })),
+        ...(decision.findFiles ?? []).map((query) => ({ actionId: 'find-file', input: { query: query.trim() } })),
+        ...(decision.readFiles ?? []).map((path) => ({ actionId: 'read-file', input: { path: path.trim() } })),
         ...(decision.questions ?? []).map((question) => ({ actionId: 'research', input: { question: question.trim() } })),
       ].filter((request) => Object.values(request.input)[0]).slice(0, 3);
       if (requests.length === 0) throw new Error('Attempt reported missing information without a concrete retrieval or research request.');
@@ -151,7 +156,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     for (const item of context.context) {
       if (item.kind === 'search') for (const path of item.paths) paths.add(path);
       else if (item.kind === 'read') paths.add(item.path);
-      else for (const source of item.value.sources) paths.add(source.path);
+      else if (item.kind === 'research') for (const source of item.value.sources) paths.add(source.path);
     }
     for (const file of this.fileIndex.findFiles(`${context.task.description}\n${context.step.goal}`, 16)) paths.add(file.path);
     return [...paths].slice(0, 24);
@@ -159,8 +164,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
 }
 
 function serializeContext(item: tWorkerContextItem): unknown {
-  if (item.kind === 'search') return item;
-  if (item.kind === 'read') return item;
+  if (item.kind === 'search' || item.kind === 'read' || item.kind === 'retrieval-feedback') return item;
   return {
     kind: 'research',
     question: item.value.question,
@@ -168,6 +172,11 @@ function serializeContext(item: tWorkerContextItem): unknown {
     answer: item.value.answer,
     sources: item.value.sources.map((source) => source.path),
   };
+}
+
+function renderMessageTemplate(template: string, message: string): string {
+  if (!template.includes('##message##')) throw new Error('Change message template must contain ##message## marker.');
+  return template.replaceAll('##message##', message);
 }
 
 function strategyLabel(strategy: EditStrategyId) {
