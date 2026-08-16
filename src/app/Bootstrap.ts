@@ -9,8 +9,8 @@ import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
 import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
-import { ReadProjectAction } from '@engine/Worker/Action/ReadProjectAction.js';
-import { SearchProjectAction } from '@engine/Worker/Action/SearchProjectAction.js';
+import { ReadFileAction } from '@engine/Worker/Action/ReadFileAction.js';
+import { FindFileAction } from '@engine/Worker/Action/FindFileAction.js';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEditStrategy.js';
 import { ReplaceEditStrategy } from '@engine/Edit/Strategy/ReplaceEditStrategy.js';
@@ -128,18 +128,19 @@ export class Bootstrap {
       logger,
     );
 
-    const readAction = new ReadProjectAction();
-    const searchAction = new SearchProjectAction(target.fileIndex);
+    const readFileAction = new ReadFileAction();
+    const findFileAction = new FindFileAction(target.fileIndex);
     const researchAction = new ResearchAction(research, workerAdaptation.research.guidance);
 
     const codeWorker = new CodeWorker(
       new ChangeCodeAction(target.fileSystem, target.fileIndex, model, logger, {
         ...workerAdaptation.profiles.code,
         adaptationGuidance: workerAdaptation.change.guidance,
+        adaptationTemplate: workerAdaptation.change.template,
         language,
       }),
-      readAction,
-      searchAction,
+      readFileAction,
+      findFileAction,
       researchAction,
       logger,
       configuration.runtime?.maxWorkerAttempts,
@@ -150,10 +151,11 @@ export class Bootstrap {
       new ChangeCodeAction(target.fileSystem, target.fileIndex, model, logger, {
         ...workerAdaptation.profiles.documentation,
         adaptationGuidance: workerAdaptation.change.guidance,
+        adaptationTemplate: workerAdaptation.change.template,
         language,
       }),
-      readAction,
-      searchAction,
+      readFileAction,
+      findFileAction,
       researchAction,
       logger,
       configuration.runtime?.maxWorkerAttempts,
