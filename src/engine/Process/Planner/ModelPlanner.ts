@@ -24,25 +24,25 @@ const plannerSchema: ModelResponseSchema = {
   fields: {
     steps: {
       type: 'array',
-      description: 'Ordered semantic work steps. Keep this list small.',
+      description: 'Ordered independently valuable outcomes. Default to one step.',
       items: {
         type: 'object',
         fields: {
-          goal: { type: 'string', description: 'Outcome this step must achieve.' },
+          goal: { type: 'string', description: 'Complete user-valued outcome this step must achieve.' },
           constraints: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Explicit user constraints that define when this goal is correctly completed. Use an empty array when none apply.',
+            description: 'Explicit user constraints that define when this outcome is correctly completed. Use an empty array when none apply.',
           },
           decompositionType: {
             type: 'option',
             optionList: [
-              { id: 'coherent-outcome', description: 'The request is one coherent outcome and no split reason applies.' },
-              { id: 'independent-outcome', description: 'This outcome can be completed and judged independently from the other requested outcomes.' },
-              { id: 'dependency', description: 'A later requested outcome cannot reasonably be attempted before this outcome exists.' },
-              { id: 'separate-deliverable', description: 'The user explicitly expects this result as a separately observable deliverable.' },
+              { id: 'coherent-outcome', description: 'The request is one coherent outcome and no independent split is justified.' },
+              { id: 'independent-outcome', description: 'This outcome remains complete and independently valuable if the other steps are never implemented.' },
+              { id: 'dependency', description: 'The user explicitly requests a later independently valuable outcome that cannot reasonably be attempted before this one exists.' },
+              { id: 'separate-deliverable', description: 'The user explicitly requests this result as a separately valuable deliverable.' },
             ],
-            description: 'Why this outcome is represented as this PlanStep. This describes decomposition only, never implementation type.',
+            description: 'Why this independently valuable outcome is represented as its own PlanStep.',
           },
           knowledgeImpact: {
             type: 'array',
@@ -68,7 +68,7 @@ export class ModelPlanner implements Planner {
   public async plan(task: Task): Promise<Plan> {
     const message = renderMessageTemplate(
       this.messageTemplate,
-      'Split this user request into the smallest useful set of executable semantic tasks.',
+      'Determine the independently valuable outcomes requested by the user and return the minimum number of PlanSteps needed to represent them.',
     );
     const response = await callModel<PlannerModelResponse>(this.model, this.logger, {
       request: {
@@ -79,17 +79,19 @@ export class ModelPlanner implements Planner {
           'You are the high-level Planner inside Nodus.',
           'The user task may be in any language.',
           ModelLanguagePolicy.nodus(this.nodusLanguage),
-          'Create only steps that directly contribute to the user-requested outcome.',
-          'Do not invent analysis, documentation, safety limits, configuration semantics, or other requirements the user did not ask for.',
+          'Default to exactly one PlanStep.',
+          'Create more than one PlanStep only for outcomes that remain complete and independently valuable to the user if every other PlanStep is permanently abandoned.',
+          'Dependencies, implementation layers, files, classes, methods, tests, validation cases, implementation phases, research needs, and supporting changes are not independent outcomes by themselves.',
+          'Tests that verify requested behavior belong to the same outcome as the implementation unless the user explicitly requests testing as a separate deliverable.',
+          'If one requested behavior requires coordinated changes across multiple project parts, keep all required changes in one PlanStep.',
+          'Do not create another PlanStep merely because some work can technically be implemented separately or performed in sequence.',
+          'Do not invent analysis, documentation, refactoring, cleanup, validation, configuration semantics, safety limits, or other work the user did not request.',
           'Do not add research/understand/discover steps merely because implementation details are unknown; the Worker resolves missing project knowledge while executing.',
-          'Do NOT solve implementation details, discover APIs, name files unless the user named them, or prescribe patch mechanics.',
-          'Each step must be something a Worker can try to complete, not a question or preparatory investigation.',
-          'Decompose by user-visible semantic outcomes, never by files, architectural layers, implementation phases, research needs, validation phases, or technical sub-actions.',
-          'Create a separate step only when at least one reason applies: (1) independent-outcome: the result can succeed/fail independently, (2) dependency: another requested result cannot reasonably be attempted before it exists, or (3) separate-deliverable: the user explicitly expects it as a separate observable deliverable.',
-          'If none of those separation reasons apply, return exactly one coherent-outcome step.',
-          'Treat wording such as preserve/default/do not/change only/pass through/update example as constraints of the coherent goal when they describe correctness of that same outcome; do not automatically turn each clause into its own step.',
-          'Every step must include constraints. Copy only explicit user constraints that remain relevant to that goal; use an empty array when there are none.',
-          'The decompositionType field explains why the step exists as a semantic planning unit. It is not a Worker type, Action type, file category, or implementation strategy.',
+          'Do not solve implementation details, discover APIs, name files unless the user named them, or prescribe patch mechanics.',
+          'Each step must describe a complete outcome a Worker can try to deliver, not a question, preparatory investigation, technical sub-action, file layer, or test case.',
+          'For every step after the first, apply this test: Would the user still consider this outcome complete and independently valuable if all other PlanSteps were permanently abandoned? If not, merge it into the same PlanStep.',
+          'Every step must include constraints. Copy only explicit user constraints that remain relevant to that outcome; use an empty array when none apply.',
+          'Use coherent-outcome when the request is represented by one PlanStep. Use another decompositionType only when that step passes the independent-value test above.',
           'Preserve explicit user constraints and nothing more.',
         ].join('\n'),
       },

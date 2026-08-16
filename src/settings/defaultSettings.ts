@@ -8,14 +8,22 @@ export const defaultNodusSettings: NodusSettings = {
   process: {
     planner: {
       template: [
-        // Строй минимальное количество достаточно крупных смысловых шагов, которые Worker способен выполнить как одно связное изменение.
-        'Create the smallest number of coherent semantic PlanSteps that can be executed safely by a Worker.',
-        // Не дроби один пользовательский результат по файлам, архитектурным слоям, методам или отдельным техническим действиям.
-        'Do not split one user-visible outcome by files, architectural layers, methods, or implementation mechanics.',
-        // Изменения, которые имеют смысл только вместе, должны оставаться одним шагом.
-        'Keep changes that are only meaningful together in the same PlanStep.',
-        // Близкие проверки одного поведения не нужно превращать в отдельные шаги только из-за разных сценариев.
-        'Keep closely related checks of the same behavior together instead of creating one PlanStep per test case.',
+        // По умолчанию пользовательский запрос считается одним PlanStep.
+        'Default to ONE PlanStep.',
+        // Несколько шагов допустимы только для действительно независимых пользовательских результатов.
+        'Create multiple PlanSteps only when the user explicitly requests outcomes that remain useful and complete if the other outcomes are never implemented.',
+        // Техническая структура реализации сама по себе не создаёт новые PlanSteps.
+        'Dependencies, implementation layers, files, classes, methods, tests, validation cases, and supporting changes are NOT independent outcomes.',
+        // Тесты запрошенного поведения являются частью того же результата, если пользователь явно не требует отдельный deliverable.
+        'Tests that verify the requested behavior are part of the same outcome as the implementation. They are not an independently valuable outcome unless the user explicitly requests testing as a separate deliverable.',
+        // Координированные изменения разных частей проекта относятся к одному шагу.
+        'If one requested behavior requires coordinated changes across Store, Service, tests, or other parts of the project, all of those changes belong to the same PlanStep.',
+        // Возможность технически выполнить работу по частям не является основанием для декомпозиции.
+        'Do not create additional PlanSteps merely because parts of the work can technically be implemented separately or performed in sequence.',
+        // Для каждого дополнительного шага проверяй его самостоятельную ценность для пользователя.
+        'For every PlanStep after the first, ask: "Would this outcome still be complete and independently valuable to the user if all other PlanSteps were permanently abandoned?" If the answer is no, it belongs in the same PlanStep.',
+        // Не добавляй работу, которую пользователь не просил.
+        'Do not add documentation, refactoring, cleanup, validation, or other work unless explicitly requested.',
         '',
         '##message##',
       ].join('\n'),
