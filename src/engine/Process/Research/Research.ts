@@ -1,5 +1,5 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
+import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import type { ResearchAnswer, ResearchResolveOptions, ResearchResolver } from '@engine/Research/ResearchTypes.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
@@ -9,7 +9,7 @@ export class Research {
   public constructor(
     private readonly store: ResearchStore,
     private readonly resolver: ResearchResolver,
-    private readonly project: ProjectFiles,
+    private readonly fileSystem: FileSystem,
     private readonly logger: EngineLogger,
   ) {}
 
@@ -36,7 +36,7 @@ export class Research {
 
     const sources = [];
     for (const path of Array.from(new Set(resolved.sources))) {
-      sources.push({ path, hash: await this.project.hash(path) });
+      sources.push({ path, hash: await this.fileSystem.hash(path) });
     }
     const answer: ResearchAnswer = {
       question,
