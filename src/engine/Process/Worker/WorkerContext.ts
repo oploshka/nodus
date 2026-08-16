@@ -17,4 +17,9 @@ export interface sWorkerResearchContext {
   value: ResearchAnswer;
 }
 
-export type tWorkerContextItem = sWorkerSearchContext | sWorkerReadContext | sWorkerResearchContext;
+export interface sWorkerRetrievalFeedbackContext {
+  kind: 'retrieval-feedback';
+  message: string;
+}
+
+export type tWorkerContextItem = sWorkerSearchContext | sWorkerReadContext | sWorkerResearchContext | sWorkerRetrievalFeedbackContext;
