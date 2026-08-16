@@ -16,6 +16,7 @@
     "nodus:project": "tsx src/app/Main.ts target/project/nodus.config.json --clear-cache --clear-logs --scan",
     "benchmark:raw-agent": "tsx target/benchmark/RawAgentBenchmark.ts",
     "benchmark:change-context": "tsx target/benchmark/ChangeContextPresentationBenchmark.ts",
+    "benchmark:change-action-probe": "tsx target/benchmark/ChangeActionProbeBenchmark.ts",
     "benchmark:model-capabilities": "tsx target/benchmark/model-capabilities/ModelCapabilityBenchmark.ts"
   },
   "devDependencies": {
