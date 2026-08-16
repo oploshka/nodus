@@ -46,8 +46,8 @@ import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.j
 import type { NodusSettings } from '../settings/NodusSettings.js';
 import { defaultNodusSettings } from '../settings/defaultSettings.js';
 
-/** App composition structure for one configured target. No project behavior is owned here. */
-export interface sTargetRuntime {
+/** App composition capability for one configured target. */
+export interface iTargetRuntime {
   id: string;
   root: string;
   fileSystem: FileSystem;
@@ -59,14 +59,14 @@ export interface sTargetRuntime {
 export interface BootstrapOverrides {
   logger?: EngineLogger;
   model?: ModelAdapter;
-  target?: sTargetRuntime;
+  target?: iTargetRuntime;
   engineTest?: EngineTest;
   settings?: NodusSettings;
 }
 
 /** Composition root for Engine dependencies. */
 export class Bootstrap {
-  public static async createTarget(configuration: ProjectConfiguration, logger: EngineLogger): Promise<sTargetRuntime> {
+  public static async createTarget(configuration: ProjectConfiguration, logger: EngineLogger): Promise<iTargetRuntime> {
     const scanner = new FileScanner();
     const indexStore = new ProjectFileIndexStore(configuration.root, configuration.id, logger, configuration.indexCachePath);
     let index = await indexStore.load();
