@@ -55,7 +55,7 @@ const decisionSchema: ModelResponseSchema = {
     findFiles: { type: 'array', items: { type: 'string' }, optional: true, description: 'File names or concepts whose project paths are not yet known. FindFile returns paths only.' },
     readFiles: { type: 'filePathList', optional: true, description: 'Already known project paths whose contents are required.' },
     questions: { type: 'array', items: { type: 'string' }, optional: true },
-    edits: { type: 'array', optional: true, items: { type: 'object', fields: { path: { type: 'string' }, instruction: { type: 'string' } } } },
+    edits: { type: 'editList', optional: true, description: 'Semantic edit intents keyed by project-relative file path.' },
   },
 };
 
