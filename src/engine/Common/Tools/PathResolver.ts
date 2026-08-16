@@ -1,7 +1,7 @@
 import { access, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { basename, dirname, isAbsolute, posix, relative, resolve, sep } from 'node:path';
-import type { FileMap } from '@engine/Project/FileMap.js';
+import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 
 const ALWAYS_WRITE_BLOCKED = ['node_modules', '.git'] as const;
 
@@ -9,11 +9,11 @@ const ALWAYS_WRITE_BLOCKED = ['node_modules', '.git'] as const;
 export class PathResolver {
   public constructor(private readonly root: string) {}
 
-  public async resolveExisting(path: string, map?: FileMap): Promise<string> {
+  public async resolveExisting(path: string, index?: ProjectFileIndex): Promise<string> {
     const requested = await this.toProjectPath(path);
     const direct = await this.existingFile(requested);
     if (direct) return direct;
-    const repaired = await this.repairFromMap(requested, map);
+    const repaired = await this.repairFromIndex(requested, index);
     if (repaired) return repaired;
     throw new Error(`Project file not found: ${path}`);
   }
@@ -27,7 +27,7 @@ export class PathResolver {
     return requested;
   }
 
-  public async resolve(path: string, map?: FileMap): Promise<string> { return this.resolveExisting(path, map); }
+  public async resolve(path: string, index?: ProjectFileIndex): Promise<string> { return this.resolveExisting(path, index); }
 
   public normalize(path: string): string {
     const value = this.stripDecorators(path).replace(/\\/g, '/');
@@ -78,8 +78,8 @@ export class PathResolver {
     return this.normalize(rel || '.');
   }
 
-  private async repairFromMap(requested: string, map?: FileMap): Promise<string | undefined> {
-    const paths = (map?.files ?? []).map((file) => this.normalize(file.path));
+  private async repairFromIndex(requested: string, index?: ProjectFileIndex): Promise<string | undefined> {
+    const paths = (index?.files ?? []).map((file) => this.normalize(file.path));
     const exact = await this.uniqueExisting(paths.filter((candidate) => candidate === requested));
     if (exact) return exact;
     const suffix = await this.uniqueExisting(paths.filter((candidate) => requested.endsWith(`/${candidate}`) || candidate.endsWith(`/${requested}`)));
