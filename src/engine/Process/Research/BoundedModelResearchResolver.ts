@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import type { ProjectFileSearch } from '@engine/Project/File/ProjectFileSearch.js';
+import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
@@ -18,7 +18,7 @@ const researchSchema: ModelResponseSchema = {
 export class BoundedModelResearchResolver implements ResearchResolver {
   public constructor(
     private readonly fileSystem: FileSystem,
-    private readonly fileSearch: ProjectFileSearch,
+    private readonly fileIndex: ProjectFileIndex,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly nodusLanguage = 'en',
@@ -27,7 +27,7 @@ export class BoundedModelResearchResolver implements ResearchResolver {
   ) {}
 
   public async resolve(question: string, options?: ResearchResolveOptions): Promise<ResolvedResearch> {
-    const candidates = this.fileSearch.search(question, this.maxFiles);
+    const candidates = this.fileIndex.findFiles(question, this.maxFiles);
     if (candidates.length === 0) {
       return {
         status: 'not-found',
