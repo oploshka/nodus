@@ -2,8 +2,8 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { ChangeCodeActionData, ChangeCodeActionInput, tChangeCodeActionRequest } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
-import type { sReadProjectActionInput } from '@engine/Worker/Action/ReadProjectAction.js';
-import type { sSearchProjectActionInput } from '@engine/Worker/Action/SearchProjectAction.js';
+import type { sReadFileActionInput } from '@engine/Worker/Action/ReadFileAction.js';
+import type { sFindFileActionInput } from '@engine/Worker/Action/FindFileAction.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import { IterativeWorker, type IterativeWorkerModelSettings } from '@engine/Worker/IterativeWorker.js';
 import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
@@ -17,14 +17,14 @@ export class DocumentationWorker extends IterativeWorker {
 
   public constructor(
     changeDocumentation: WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, tChangeCodeActionRequest>,
-    read: WorkerAction<sReadProjectActionInput, sWorkerReadContext>,
-    search: WorkerAction<sSearchProjectActionInput, sWorkerSearchContext>,
+    readFile: WorkerAction<sReadFileActionInput, sWorkerReadContext>,
+    findFile: WorkerAction<sFindFileActionInput, sWorkerSearchContext>,
     research: WorkerAction<ResearchActionInput, ResearchAnswer>,
     logger: EngineLogger,
     maxAttempts?: number,
     maxResearchRequests?: number,
     modelSettings?: IterativeWorkerModelSettings,
   ) {
-    super(changeDocumentation, read, search, research, logger, maxAttempts, maxResearchRequests, undefined, modelSettings);
+    super(changeDocumentation, readFile, findFile, research, logger, maxAttempts, maxResearchRequests, undefined, undefined, modelSettings);
   }
 }

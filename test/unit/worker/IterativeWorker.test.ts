@@ -4,8 +4,8 @@ import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import type { ChangeCodeActionData, ChangeCodeActionInput, tChangeCodeActionRequest } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
-import type { sReadProjectActionInput } from '@engine/Worker/Action/ReadProjectAction.js';
-import type { sSearchProjectActionInput } from '@engine/Worker/Action/SearchProjectAction.js';
+import type { sReadFileActionInput } from '@engine/Worker/Action/ReadFileAction.js';
+import type { sFindFileActionInput } from '@engine/Worker/Action/FindFileAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
@@ -28,26 +28,28 @@ class SequenceChangeAction implements WorkerAction<ChangeCodeActionInput, Change
   }
 }
 
-class ScriptedSearchAction implements WorkerAction<sSearchProjectActionInput, sWorkerSearchContext> {
-  public readonly id = 'search';
-  public readonly presentation = new ActionPresentation({ name: { en: 'Search' } });
-  public readonly description = 'test search action';
+class ScriptedFindFileAction implements WorkerAction<sFindFileActionInput, sWorkerSearchContext> {
+  public readonly id = 'find-file';
+  public readonly presentation = new ActionPresentation({ name: { en: 'Find file' } });
+  public readonly description = 'test find file action';
   public readonly queries: string[] = [];
 
-  public async run(input: sSearchProjectActionInput): Promise<ActionResult<sWorkerSearchContext>> {
+  public constructor(private readonly paths = ['src/TodoStore.ts']) {}
+
+  public async run(input: sFindFileActionInput): Promise<ActionResult<sWorkerSearchContext>> {
     this.queries.push(input.query);
-    return { status: 'completed', data: { kind: 'search', query: input.query, paths: ['src/TodoStore.ts'] } };
+    return { status: 'completed', data: { kind: 'search', query: input.query, paths: this.paths } };
   }
 }
 
-class ScriptedReadAction implements WorkerAction<sReadProjectActionInput, sWorkerReadContext> {
-  public readonly id = 'read';
-  public readonly presentation = new ActionPresentation({ name: { en: 'Read' } });
-  public readonly description = 'test read action';
+class ScriptedReadFileAction implements WorkerAction<sReadFileActionInput, sWorkerReadContext> {
+  public readonly id = 'read-file';
+  public readonly presentation = new ActionPresentation({ name: { en: 'Read file' } });
+  public readonly description = 'test read file action';
   public readonly paths: string[] = [];
   public readonly contents: string[] = [];
 
-  public async run(input: sReadProjectActionInput): Promise<ActionResult<sWorkerReadContext>> {
+  public async run(input: sReadFileActionInput): Promise<ActionResult<sWorkerReadContext>> {
     this.paths.push(input.path);
     const content = await input.readFile(input.path);
     this.contents.push(content);
@@ -76,40 +78,74 @@ function answer(question: string): ResearchAnswer {
 }
 
 describe('Iterative Worker action lifecycle', () => {
-  it('uses cheap Search before retrying the primary action', async () => {
+  it('uses cheap FindFile before retrying the primary action', async () => {
     const change = new SequenceChangeAction([
-      { status: 'not-completed', reason: 'Need location', canContinue: true, requests: [{ actionId: 'search', input: { query: 'TodoStore' } }] },
+      { status: 'not-completed', reason: 'Need location', canContinue: true, requests: [{ actionId: 'find-file', input: { query: 'TodoStore' } }] },
       { status: 'completed', data: { summary: 'done' } },
     ]);
-    const search = new ScriptedSearchAction();
-    const read = new ScriptedReadAction();
+    const findFile = new ScriptedFindFileAction();
+    const readFile = new ScriptedReadFileAction();
     const research = new ScriptedResearchAction();
-    const subject = new CodeWorker(change, read, search, research, new NullLogger(), 3, 2);
+    const subject = new CodeWorker(change, readFile, findFile, research, new NullLogger(), 3, 2);
     const context = createWorkerTestContext();
 
     const result = await subject.run(context.data, context.instrument);
 
     expect(result.status).toBe('completed');
-    expect(search.queries).toEqual(['TodoStore']);
+    expect(findFile.queries).toEqual(['TodoStore']);
     expect(research.asked).toHaveLength(0);
     expect(change.contextKinds).toEqual([[], ['search']]);
   });
 
   it('reads a known file through the current task-local Edit view', async () => {
     const change = new SequenceChangeAction([
-      { status: 'not-completed', reason: 'Need file', canContinue: true, requests: [{ actionId: 'read', input: { path: 'a.ts' } }] },
+      { status: 'not-completed', reason: 'Need file', canContinue: true, requests: [{ actionId: 'read-file', input: { path: 'a.ts' } }] },
       { status: 'completed', data: { summary: 'done' } },
     ]);
-    const read = new ScriptedReadAction();
-    const subject = new CodeWorker(change, read, new ScriptedSearchAction(), new ScriptedResearchAction(), new NullLogger(), 3, 2);
+    const readFile = new ScriptedReadFileAction();
+    const subject = new CodeWorker(change, readFile, new ScriptedFindFileAction(), new ScriptedResearchAction(), new NullLogger(), 3, 2);
     const context = createWorkerTestContext({ files: { 'a.ts': 'task-local content' } });
 
     const result = await subject.run(context.data, context.instrument);
 
     expect(result.status).toBe('completed');
-    expect(read.paths).toEqual(['a.ts']);
-    expect(read.contents).toEqual(['task-local content']);
+    expect(readFile.paths).toEqual(['a.ts']);
+    expect(readFile.contents).toEqual(['task-local content']);
     expect(change.contextKinds).toEqual([[], ['read']]);
+  });
+
+  it('does not count a differently worded FindFile request as progress when it returns only known paths', async () => {
+    const change = new SequenceChangeAction([
+      { status: 'not-completed', reason: 'Need location', canContinue: true, requests: [{ actionId: 'find-file', input: { query: 'TodoStore' } }] },
+      { status: 'not-completed', reason: 'Need implementation', canContinue: true, requests: [{ actionId: 'find-file', input: { query: 'TodoStore implementation details' } }] },
+      { status: 'completed', data: { summary: 'done' } },
+    ]);
+    const findFile = new ScriptedFindFileAction(['src/TodoStore.ts']);
+    const subject = new CodeWorker(change, new ScriptedReadFileAction(), findFile, new ScriptedResearchAction(), new NullLogger(), 4, 2);
+    const context = createWorkerTestContext();
+
+    const result = await subject.run(context.data, context.instrument);
+
+    expect(result.status).toBe('completed');
+    expect(findFile.queries).toEqual(['TodoStore', 'TodoStore implementation details']);
+    expect(change.contextKinds).toEqual([[], ['search'], ['search', 'retrieval-feedback']]);
+  });
+
+  it('does not re-read a path already present in context and gives the primary action feedback', async () => {
+    const change = new SequenceChangeAction([
+      { status: 'not-completed', reason: 'Need file', canContinue: true, requests: [{ actionId: 'read-file', input: { path: 'a.ts' } }] },
+      { status: 'not-completed', reason: 'Need file again', canContinue: true, requests: [{ actionId: 'read-file', input: { path: './a.ts' } }] },
+      { status: 'completed', data: { summary: 'done' } },
+    ]);
+    const readFile = new ScriptedReadFileAction();
+    const subject = new CodeWorker(change, readFile, new ScriptedFindFileAction(), new ScriptedResearchAction(), new NullLogger(), 4, 2);
+    const context = createWorkerTestContext({ files: { 'a.ts': 'task-local content' } });
+
+    const result = await subject.run(context.data, context.instrument);
+
+    expect(result.status).toBe('completed');
+    expect(readFile.paths).toEqual(['a.ts']);
+    expect(change.contextKinds).toEqual([[], ['read'], ['read', 'retrieval-feedback']]);
   });
 
   it('runs Research only when explicitly requested and keeps it separately bounded', async () => {
@@ -118,7 +154,7 @@ describe('Iterative Worker action lifecycle', () => {
       { status: 'completed', data: { summary: 'done' } },
     ]);
     const research = new ScriptedResearchAction();
-    const subject = new CodeWorker(change, new ScriptedReadAction(), new ScriptedSearchAction(), research, new NullLogger(), 3, 2);
+    const subject = new CodeWorker(change, new ScriptedReadFileAction(), new ScriptedFindFileAction(), research, new NullLogger(), 3, 2);
     const context = createWorkerTestContext();
 
     const result = await subject.run(context.data, context.instrument);
@@ -130,17 +166,17 @@ describe('Iterative Worker action lifecycle', () => {
 
   it('does not run retrieval or Research when the primary action completes immediately', async () => {
     const change = new SequenceChangeAction([{ status: 'completed', data: { summary: 'done without context' } }]);
-    const read = new ScriptedReadAction();
-    const search = new ScriptedSearchAction();
+    const readFile = new ScriptedReadFileAction();
+    const findFile = new ScriptedFindFileAction();
     const research = new ScriptedResearchAction();
-    const subject = new CodeWorker(change, read, search, research, new NullLogger(), 3, 2);
+    const subject = new CodeWorker(change, readFile, findFile, research, new NullLogger(), 3, 2);
     const context = createWorkerTestContext();
 
     const result = await subject.run(context.data, context.instrument);
 
     expect(result.status).toBe('completed');
-    expect(read.paths).toHaveLength(0);
-    expect(search.queries).toHaveLength(0);
+    expect(readFile.paths).toHaveLength(0);
+    expect(findFile.queries).toHaveLength(0);
     expect(research.asked).toHaveLength(0);
   });
 
@@ -154,7 +190,7 @@ describe('Iterative Worker action lifecycle', () => {
         { actionId: 'research', input: { question: 'q2' } },
       ],
     }]);
-    const subject = new CodeWorker(change, new ScriptedReadAction(), new ScriptedSearchAction(), new ScriptedResearchAction(), new NullLogger(), 3, 1);
+    const subject = new CodeWorker(change, new ScriptedReadFileAction(), new ScriptedFindFileAction(), new ScriptedResearchAction(), new NullLogger(), 3, 1);
     const context = createWorkerTestContext();
 
     const result = await subject.run(context.data, context.instrument);

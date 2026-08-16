@@ -3,8 +3,8 @@ import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { ChangeCodeActionData, ChangeCodeActionInput, tChangeCodeActionRequest } from '@engine/Worker/Action/ChangeCodeAction.js';
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
-import type { sReadProjectActionInput } from '@engine/Worker/Action/ReadProjectAction.js';
-import type { sSearchProjectActionInput } from '@engine/Worker/Action/SearchProjectAction.js';
+import type { sReadFileActionInput } from '@engine/Worker/Action/ReadFileAction.js';
+import type { sFindFileActionInput } from '@engine/Worker/Action/FindFileAction.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import type { Worker, WorkerResult, WorkerRunData } from '@engine/Worker/Worker.js';
 import type { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
@@ -22,7 +22,7 @@ export interface IterativeWorkerModelSettings {
 }
 
 /**
- * Shared Worker lifecycle. Direct Search/Read retrieval is preferred for cheap project facts.
+ * Shared Worker lifecycle. Direct FindFile/ReadFile retrieval is preferred for cheap project facts.
  * Research remains a separately bounded expensive analysis operation.
  */
 export abstract class IterativeWorker implements Worker {
@@ -36,16 +36,17 @@ export abstract class IterativeWorker implements Worker {
 
   protected constructor(
     private readonly primaryAction: WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, tChangeCodeActionRequest>,
-    private readonly readAction: WorkerAction<sReadProjectActionInput, sWorkerReadContext>,
-    private readonly searchAction: WorkerAction<sSearchProjectActionInput, sWorkerSearchContext>,
+    private readonly readFileAction: WorkerAction<sReadFileActionInput, sWorkerReadContext>,
+    private readonly findFileAction: WorkerAction<sFindFileActionInput, sWorkerSearchContext>,
     private readonly researchAction: WorkerAction<ResearchActionInput, ResearchAnswer>,
     private readonly logger: EngineLogger,
     private readonly maxAttempts = 4,
     private readonly maxResearchRequests = 4,
-    private readonly maxRetrievalRequests = 6,
+    private readonly maxFindFileRequests = 4,
+    private readonly maxReadFileRequests = 6,
     private readonly modelSettings: IterativeWorkerModelSettings = {},
   ) {
-    this.actions = [primaryAction, searchAction, readAction, researchAction];
+    this.actions = [primaryAction, findFileAction, readFileAction, researchAction];
   }
 
   public canHandle(_step: PlanStep): boolean { return true; }
@@ -59,7 +60,8 @@ export abstract class IterativeWorker implements Worker {
 
     let attempts = 0;
     let researchRequests = 0;
-    let retrievalRequests = 0;
+    let findFileRequests = 0;
+    let readFileRequests = 0;
     let lastAttemptError: string | undefined;
 
     this.logger.info('worker.start', {
@@ -114,31 +116,39 @@ export abstract class IterativeWorker implements Worker {
 
       let progress = false;
       for (const request of requests) {
-        if (request.actionId === this.searchAction.id) {
-          const input = request.input as sSearchProjectActionInput;
+        if (request.actionId === this.findFileAction.id) {
+          const input = request.input as sFindFileActionInput;
           if (this.hasSearch(session.context, input.query)) continue;
-          if (retrievalRequests >= this.maxRetrievalRequests) return { status: 'not-completed', reason: `Worker retrieval request limit reached (${this.maxRetrievalRequests}).`, canContinue: true };
-          retrievalRequests += 1;
-          this.logActionStart(this.searchAction, step.id, { requestIndex: retrievalRequests, query: input.query });
-          const searched = await this.searchAction.run(input);
-          this.logActionFinish(this.searchAction, step.id, searched);
-          if (searched.status === 'failed') return { status: 'failed', reason: searched.reason, canContinue: false };
-          if (searched.status === 'not-completed') return { status: 'not-completed', reason: searched.reason, canContinue: true };
-          session.context.push(searched.data);
+          if (findFileRequests >= this.maxFindFileRequests) return { status: 'not-completed', reason: `Worker FindFile request limit reached (${this.maxFindFileRequests}).`, canContinue: true };
+
+          this.logActionStart(this.findFileAction, step.id, { requestIndex: findFileRequests + 1, query: input.query });
+          const found = await this.findFileAction.run(input);
+          this.logActionFinish(this.findFileAction, step.id, found);
+          if (found.status === 'failed') return { status: 'failed', reason: found.reason, canContinue: false };
+          if (found.status === 'not-completed') return { status: 'not-completed', reason: found.reason, canContinue: true };
+
+          const knownPaths = this.knownPaths(session.context);
+          const newPaths = found.data.paths.filter((path) => !knownPaths.has(normalizePath(path)));
+          if (newPaths.length === 0) continue;
+
+          findFileRequests += 1;
+          session.context.push({ ...found.data, paths: newPaths });
           progress = true;
           continue;
         }
 
-        if (request.actionId === this.readAction.id) {
+        if (request.actionId === this.readFileAction.id) {
           const input = request.input as { path: string };
           if (this.hasRead(session.context, input.path)) continue;
-          if (retrievalRequests >= this.maxRetrievalRequests) return { status: 'not-completed', reason: `Worker retrieval request limit reached (${this.maxRetrievalRequests}).`, canContinue: true };
-          retrievalRequests += 1;
-          this.logActionStart(this.readAction, step.id, { requestIndex: retrievalRequests, path: input.path });
-          const read = await this.readAction.run({ path: input.path, readFile: (path) => edit.read(path) });
-          this.logActionFinish(this.readAction, step.id, read);
+          if (readFileRequests >= this.maxReadFileRequests) return { status: 'not-completed', reason: `Worker ReadFile request limit reached (${this.maxReadFileRequests}).`, canContinue: true };
+
+          this.logActionStart(this.readFileAction, step.id, { requestIndex: readFileRequests + 1, path: input.path });
+          const read = await this.readFileAction.run({ path: input.path, readFile: (path) => edit.read(path) });
+          this.logActionFinish(this.readFileAction, step.id, read);
           if (read.status === 'failed') return { status: 'failed', reason: read.reason, canContinue: false };
           if (read.status === 'not-completed') return { status: 'not-completed', reason: read.reason, canContinue: true };
+
+          readFileRequests += 1;
           session.context.push(read.data);
           progress = true;
           continue;
@@ -159,7 +169,10 @@ export abstract class IterativeWorker implements Worker {
         }
       }
 
-      if (!progress) return { status: 'not-completed', reason: 'Worker requested context that is already available and made no progress.', canContinue: true };
+      if (!progress) {
+        this.addRetrievalFeedback(session.context);
+        continue;
+      }
     }
 
     return {
@@ -174,11 +187,28 @@ export abstract class IterativeWorker implements Worker {
   }
 
   private hasRead(context: ReadonlyArray<tWorkerContextItem>, path: string): boolean {
-    return context.some((item) => item.kind === 'read' && item.path.trim() === path.trim());
+    const normalized = normalizePath(path);
+    return context.some((item) => item.kind === 'read' && normalizePath(item.path) === normalized);
   }
 
   private hasResearch(context: ReadonlyArray<tWorkerContextItem>, question: string): boolean {
     return context.some((item) => item.kind === 'research' && item.value.question.trim() === question.trim());
+  }
+
+  private knownPaths(context: ReadonlyArray<tWorkerContextItem>): Set<string> {
+    const paths = new Set<string>();
+    for (const item of context) {
+      if (item.kind === 'search') for (const path of item.paths) paths.add(normalizePath(path));
+      else if (item.kind === 'read') paths.add(normalizePath(item.path));
+      else if (item.kind === 'research') for (const source of item.value.sources) paths.add(normalizePath(source.path));
+    }
+    return paths;
+  }
+
+  private addRetrievalFeedback(context: tWorkerContextItem[]): void {
+    const message = 'The requested retrieval produced no new information. Relevant paths or file contents are already available in context. Use ReadFile for an already known path, proceed with the available context, or request genuinely different missing information.';
+    const last = context[context.length - 1];
+    if (last?.kind !== 'retrieval-feedback' || last.message !== message) context.push({ kind: 'retrieval-feedback', message });
   }
 
   private logActionStart(action: { id: string; name?: string; method?: string; presentation: unknown }, stepId: string, data: Record<string, unknown>): void {
@@ -188,4 +218,8 @@ export abstract class IterativeWorker implements Worker {
   private logActionFinish(action: { id: string; name?: string; presentation: unknown }, stepId: string, result: unknown): void {
     this.logger.info('worker.action.finish', { workerId: this.id, stepId, actionId: action.id, actionName: action.name, actionPresentation: action.presentation, result });
   }
+}
+
+function normalizePath(path: string): string {
+  return path.trim().replace(/\\/g, '/').replace(/^\.\//, '');
 }

@@ -6,6 +6,8 @@ export interface PlannerProcessAdaptation {
 }
 
 export interface ChangeProcessAdaptation {
+  /** Шаблон сообщения Change Action. Маркер ##message## заменяется исходным сообщением Process. */
+  template: string;
   /** Поведенческие подсказки для решения, когда Worker уже должен действовать, а когда действительно нужен Research. */
   guidance: ReadonlyArray<string>;
 }

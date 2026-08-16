@@ -22,6 +22,22 @@ export const defaultNodusSettings: NodusSettings = {
     },
     worker: {
       change: {
+        template: [
+          // FindFile ищет только путь к файлу и никогда не читает его содержимое.
+          'FindFile only locates project files and returns paths. It never reads or inspects file contents.',
+          // ReadFile читает содержимое уже известного пути.
+          'ReadFile reads the contents of an already known project path.',
+          // Если путь уже известен, нельзя использовать FindFile для вопросов о содержимом этого файла.
+          'If a required path is already present in candidateFiles or previous FindFile results, do not use FindFile to ask about signatures, methods, implementation details, imports, tests, or file structure. Use ReadFile.',
+          // Неправильный пример помогает небольшой модели различить две операции.
+          'Wrong: findFiles: ["method signatures in TodoStore.ts"]',
+          // Правильный пример того же информационного запроса.
+          'Correct: readFiles: ["src/TodoStore.ts"]',
+          // Запрашивай только минимально необходимый следующий кусок информации.
+          'Request only the minimum next information needed. Prefer one request and never add requests merely to fill a limit.',
+          '',
+          '##message##',
+        ].join('\n'),
         guidance: [
           // Работай только в границах текущего шага плана и не исследуй будущие шаги заранее.
           'Work only within the current PlanStep. Do not investigate entities that belong only to later PlanSteps.',
