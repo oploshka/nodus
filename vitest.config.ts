@@ -14,7 +14,6 @@ export default defineConfig({
       '@engine/Edit': `${root}src/engine/Process/Edit`,
       '@engine/EngineTest': `${root}src/engine/Process/EngineTest`,
       '@engine/Task': `${root}src/engine/Common/Task`,
-      '@engine/Project': `${root}src/engine/Common/Project`,
       '@engine/Presentation': `${root}src/engine/Common/Presentation`,
       '@engine/Language': `${root}src/engine/Common/Language`,
       '@engine/Metrics': `${root}src/engine/Common/Metrics`,
