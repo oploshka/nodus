@@ -24,6 +24,10 @@ export interface sProjectFileIndexState {
 export class ProjectFileIndex {
   public constructor(private state: sProjectFileIndexState) {}
 
+  public get files(): ReadonlyArray<sProjectFileInfo> {
+    return this.state.files;
+  }
+
   public replace(state: sProjectFileIndexState): void {
     this.state = state;
   }
