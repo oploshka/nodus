@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/ProjectFileIndex.js';
+import { ProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/Index/ProjectFileIndex.js';
 
 function state(paths: Array<{ path: string; imports?: string[]; exports?: string[] }>): sProjectFileIndexState {
   return {
