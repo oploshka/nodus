@@ -4,13 +4,23 @@ import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
 import type { ProjectFileInfo, ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue']);
+const DEFAULT_EXCLUDE = ['node_modules', 'dist', '.git', '.nodus'] as const;
 
 /** Filesystem utility that builds the structural project-file index. */
 export class FileScanner {
+  public shouldScanOnOpen(mode: ProjectConfiguration['scanMode']): boolean {
+    return (mode ?? 'on-open') === 'on-open';
+  }
+
   public async scan(configuration: ProjectConfiguration): Promise<ProjectFileIndex> {
     const files: ProjectFileInfo[] = [];
-    await this.walk(configuration.root, configuration.root, configuration, files);
-    return { version: 1, projectId: configuration.id, root: configuration.root, scannedAt: new Date().toISOString(), files };
+    const resolved: ProjectConfiguration = {
+      ...configuration,
+      include: configuration.include ?? [],
+      exclude: configuration.exclude ?? [...DEFAULT_EXCLUDE],
+    };
+    await this.walk(resolved.root, resolved.root, resolved, files);
+    return { version: 1, projectId: resolved.id, root: resolved.root, scannedAt: new Date().toISOString(), files };
   }
 
   private async walk(root: string, directory: string, configuration: ProjectConfiguration, output: ProjectFileInfo[]): Promise<void> {
