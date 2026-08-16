@@ -71,6 +71,60 @@ describe('common ModelResponseSchema', () => {
     }, raw)).toEqual({ files: ['src/A.ts'] });
   });
 
+  it('normalizes a multiline raw block as one structured array value', () => {
+    const raw = new RawResponseFormatHandler().parse([
+      'status completed',
+      '#files',
+      '[',
+      '  "src/A.ts",',
+      '  "src/B.ts"',
+      ']',
+    ].join('\n'));
+
+    expect(validateResponseSchema({
+      fields: {
+        status: schema.fields.status,
+        files: { type: 'array', items: { type: 'string' } },
+      },
+    }, raw)).toEqual({
+      status: 'completed',
+      files: ['src/A.ts', 'src/B.ts'],
+    });
+  });
+
+  it('normalizes a multiline raw block containing an array of objects', () => {
+    const raw = new RawResponseFormatHandler().parse([
+      'status completed',
+      '#edits',
+      '[',
+      '  {"path":"src/A.ts","instruction":"Change A"},',
+      '  {"path":"src/B.ts","instruction":"Change B"}',
+      ']',
+    ].join('\n'));
+
+    expect(validateResponseSchema({
+      fields: {
+        status: schema.fields.status,
+        edits: {
+          type: 'array',
+          items: {
+            type: 'object',
+            fields: {
+              path: { type: 'string' },
+              instruction: { type: 'string' },
+            },
+          },
+        },
+      },
+    }, raw)).toEqual({
+      status: 'completed',
+      edits: [
+        { path: 'src/A.ts', instruction: 'Change A' },
+        { path: 'src/B.ts', instruction: 'Change B' },
+      ],
+    });
+  });
+
   it('describes nested fields inside arrays of objects to the model', () => {
     const instructions = responseSchemaInstructions({
       fields: {
