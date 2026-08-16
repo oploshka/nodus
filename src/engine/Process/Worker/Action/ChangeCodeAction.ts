@@ -6,7 +6,8 @@ import type { Task } from '@engine/Task/Task.js';
 import type { ActionModelOptions, ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
-import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
+import type { ModelMessage } from '@model/Request/ModelRequest.js';
+import { ModelRequestFormat, serializeRequestData } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
@@ -24,6 +25,11 @@ interface ChangeDecision {
   readFiles?: string[];
   questions?: string[];
   edits?: Array<{ path: string; instruction: string }>;
+}
+
+interface ChangeConversation {
+  history: ModelMessage[];
+  seenContextItems: number;
 }
 
 export interface ChangeCodeActionProfile {
@@ -71,6 +77,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
   public readonly name: string;
   public readonly method: string | undefined;
   public readonly description = 'Determine the smallest coherent set of project edits needed for one PlanStep.';
+  private readonly conversations = new Map<string, ChangeConversation>();
 
   public constructor(
     private readonly fileSystem: FileSystem,
@@ -87,12 +94,33 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
   }
 
   public async run(context: ChangeCodeActionInput): Promise<ActionResult<ChangeCodeActionData, tChangeCodeActionRequest>> {
-    const message = renderMessageTemplate(this.profile.adaptationTemplate ?? '##message##', 'Determine the concrete project edits required to complete the assigned PlanStep now.');
+    const key = `${context.task.id}:${context.step.id}`;
+    const conversation = this.conversations.get(key) ?? { history: [], seenContextItems: 0 };
+    const firstTurn = conversation.history.length === 0;
+    const message = renderMessageTemplate(
+      this.profile.adaptationTemplate ?? '##message##',
+      firstTurn
+        ? 'Determine the concrete project edits required to complete the assigned PlanStep now.'
+        : 'Continue the same change decision using the new action results below. Do not request information that was already returned earlier in this conversation.',
+    );
+    const data = firstTurn
+      ? {
+          task: context.task.description,
+          step: context.step,
+          purpose: this.profile.purpose,
+          candidateFiles: this.candidateFiles(context),
+          context: context.context.map(serializeContext),
+        }
+      : {
+          actionResults: context.context.slice(conversation.seenContextItems).map(serializeContext),
+        };
+
     const decision = await callModel<ChangeDecision>(this.model, this.logger, {
       request: {
         message,
-        data: { task: context.task.description, step: context.step, purpose: this.profile.purpose, candidateFiles: this.candidateFiles(context), context: context.context.map(serializeContext) },
+        data,
         format: ModelRequestFormat.Json,
+        history: conversation.history,
         guidance: [
           this.profile.guidance,
           ...(this.profile.adaptationGuidance ?? []),
@@ -114,8 +142,21 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
       settings: { maxTokens: 2048, ...this.defaultModelSettings, ...context.settings },
     });
 
-    if (decision.outcome === 'already-completed') return { status: 'completed', data: { summary: decision.summary ?? 'Requested outcome is already present.' } };
-    if (decision.outcome === 'failed') return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed under the supplied constraints.', canContinue: false };
+    conversation.history.push(
+      { role: 'user', content: renderUserTurn(message, data) },
+      { role: 'assistant', content: serializeDecision(decision) },
+    );
+    conversation.seenContextItems = context.context.length;
+    this.conversations.set(key, conversation);
+
+    if (decision.outcome === 'already-completed') {
+      this.conversations.delete(key);
+      return { status: 'completed', data: { summary: decision.summary ?? 'Requested outcome is already present.' } };
+    }
+    if (decision.outcome === 'failed') {
+      this.conversations.delete(key);
+      return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed under the supplied constraints.', canContinue: false };
+    }
     if (decision.outcome === 'missing-information') {
       const requests = [
         ...(decision.findFiles ?? []).map((query) => ({ actionId: 'find-file', input: { query: query.trim() } })),
@@ -130,6 +171,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     if (edits.length === 0) throw new Error('Attempt was ready but returned no edits.');
     const normalized = [];
     for (const edit of edits) normalized.push({ path: await this.fileSystem.resolvePath(edit.path), instruction: edit.instruction.trim() });
+    this.conversations.delete(key);
     return { status: 'completed', data: { summary: decision.summary ?? `Prepared ${normalized.length} project edit intent(s).`, edit: { strategy: this.profile.strategy, edits: normalized, settings: context.settings } } };
   }
 
@@ -148,6 +190,22 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
 function serializeContext(item: tWorkerContextItem): unknown {
   if (item.kind === 'search' || item.kind === 'read' || item.kind === 'retrieval-feedback') return item;
   return { kind: 'research', question: item.value.question, status: item.value.status, answer: item.value.answer, sources: item.value.sources.map((source) => source.path) };
+}
+
+function renderUserTurn(message: string, data: unknown): string {
+  const serialized = serializeRequestData(ModelRequestFormat.Json, data);
+  return [message.trim(), serialized ? `DATA\n${serialized}` : ''].filter(Boolean).join('\n\n');
+}
+
+function serializeDecision(decision: ChangeDecision): string {
+  const fields: string[] = [`#outcome\n${decision.outcome}`];
+  if (decision.summary) fields.push(`#summary\n${decision.summary}`);
+  if (decision.reason) fields.push(`#reason\n${decision.reason}`);
+  if (decision.findFiles?.length) fields.push(`#findFiles\n${JSON.stringify(decision.findFiles)}`);
+  if (decision.readFiles?.length) fields.push(`#readFiles\n${decision.readFiles.join('\n')}`);
+  if (decision.questions?.length) fields.push(`#questions\n${JSON.stringify(decision.questions)}`);
+  if (decision.edits?.length) fields.push(`#edits\n${JSON.stringify(decision.edits)}`);
+  return fields.join('\n\n');
 }
 
 function renderMessageTemplate(template: string, message: string): string {
