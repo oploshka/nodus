@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, relative, resolve, sep } from 'node:path';
-import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
+import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
 import type { ProjectFileInfo, ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue']);
@@ -8,13 +8,13 @@ const DEFAULT_EXCLUDE = ['node_modules', 'dist', '.git', '.nodus'] as const;
 
 /** Filesystem utility that builds the structural project-file index. */
 export class FileScanner {
-  public shouldScanOnOpen(mode: ProjectConfiguration['scanMode']): boolean {
+  public shouldScanOnOpen(mode: sTargetConfig['scanMode']): boolean {
     return (mode ?? 'on-open') === 'on-open';
   }
 
-  public async scan(configuration: ProjectConfiguration): Promise<ProjectFileIndex> {
+  public async scan(configuration: sTargetConfig): Promise<ProjectFileIndex> {
     const files: ProjectFileInfo[] = [];
-    const resolved: ProjectConfiguration = {
+    const resolved: sTargetConfig = {
       ...configuration,
       include: configuration.include ?? [],
       exclude: configuration.exclude ?? [...DEFAULT_EXCLUDE],
@@ -23,7 +23,7 @@ export class FileScanner {
     return { version: 1, projectId: resolved.id, root: resolved.root, scannedAt: new Date().toISOString(), files };
   }
 
-  private async walk(root: string, directory: string, configuration: ProjectConfiguration, output: ProjectFileInfo[]): Promise<void> {
+  private async walk(root: string, directory: string, configuration: sTargetConfig, output: ProjectFileInfo[]): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
       const absolutePath = resolve(directory, entry.name);

@@ -1,5 +1,5 @@
 {
-  "project": {
+  "target": {
     "id": "todo-project",
     "root": ".",
     "scanMode": "manual",

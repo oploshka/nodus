@@ -125,8 +125,8 @@ async function main(): Promise<void> {
   const tools: Tool[] = [new FileSystemTool(), new SearchTool(), new TerminalTool()];
   const toolsByName = new Map(tools.map((tool) => [tool.definition.id, tool]));
   const context: ToolContext = {
-    projectRoot: configuration.project.root,
-    exclude: configuration.project.exclude ?? [],
+    projectRoot: configuration.target.root,
+    exclude: configuration.target.exclude ?? [],
   };
 
   const messages: Message[] = [
@@ -149,7 +149,7 @@ async function main(): Promise<void> {
   let totalTokens = 0;
 
   console.log(`Raw agent benchmark`);
-  console.log(`Project root: ${configuration.project.root}`);
+  console.log(`Target root: ${configuration.target.root}`);
   console.log(`Model: ${configuration.model.model}`);
   console.log(`Task: ${task}`);
   console.log('---');

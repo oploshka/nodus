@@ -7,7 +7,7 @@ import { BoundedModelResearchResolver } from '@engine/Research/BoundedModelResea
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
+import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
 import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEditStrategy.js';
@@ -66,7 +66,7 @@ export interface BootstrapOverrides {
 
 /** Composition root for Engine dependencies. */
 export class Bootstrap {
-  public static async createTarget(configuration: ProjectConfiguration, logger: EngineLogger): Promise<iTargetRuntime> {
+  public static async createTarget(configuration: sTargetConfig, logger: EngineLogger): Promise<iTargetRuntime> {
     const scanner = new FileScanner();
     const indexStore = new ProjectFileIndexStore(configuration.root, configuration.id, logger, configuration.indexCachePath);
     let index = await indexStore.load();
@@ -108,9 +108,9 @@ export class Bootstrap {
     );
     const model = new ModelRunner(adapter, configuration.model);
 
-    const target = overrides.target ?? await this.createTarget(configuration.project, logger);
+    const target = overrides.target ?? await this.createTarget(configuration.target, logger);
 
-    const researchStore = new ResearchStore(target.fileSystem, logger, configuration.project.researchCachePath);
+    const researchStore = new ResearchStore(target.fileSystem, logger, configuration.target.researchCachePath);
     await researchStore.open();
     const research = new Research(
       researchStore,
@@ -151,7 +151,7 @@ export class Bootstrap {
       workers.push(new AgentWorker(
         new AgentRunner(adapter, configuration.model),
         tools,
-        { projectRoot: target.root, exclude: configuration.project.exclude ?? [] },
+        { projectRoot: target.root, exclude: configuration.target.exclude ?? [] },
         logger,
         configuration.runtime?.maxAgentRounds,
         language,
