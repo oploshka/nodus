@@ -47,7 +47,7 @@ const decisionSchema: ModelResponseSchema = {
     summary: { type: 'string', optional: true },
     reason: { type: 'string', optional: true },
     findFiles: { type: 'array', items: { type: 'string' }, optional: true, description: 'File names or concepts whose project paths are not yet known. FindFile returns paths only.' },
-    readFiles: { type: 'array', items: { type: 'string' }, optional: true, description: 'Already known project paths whose contents are required.' },
+    readFiles: { type: 'filePathList', optional: true, description: 'Already known project paths whose contents are required.' },
     questions: { type: 'array', items: { type: 'string' }, optional: true },
     edits: { type: 'array', optional: true, items: { type: 'object', fields: { path: { type: 'string' }, instruction: { type: 'string' } } } },
   },
@@ -81,29 +81,17 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     private readonly defaultModelSettings: ChangeCodeActionInput['settings'] = undefined,
     private readonly maxEditsPerAttempt = 6,
   ) {
-    this.presentation = new ActionPresentation({
-      name: { en: 'Project change', ru: 'Изменение проекта' },
-      detail: strategyLabel(profile.strategy),
-    });
+    this.presentation = new ActionPresentation({ name: { en: 'Project change', ru: 'Изменение проекта' }, detail: strategyLabel(profile.strategy) });
     this.name = this.presentation.name();
     this.method = this.presentation.detail();
   }
 
   public async run(context: ChangeCodeActionInput): Promise<ActionResult<ChangeCodeActionData, tChangeCodeActionRequest>> {
-    const message = renderMessageTemplate(
-      this.profile.adaptationTemplate ?? '##message##',
-      'Determine the concrete project edits required to complete the assigned PlanStep now.',
-    );
+    const message = renderMessageTemplate(this.profile.adaptationTemplate ?? '##message##', 'Determine the concrete project edits required to complete the assigned PlanStep now.');
     const decision = await callModel<ChangeDecision>(this.model, this.logger, {
       request: {
         message,
-        data: {
-          task: context.task.description,
-          step: context.step,
-          purpose: this.profile.purpose,
-          candidateFiles: this.candidateFiles(context),
-          context: context.context.map(serializeContext),
-        },
+        data: { task: context.task.description, step: context.step, purpose: this.profile.purpose, candidateFiles: this.candidateFiles(context), context: context.context.map(serializeContext) },
         format: ModelRequestFormat.Json,
         guidance: [
           this.profile.guidance,
@@ -142,13 +130,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     if (edits.length === 0) throw new Error('Attempt was ready but returned no edits.');
     const normalized = [];
     for (const edit of edits) normalized.push({ path: await this.fileSystem.resolvePath(edit.path), instruction: edit.instruction.trim() });
-    return {
-      status: 'completed',
-      data: {
-        summary: decision.summary ?? `Prepared ${normalized.length} project edit intent(s).`,
-        edit: { strategy: this.profile.strategy, edits: normalized, settings: context.settings },
-      },
-    };
+    return { status: 'completed', data: { summary: decision.summary ?? `Prepared ${normalized.length} project edit intent(s).`, edit: { strategy: this.profile.strategy, edits: normalized, settings: context.settings } } };
   }
 
   private candidateFiles(context: ChangeCodeActionInput): string[] {
@@ -165,13 +147,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
 
 function serializeContext(item: tWorkerContextItem): unknown {
   if (item.kind === 'search' || item.kind === 'read' || item.kind === 'retrieval-feedback') return item;
-  return {
-    kind: 'research',
-    question: item.value.question,
-    status: item.value.status,
-    answer: item.value.answer,
-    sources: item.value.sources.map((source) => source.path),
-  };
+  return { kind: 'research', question: item.value.question, status: item.value.status, answer: item.value.answer, sources: item.value.sources.map((source) => source.path) };
 }
 
 function renderMessageTemplate(template: string, message: string): string {
