@@ -16,6 +16,7 @@ export type ModelResponseFieldInfo =
   | (ModelResponseFieldBase & { type: 'object'; fields: Record<string, ModelResponseFieldInfo> })
   | (ModelResponseFieldBase & { type: 'array'; items: ModelResponseFieldInfo })
   | (ModelResponseFieldBase & { type: 'filePathList' })
+  | (ModelResponseFieldBase & { type: 'editList' })
   | (ModelResponseFieldBase & { type: 'any' });
 
 export interface ModelResponseSchema {
@@ -69,6 +70,7 @@ function describeField(name: string, field: ModelResponseFieldInfo, depth: numbe
   if (field.type === 'object') return [`${indent}- ${name}: object${optional}${description}`, ...Object.entries(field.fields).map(([childName, child]) => describeField(childName, child, depth + 1))].join('\n');
   if (field.type === 'array') return [`${indent}- ${name}: array${optional}${description}`, describeField('item', field.items, depth + 1)].join('\n');
   if (field.type === 'filePathList') return `${indent}- ${name}: file path list, one project-relative path per line${optional}${description}`;
+  if (field.type === 'editList') return `${indent}- ${name}: edit list; repeat "- path: <project-relative path>" followed by "  instruction: <semantic instruction>"${optional}${description}`;
   return `${indent}- ${name}: ${field.type}${optional}${description}`;
 }
 
@@ -78,6 +80,7 @@ function decodeField(field: ModelResponseFieldInfo, value: unknown, path: string
     return items.map((item, index) => decodeField(field.items, item, `${path}[${index}]`));
   }
   if (field.type === 'filePathList') return normalizeFilePathList(value, path);
+  if (field.type === 'editList') return normalizeEditList(value, path);
 
   value = unwrapSingleOccurrence(value, path);
   if (field.type === 'any') return value;
@@ -128,6 +131,62 @@ function normalizeFilePathList(value: unknown, path: string): string[] {
     }
   }
   return paths;
+}
+
+function normalizeEditList(value: unknown, path: string): Array<{ path: string; instruction: string }> {
+  const occurrences = Array.isArray(value) ? value : [value];
+  const edits: Array<{ path: string; instruction: string }> = [];
+
+  for (const occurrence of occurrences) {
+    if (typeof occurrence !== 'string') throw new ModelResponseSchemaError(path, 'Expected edit list', value);
+
+    const structured = tryParseStructuredValue(occurrence);
+    if (Array.isArray(structured)) {
+      for (const item of structured) edits.push(decodeEditItem(item, path));
+      continue;
+    }
+
+    let current: { path: string; instructionLines: string[] } | undefined;
+    for (const rawLine of occurrence.split(/\r?\n/)) {
+      const pathMatch = /^\s*-\s+path:\s*(.+?)\s*$/.exec(rawLine);
+      if (pathMatch) {
+        if (current) edits.push(finalizeEditItem(current, path));
+        current = { path: pathMatch[1].trim(), instructionLines: [] };
+        continue;
+      }
+
+      if (!current) {
+        if (!rawLine.trim()) continue;
+        throw new ModelResponseSchemaError(path, 'Expected edit item starting with "- path:"', occurrence);
+      }
+
+      const instructionMatch = /^\s*instruction:\s*(.*)$/.exec(rawLine);
+      if (instructionMatch && current.instructionLines.length === 0) {
+        current.instructionLines.push(instructionMatch[1]);
+        continue;
+      }
+
+      if (rawLine.trim()) current.instructionLines.push(rawLine.trim());
+    }
+    if (current) edits.push(finalizeEditItem(current, path));
+  }
+
+  return edits;
+}
+
+function decodeEditItem(value: unknown, path: string): { path: string; instruction: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ModelResponseSchemaError(path, 'Expected edit object', value);
+  const record = value as Record<string, unknown>;
+  if (typeof record.path !== 'string' || !record.path.trim()) throw new ModelResponseSchemaError(`${path}.path`, 'Expected path string', record.path);
+  if (typeof record.instruction !== 'string' || !record.instruction.trim()) throw new ModelResponseSchemaError(`${path}.instruction`, 'Expected instruction string', record.instruction);
+  return { path: record.path.trim(), instruction: record.instruction.trim() };
+}
+
+function finalizeEditItem(value: { path: string; instructionLines: string[] }, path: string): { path: string; instruction: string } {
+  const instruction = value.instructionLines.join('\n').trim();
+  if (!value.path) throw new ModelResponseSchemaError(`${path}.path`, 'Expected path string', value.path);
+  if (!instruction) throw new ModelResponseSchemaError(`${path}.instruction`, 'Expected instruction string', instruction);
+  return { path: value.path, instruction };
 }
 
 function normalizeArrayValue(value: unknown, path: string): unknown[] {
