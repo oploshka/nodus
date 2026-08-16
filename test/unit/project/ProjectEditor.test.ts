@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import { EditValidator } from '@engine/Edit/Validation/EditValidator.js';
-import { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
+import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
+import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import { Task } from '@engine/Task/Task.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
@@ -21,8 +22,8 @@ async function fixture(strategy: EditStrategy) {
   roots.push(root);
   await writeFile(join(root, 'a.ts'), 'A\n', 'utf8');
   await writeFile(join(root, 'b.ts'), 'B\n', 'utf8');
-  const project = new ProjectFiles({ id: 'test', root, scanMode: 'manual', include: [], exclude: [] }, logger);
-  return { root, project, editor: new ProjectEditor(project, logger, [strategy]) };
+  const fileSystem = new FileSystem(root, new PathResolver(root), () => undefined, logger, []);
+  return { root, projectId: 'test', editor: new ProjectEditor(fileSystem, logger, [strategy]), fileSystem };
 }
 
 function scripted(outputs: Record<string, string>): EditStrategy {
@@ -38,8 +39,8 @@ function scripted(outputs: Record<string, string>): EditStrategy {
 
 describe('ProjectEditor', () => {
   it('prepares the complete multi-file set before applying it', async () => {
-    const { root, project, editor } = await fixture(scripted({ 'a.ts': 'AA\n', 'b.ts': 'BB\n' }));
-    const task = new Task('task', project.id);
+    const { root, projectId, editor } = await fixture(scripted({ 'a.ts': 'AA\n', 'b.ts': 'BB\n' }));
+    const task = new Task('task', projectId);
     const prepared = await editor.change(task, step, {
       strategy: 'range-replace',
       edits: [
@@ -66,8 +67,8 @@ describe('ProjectEditor', () => {
         return { status: 'completed', path: context.edit.path, content: 'AA\n', operations: 1 };
       },
     };
-    const { root, project, editor } = await fixture(strategy);
-    const result = await editor.change(new Task('task', project.id), step, {
+    const { root, projectId, editor } = await fixture(strategy);
+    const result = await editor.change(new Task('task', projectId), step, {
       strategy: 'range-replace',
       edits: [{ path: 'a.ts', instruction: 'change A' }, { path: 'b.ts', instruction: 'change B' }],
     });
@@ -84,8 +85,8 @@ describe('ProjectEditor', () => {
         return { status: 'completed', path: context.edit.path, content: context.source + context.edit.instruction + '\n', operations: 1 };
       },
     };
-    const { root, project, editor } = await fixture(strategy);
-    const prepared = await editor.change(new Task('task', project.id), step, {
+    const { root, projectId, editor } = await fixture(strategy);
+    const prepared = await editor.change(new Task('task', projectId), step, {
       strategy: 'range-replace',
       edits: [{ path: 'a.ts', instruction: 'first' }, { path: 'a.ts', instruction: 'second' }],
     });
@@ -104,22 +105,22 @@ describe('ProjectEditor', () => {
     };
     const diff: EditStrategy = {
       id: 'diff',
-      async prepare(context) {
-        return { status: 'completed', path: context.edit.path, content: 'AA\n', operations: 1 };
+      async prepare() {
+        return { status: 'completed', path: 'a.ts', content: 'AA\n', operations: 1 };
       },
     };
     const root = await mkdtemp(join(tmpdir(), 'nodus-editor-fallback-'));
     roots.push(root);
     await writeFile(join(root, 'a.ts'), 'A\n', 'utf8');
-    const project = new ProjectFiles({ id: 'test', root, scanMode: 'manual', include: [], exclude: [] }, logger);
-    const editor = new ProjectEditor(project, logger, [range, diff], new EditValidator(), {
+    const fileSystem = new FileSystem(root, new PathResolver(root), () => undefined, logger, []);
+    const editor = new ProjectEditor(fileSystem, logger, [range, diff], new EditValidator(), {
       'range-replace': ['diff'],
       replace: [],
       diff: [],
       edit: [],
     });
 
-    const prepared = await editor.change(new Task('task', project.id), step, {
+    const prepared = await editor.change(new Task('task', 'test'), step, {
       strategy: 'range-replace',
       edits: [{ path: 'a.ts', instruction: 'change A' }],
     });
