@@ -34,6 +34,34 @@ Technical/category directories могут оставаться lowercase, ког
 
 Не создавать nested `Type` для каждой подсистемы. Internal interfaces/types обычно остаются в файле, владеющем логикой, или рядом с implementation, если отдельный файл действительно нужен.
 
+Для новых contracts используем lowercase-префикс, который обозначает семантическую категорию, а не только синтаксис TypeScript:
+
+- `s` — structure: пассивная структура данных. Объявляется через `interface`, например `sTargetConfig`.
+- `i` — interface/capability: контракт поведения, преимущественно набор действий. Объявляется через `interface`, например `iFileReader`. Значения допустимы, но не должны превращать capability в DTO.
+- `v` — value: alias простого значения, literal union или другой value-level type, например `vProjectId` или `vFilePath`.
+- `t` — transformed/derived type: вычисляемый, преобразованный или составной type, когда `interface` не выражает нужную семантику, например результат `ReturnType`, `Awaited`, conditional/mapped type.
+
+Префиксы пишутся в нижнем регистре, чтобы визуально отделять категорию от PascalCase-имени. Старые contracts не переименовываются массово только ради соглашения; новые создаются по новому правилу, а существующие приводятся к нему при содержательной переработке соответствующей зоны.
+
+`s` и `i` намеренно оба используют `interface`: различие между ними архитектурное. `s*` описывает форму данных, `i*` — возможность/поведение.
+
+## Config naming
+
+Внешняя конфигурация Nodus описывает target, с которым работает runtime, а не внутреннюю `Project`-модель Engine. Поэтому для нового API используем термин `target`, а не `project`:
+
+```ts
+interface sTargetConfig {
+  id: string;
+  root: string;
+}
+```
+
+В `nodus.config` этому соответствует секция `target`.
+
+`Project` остаётся внутренним архитектурным понятием Nodus для специализированных представлений и знаний о target (`ProjectFileIndex`, Project Knowledge и другие представления). Это позволяет не смешивать внешний target configuration с внутренней моделью Project.
+
+Semantic defaults не должны задаваться configuration loader или composition root только потому, что там собираются зависимости. Default остаётся в компоненте, который понимает его смысл; Bootstrap передаёт явно заданные значения и связывает компоненты.
+
 ## Документация
 
 Корневой `README.md` — entry point/index. Архитектурные документы централизуются в `doc/architecture/`. Roadmap и active work находятся в `doc/development/`, правила проекта — в `doc/project/`, прошлые состояния — в `doc/history/`, неподтверждённые направления — в `doc/research/`.
