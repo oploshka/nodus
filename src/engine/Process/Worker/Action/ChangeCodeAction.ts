@@ -1,5 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
+import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
+import type { ProjectFileSearch } from '@engine/Project/File/ProjectFileSearch.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
@@ -64,7 +65,8 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
   public readonly description = 'Determine the smallest coherent set of project edits needed for one PlanStep.';
 
   public constructor(
-    private readonly project: ProjectFiles,
+    private readonly fileSystem: FileSystem,
+    private readonly fileSearch: ProjectFileSearch,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly profile: ChangeCodeActionProfile,
@@ -121,7 +123,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     const edits = (decision.edits ?? []).slice(0, this.maxEditsPerAttempt);
     if (edits.length === 0) throw new Error('Attempt was ready but returned no edits.');
     const normalized = [];
-    for (const edit of edits) normalized.push({ path: await this.project.resolvePath(edit.path), instruction: edit.instruction.trim() });
+    for (const edit of edits) normalized.push({ path: await this.fileSystem.resolvePath(edit.path), instruction: edit.instruction.trim() });
     return {
       status: 'completed',
       data: {
@@ -134,7 +136,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
   private candidateFiles(context: ChangeCodeActionInput): string[] {
     const paths = new Set<string>();
     for (const source of context.knowledge.flatMap((item) => item.sources)) paths.add(source.path);
-    for (const file of this.project.candidateFiles(`${context.task.description}\n${context.step.goal}`, 16)) paths.add(file.path);
+    for (const file of this.fileSearch.search(`${context.task.description}\n${context.step.goal}`, 16)) paths.add(file.path);
     return [...paths].slice(0, 24);
   }
 }
