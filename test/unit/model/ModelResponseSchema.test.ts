@@ -22,7 +22,7 @@ const schema: ModelResponseSchema = {
 
 describe('common ModelResponseSchema', () => {
   it('validates the same object contract independently from wire format', () => {
-    const raw = new RawResponseFormatHandler().parse('status completed\ninput {"path":"src/A.ts"}');
+    const raw = new RawResponseFormatHandler().parse('#status\ncompleted\n#input\n{"path":"src/A.ts"}');
     expect(validateResponseSchema(schema, raw)).toEqual({
       status: 'completed',
       input: { path: 'src/A.ts' },
@@ -31,11 +31,11 @@ describe('common ModelResponseSchema', () => {
 
   it('normalizes repeated raw values according to array item schema', () => {
     const raw = new RawResponseFormatHandler().parse([
-      'status completed',
-      'files src/A.ts',
-      'files src/B.ts',
-      'edits {"path":"src/A.ts","instruction":"Change A"}',
-      'edits {"path":"src/B.ts","instruction":"Change B"}',
+      '#status', 'completed',
+      '#files', 'src/A.ts',
+      '#files', 'src/B.ts',
+      '#edits', '{"path":"src/A.ts","instruction":"Change A"}',
+      '#edits', '{"path":"src/B.ts","instruction":"Change B"}',
     ].join('\n'));
     const result = validateResponseSchema({
       fields: {
@@ -65,20 +65,21 @@ describe('common ModelResponseSchema', () => {
   });
 
   it('keeps a single raw array occurrence as a one-item array', () => {
-    const raw = new RawResponseFormatHandler().parse('files src/A.ts');
+    const raw = new RawResponseFormatHandler().parse('#files\nsrc/A.ts');
     expect(validateResponseSchema({
       fields: { files: { type: 'array', items: { type: 'string' } } },
     }, raw)).toEqual({ files: ['src/A.ts'] });
   });
 
+  it('accepts compact #field value form', () => {
+    const raw = new RawResponseFormatHandler().parse('#status completed\n#summary Change prepared');
+    expect(validateResponseSchema(schema, raw)).toEqual({ status: 'completed', summary: 'Change prepared' });
+  });
+
   it('normalizes a multiline raw block as one structured array value', () => {
     const raw = new RawResponseFormatHandler().parse([
-      'status completed',
-      '#files',
-      '[',
-      '  "src/A.ts",',
-      '  "src/B.ts"',
-      ']',
+      '#status', 'completed',
+      '#files', '[', '  "src/A.ts",', '  "src/B.ts"', ']',
     ].join('\n'));
 
     expect(validateResponseSchema({
@@ -86,17 +87,13 @@ describe('common ModelResponseSchema', () => {
         status: schema.fields.status,
         files: { type: 'array', items: { type: 'string' } },
       },
-    }, raw)).toEqual({
-      status: 'completed',
-      files: ['src/A.ts', 'src/B.ts'],
-    });
+    }, raw)).toEqual({ status: 'completed', files: ['src/A.ts', 'src/B.ts'] });
   });
 
   it('normalizes a multiline raw block containing an array of objects', () => {
     const raw = new RawResponseFormatHandler().parse([
-      'status completed',
-      '#edits',
-      '[',
+      '#status', 'completed',
+      '#edits', '[',
       '  {"path":"src/A.ts","instruction":"Change A"},',
       '  {"path":"src/B.ts","instruction":"Change B"}',
       ']',
@@ -107,13 +104,7 @@ describe('common ModelResponseSchema', () => {
         status: schema.fields.status,
         edits: {
           type: 'array',
-          items: {
-            type: 'object',
-            fields: {
-              path: { type: 'string' },
-              instruction: { type: 'string' },
-            },
-          },
+          items: { type: 'object', fields: { path: { type: 'string' }, instruction: { type: 'string' } } },
         },
       },
     }, raw)).toEqual({
@@ -123,6 +114,11 @@ describe('common ModelResponseSchema', () => {
         { path: 'src/B.ts', instruction: 'Change B' },
       ],
     });
+  });
+
+  it('preserves internal block whitespace while removing only boundary blank lines', () => {
+    const raw = new RawResponseFormatHandler().parse('#summary\n\n  first\n  second\n\n');
+    expect(raw).toEqual({ summary: ['  first\n  second'] });
   });
 
   it('describes nested fields inside arrays of objects to the model', () => {
@@ -148,7 +144,6 @@ describe('common ModelResponseSchema', () => {
   });
 
   it('rejects an unknown option id', () => {
-    expect(() => validateResponseSchema(schema, { status: 'maybe' }))
-      .toThrow(ModelResponseSchemaError);
+    expect(() => validateResponseSchema(schema, { status: 'maybe' })).toThrow(ModelResponseSchemaError);
   });
 });
