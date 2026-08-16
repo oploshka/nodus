@@ -75,17 +75,6 @@ function answer(question: string): ResearchAnswer {
   return { question, status: 'resolved', answer: `answer:${question}`, sources: [], createdAt: new Date(0).toISOString() };
 }
 
-function worker(change: SequenceChangeAction, research = new ScriptedResearchAction()) {
-  return {
-    search: new ScriptedSearchAction(),
-    read: new ScriptedReadAction(),
-    research,
-    build(search = new ScriptedSearchAction(), read = new ScriptedReadAction()) {
-      return new CodeWorker(change, read, search, research, new NullLogger(), 4, 2);
-    },
-  };
-}
-
 describe('Iterative Worker action lifecycle', () => {
   it('uses cheap Search before retrying the primary action', async () => {
     const change = new SequenceChangeAction([
