@@ -1,28 +1,56 @@
-import type { ProjectFileIndex, ProjectFileInfo } from './ProjectFileIndex.js';
+import {
+  ProjectFileIndex,
+  type iProjectFileIndex,
+  type ProjectFileIndex as ProjectFileIndexState,
+  type ProjectFileInfo,
+  type sProjectFileIndexState,
+} from './ProjectFileIndex.js';
 
-/** Cheap lexical search over the current ProjectFileIndex. */
-export class ProjectFileSearch {
-  public constructor(private readonly index: () => ProjectFileIndex | undefined) {}
+/**
+ * Legacy adapter for callers that have not migrated to ProjectFileIndex yet.
+ * All file-index behavior delegates to ProjectFileIndex.
+ */
+export class ProjectFileSearch implements iProjectFileIndex {
+  private overrideState?: sProjectFileIndexState;
+
+  public constructor(private readonly index: () => ProjectFileIndexState | undefined) {}
+
+  public get files(): ReadonlyArray<ProjectFileInfo> {
+    return this.runtime()?.files ?? [];
+  }
+
+  public replace(state: sProjectFileIndexState): void {
+    this.overrideState = state;
+  }
+
+  public snapshot(): sProjectFileIndexState {
+    const state = this.overrideState ?? this.index();
+    if (!state) throw new Error('Project file index is not available.');
+    return state;
+  }
+
+  public list(): ReadonlyArray<ProjectFileInfo> {
+    return this.runtime()?.list() ?? [];
+  }
+
+  public get(path: string): ProjectFileInfo | undefined {
+    return this.runtime()?.get(path);
+  }
+
+  public has(path: string): boolean {
+    return this.runtime()?.has(path) ?? false;
+  }
+
+  public findFiles(question: string, limit = 6): ProjectFileInfo[] {
+    return this.runtime()?.findFiles(question, limit) ?? [];
+  }
 
   public search(question: string, limit = 6): ProjectFileInfo[] {
-    const files = this.index()?.files ?? [];
-    const tokens = Array.from(new Set(question.toLowerCase().match(/[a-zа-яё0-9_$-]{3,}/gi) ?? []));
-    const scored = files.map((file) => {
-      const haystack = [file.path, ...file.imports, ...file.exports].join(' ').toLowerCase();
-      let score = 0;
-      for (const token of tokens) {
-        if (file.path.toLowerCase().includes(token)) score += 5;
-        if (haystack.includes(token)) score += 2;
-      }
-      if (/cli|command/.test(question.toLowerCase()) && /Cli/i.test(file.path)) score += 8;
-      if (/conversation/.test(question.toLowerCase()) && /conversation/i.test(file.path)) score += 8;
-      if (/index|project/.test(question.toLowerCase()) && /project|index/i.test(file.path)) score += 4;
-      return { file, score };
-    });
-    return scored
-      .filter((item) => item.score > 0)
-      .sort((a, b) => b.score - a.score || a.file.path.localeCompare(b.file.path))
-      .slice(0, limit)
-      .map((item) => item.file);
+    return this.findFiles(question, limit);
+  }
+
+  private runtime(): iProjectFileIndex | undefined {
+    const state = this.overrideState ?? this.index();
+    return state ? new ProjectFileIndex(state) : undefined;
   }
 }

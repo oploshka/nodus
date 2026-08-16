@@ -2,11 +2,11 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
-import type { ProjectFileIndex } from './ProjectFileIndex.js';
+import type { sProjectFileIndexState } from './ProjectFileIndex.js';
 
 export const DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH = '.nodus/project-index.json';
 
-/** Persistence lifecycle for ProjectFileIndex. */
+/** Persistence lifecycle for the serializable ProjectFileIndex state. */
 export class ProjectFileIndexStore {
   private readonly pathResolver: PathResolver;
 
@@ -19,10 +19,10 @@ export class ProjectFileIndexStore {
     this.pathResolver = new PathResolver(root);
   }
 
-  public async load(): Promise<ProjectFileIndex | undefined> {
+  public async load(): Promise<sProjectFileIndexState | undefined> {
     if (!this.cachePath) return undefined;
     try {
-      const parsed = JSON.parse(await readFile(this.absolute(this.cachePath), 'utf8')) as ProjectFileIndex;
+      const parsed = JSON.parse(await readFile(this.absolute(this.cachePath), 'utf8')) as sProjectFileIndexState;
       return parsed.version === 1 && parsed.projectId === this.projectId ? parsed : undefined;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') this.logger.warn('project.index.load.failed', String(error));
@@ -30,7 +30,7 @@ export class ProjectFileIndexStore {
     }
   }
 
-  public async save(index: ProjectFileIndex): Promise<void> {
+  public async save(index: sProjectFileIndexState): Promise<void> {
     if (!this.cachePath) return;
     const path = this.absolute(this.cachePath);
     await mkdir(dirname(path), { recursive: true });
