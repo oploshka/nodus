@@ -27,7 +27,7 @@
         "src/engine/Common/Task/*"
       ],
       "@engine/Project/*": [
-        "src/engine/Common/Project/*"
+        "src/engine/Project/*"
       ],
       "@engine/Presentation/*": [
         "src/engine/Common/Presentation/*"
