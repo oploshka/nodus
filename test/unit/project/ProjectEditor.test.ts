@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import { EditValidator } from '@engine/Edit/Validation/EditValidator.js';
-import { Project } from '@engine/Project/Project.js';
+import { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import { Task } from '@engine/Task/Task.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
@@ -21,7 +21,7 @@ async function fixture(strategy: EditStrategy) {
   roots.push(root);
   await writeFile(join(root, 'a.ts'), 'A\n', 'utf8');
   await writeFile(join(root, 'b.ts'), 'B\n', 'utf8');
-  const project = new Project({ id: 'test', root, scanMode: 'manual', include: [], exclude: [] }, logger);
+  const project = new ProjectFiles({ id: 'test', root, scanMode: 'manual', include: [], exclude: [] }, logger);
   return { root, project, editor: new ProjectEditor(project, logger, [strategy]) };
 }
 
@@ -111,7 +111,7 @@ describe('ProjectEditor', () => {
     const root = await mkdtemp(join(tmpdir(), 'nodus-editor-fallback-'));
     roots.push(root);
     await writeFile(join(root, 'a.ts'), 'A\n', 'utf8');
-    const project = new Project({ id: 'test', root, scanMode: 'manual', include: [], exclude: [] }, logger);
+    const project = new ProjectFiles({ id: 'test', root, scanMode: 'manual', include: [], exclude: [] }, logger);
     const editor = new ProjectEditor(project, logger, [range, diff], new EditValidator(), {
       'range-replace': ['diff'],
       replace: [],
