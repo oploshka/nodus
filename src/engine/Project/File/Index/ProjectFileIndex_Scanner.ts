@@ -1,13 +1,13 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, relative, resolve, sep } from 'node:path';
 import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
-import type { sProjectFileInfo, sProjectFileIndexState } from '@engine/Project/File/ProjectFileIndex.js';
+import type { sProjectFileInfo, sProjectFileIndexState } from './ProjectFileIndex.js';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue']);
 const DEFAULT_EXCLUDE = ['node_modules', 'dist', '.git', '.nodus'] as const;
 
-/** Filesystem utility that builds serializable structural project-file index state. */
-export class FileScanner {
+/** Builds serializable ProjectFileIndex state from the target filesystem. */
+export class ProjectFileIndex_Scanner {
   public shouldScanOnOpen(mode: sTargetConfig['scanMode']): boolean {
     return (mode ?? 'on-open') === 'on-open';
   }

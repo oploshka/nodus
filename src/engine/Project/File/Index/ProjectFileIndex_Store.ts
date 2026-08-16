@@ -6,8 +6,8 @@ import type { sProjectFileIndexState } from './ProjectFileIndex.js';
 
 export const DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH = '.nodus/project-index.json';
 
-/** Persistence lifecycle for the serializable ProjectFileIndex state. */
-export class ProjectFileIndexStore {
+/** Persistence lifecycle subcomponent of ProjectFileIndex. */
+export class ProjectFileIndex_Store {
   private readonly pathResolver: PathResolver;
 
   public constructor(

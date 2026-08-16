@@ -28,11 +28,11 @@ import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import { DocumentationWorker } from '@engine/Worker/DocumentationWorker.js';
 import { AgentWorker } from '@engine/Worker/AgentWorker.js';
-import { FileScanner } from '@engine/Common/Tools/FileScanner.js';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
-import { ProjectFileIndexStore } from '@engine/Project/File/ProjectFileIndexStore.js';
-import { ProjectFileIndex, type iProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/ProjectFileIndex.js';
+import { ProjectFileIndex, type iProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/Index/ProjectFileIndex.js';
+import { ProjectFileIndex_Scanner } from '@engine/Project/File/Index/ProjectFileIndex_Scanner.js';
+import { ProjectFileIndex_Store } from '@engine/Project/File/Index/ProjectFileIndex_Store.js';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
 import { isAgentModelAdapter } from '@model/Adapter/AgentModelAdapter.js';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter.js';
@@ -68,8 +68,8 @@ export interface BootstrapOverrides {
 /** Composition root for Engine dependencies. */
 export class Bootstrap {
   public static async createTarget(configuration: sTargetConfig, logger: EngineLogger): Promise<iTargetRuntime> {
-    const scanner = new FileScanner();
-    const indexStore = new ProjectFileIndexStore(configuration.root, configuration.id, logger, configuration.indexCachePath);
+    const scanner = new ProjectFileIndex_Scanner();
+    const indexStore = new ProjectFileIndex_Store(configuration.root, configuration.id, logger, configuration.indexCachePath);
     const loadedState = await indexStore.load();
     const initialState: sProjectFileIndexState = loadedState ?? {
       version: 1,
