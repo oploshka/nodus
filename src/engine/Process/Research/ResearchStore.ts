@@ -1,7 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { Project } from '@engine/Project/Project.js';
+import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 
 interface StoreFile {
@@ -13,7 +11,7 @@ export class ResearchStore {
   private readonly entries = new Map<string, ResearchAnswer>();
 
   public constructor(
-    private readonly project: Project,
+    private readonly project: ProjectFiles,
     private readonly logger: EngineLogger,
     private readonly cachePath?: string,
   ) {}
@@ -63,7 +61,6 @@ export class ResearchStore {
 
   private async persist(): Promise<void> {
     if (!this.cachePath) return;
-    // Project.write creates the parent directory. mkdir is intentionally kept out of Project's public API.
     await this.project.write(this.cachePath, JSON.stringify({ version: 1, entries: this.all() } satisfies StoreFile, null, 2));
   }
 }
