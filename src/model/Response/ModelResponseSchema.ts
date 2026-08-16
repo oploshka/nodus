@@ -106,12 +106,10 @@ function describeField(name: string, field: ModelResponseFieldInfo, depth: numbe
 
 function decodeField(field: ModelResponseFieldInfo, value: unknown, path: string): unknown {
   if (field.type === 'array') {
-    if (!Array.isArray(value)) {
-      const parsed = parseStructuredValue(value, path);
-      if (!Array.isArray(parsed)) throw new ModelResponseSchemaError(path, 'Expected array', value);
-      value = parsed;
-    }
-    return value.map((item, index) => decodeField(field.items, item, `${path}[${index}]`));
+    const items: unknown[] = Array.isArray(value)
+      ? value
+      : parseArrayValue(value, path);
+    return items.map((item, index) => decodeField(field.items, item, `${path}[${index}]`));
   }
 
   value = unwrapSingleOccurrence(value, path);
@@ -157,6 +155,12 @@ function decodeField(field: ModelResponseFieldInfo, value: unknown, path: string
     result[name] = decodeField(child, childValue, `${path}.${name}`);
   }
   return result;
+}
+
+function parseArrayValue(value: unknown, path: string): unknown[] {
+  const parsed = parseStructuredValue(value, path);
+  if (!Array.isArray(parsed)) throw new ModelResponseSchemaError(path, 'Expected array', value);
+  return parsed;
 }
 
 function unwrapSingleOccurrence(value: unknown, path: string): unknown {
