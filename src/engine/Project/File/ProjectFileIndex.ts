@@ -15,13 +15,22 @@ export interface sProjectFileIndexState {
   files: sProjectFileInfo[];
 }
 
+/** Complete runtime capability over loaded project-file index state. */
+export interface iProjectFileIndex {
+  readonly files: ReadonlyArray<sProjectFileInfo>;
+  replace(state: sProjectFileIndexState): void;
+  snapshot(): sProjectFileIndexState;
+  list(): ReadonlyArray<sProjectFileInfo>;
+  get(path: string): sProjectFileInfo | undefined;
+  has(path: string): boolean;
+  findFiles(question: string, limit?: number): sProjectFileInfo[];
+}
+
 /**
  * Runtime representation of structural project-file knowledge.
- *
- * Scanning and persistence stay outside this class; this component owns the
- * loaded index state and the operations that make that state useful.
+ * Scanning and persistence stay outside this component.
  */
-export class ProjectFileIndex {
+export const ProjectFileIndex = class ProjectFileIndex implements iProjectFileIndex {
   public constructor(private state: sProjectFileIndexState) {}
 
   public get files(): ReadonlyArray<sProjectFileInfo> {
@@ -50,9 +59,8 @@ export class ProjectFileIndex {
   }
 
   public findFiles(question: string, limit = 6): sProjectFileInfo[] {
-    const files = this.state.files;
     const tokens = Array.from(new Set(question.toLowerCase().match(/[a-zа-яё0-9_$-]{3,}/gi) ?? []));
-    const scored = files.map((file) => {
+    const scored = this.state.files.map((file) => {
       const haystack = [file.path, ...file.imports, ...file.exports].join(' ').toLowerCase();
       let score = 0;
       for (const token of tokens) {
@@ -71,13 +79,14 @@ export class ProjectFileIndex {
       .slice(0, limit)
       .map((item) => item.file);
   }
-}
+};
 
 function normalizePath(path: string): string {
   return path.trim().replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
-// Compatibility names for callers that still use the pre-convention type names.
+// Compatibility type names for callers that still consume the serializable state directly.
+export type ProjectFileIndex = sProjectFileIndexState;
 export type ProjectFileInfo = sProjectFileInfo;
 export type ProjectFileFact = sProjectFileInfo;
 export type ProjectIndex = sProjectFileIndexState;
