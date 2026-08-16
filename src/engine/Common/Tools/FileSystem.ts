@@ -12,13 +12,13 @@ export class FileSystem {
   public constructor(
     public readonly root: string,
     private readonly pathResolver: PathResolver,
-    private readonly index: () => ProjectFileIndex | undefined,
+    private readonly indexProvider: () => ProjectFileIndex | undefined,
     private readonly logger: EngineLogger,
     private readonly exclude: ReadonlyArray<string> = DEFAULT_EXCLUDE,
   ) {}
 
   public async resolvePath(path: string): Promise<string> {
-    const resolved = await this.pathResolver.resolveExisting(path, this.index());
+    const resolved = await this.pathResolver.resolveExisting(path, this.indexProvider());
     this.logPathCorrection(path, resolved);
     return resolved;
   }
