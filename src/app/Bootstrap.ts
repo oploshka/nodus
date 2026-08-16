@@ -32,8 +32,7 @@ import { FileScanner } from '@engine/Common/Tools/FileScanner.js';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import { ProjectFileIndexStore } from '@engine/Project/File/ProjectFileIndexStore.js';
-import { ProjectFileSearch } from '@engine/Project/File/ProjectFileSearch.js';
-import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
+import { ProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/ProjectFileIndex.js';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
 import { isAgentModelAdapter } from '@model/Adapter/AgentModelAdapter.js';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter.js';
@@ -53,8 +52,8 @@ export interface iTargetRuntime {
   id: string;
   root: string;
   fileSystem: FileSystem;
-  fileSearch: ProjectFileSearch;
-  scan(): Promise<ProjectFileIndex>;
+  fileIndex: ProjectFileIndex;
+  scan(): Promise<sProjectFileIndexState>;
   clearIndex(): Promise<void>;
 }
 
@@ -71,16 +70,24 @@ export class Bootstrap {
   public static async createTarget(configuration: sTargetConfig, logger: EngineLogger): Promise<iTargetRuntime> {
     const scanner = new FileScanner();
     const indexStore = new ProjectFileIndexStore(configuration.root, configuration.id, logger, configuration.indexCachePath);
-    let index = await indexStore.load();
+    const loadedState = await indexStore.load();
+    const initialState: sProjectFileIndexState = loadedState ?? {
+      version: 1,
+      projectId: configuration.id,
+      root: configuration.root,
+      scannedAt: new Date(0).toISOString(),
+      files: [],
+    };
+    const fileIndex = new ProjectFileIndex(initialState);
     const pathResolver = new PathResolver(configuration.root);
-    const fileSystem = new FileSystem(configuration.root, pathResolver, () => index, logger, configuration.exclude);
-    const fileSearch = new ProjectFileSearch(() => index);
+    const fileSystem = new FileSystem(configuration.root, pathResolver, () => fileIndex, logger, configuration.exclude);
 
-    const scan = async (): Promise<ProjectFileIndex> => {
-      index = await scanner.scan(configuration);
-      await indexStore.save(index);
-      logger.info('project.scan', { files: index.files.length });
-      return index;
+    const scan = async (): Promise<sProjectFileIndexState> => {
+      const state = await scanner.scan(configuration);
+      fileIndex.replace(state);
+      await indexStore.save(state);
+      logger.info('project.scan', { files: state.files.length });
+      return state;
     };
 
     if (scanner.shouldScanOnOpen(configuration.scanMode)) await scan();
@@ -89,7 +96,7 @@ export class Bootstrap {
       id: configuration.id,
       root: configuration.root,
       fileSystem,
-      fileSearch,
+      fileIndex,
       scan,
       clearIndex: () => indexStore.clear(),
     };
@@ -116,17 +123,17 @@ export class Bootstrap {
     await researchStore.open();
     const research = new Research(
       researchStore,
-      new BoundedModelResearchResolver(target.fileSystem, target.fileSearch, model, logger, language.nodus),
+      new BoundedModelResearchResolver(target.fileSystem, target.fileIndex, model, logger, language.nodus),
       target.fileSystem,
       logger,
     );
 
     const readAction = new ReadProjectAction();
-    const searchAction = new SearchProjectAction(target.fileSearch);
+    const searchAction = new SearchProjectAction(target.fileIndex);
     const researchAction = new ResearchAction(research, workerAdaptation.research.guidance);
 
     const codeWorker = new CodeWorker(
-      new ChangeCodeAction(target.fileSystem, target.fileSearch, model, logger, {
+      new ChangeCodeAction(target.fileSystem, target.fileIndex, model, logger, {
         ...workerAdaptation.profiles.code,
         adaptationGuidance: workerAdaptation.change.guidance,
         language,
@@ -140,7 +147,7 @@ export class Bootstrap {
     );
 
     const documentationWorker = new DocumentationWorker(
-      new ChangeCodeAction(target.fileSystem, target.fileSearch, model, logger, {
+      new ChangeCodeAction(target.fileSystem, target.fileIndex, model, logger, {
         ...workerAdaptation.profiles.documentation,
         adaptationGuidance: workerAdaptation.change.guidance,
         language,
