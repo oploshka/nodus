@@ -122,7 +122,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
           'Do not perform validation; validation is a separate concern.',
         ].join('\n'),
       },
-      response: { format: ModelResponseFormat.Json, schema: decisionSchema },
+      response: { format: ModelResponseFormat.Raw, schema: decisionSchema },
       settings: { maxTokens: 2048, ...this.defaultModelSettings, ...context.settings },
     });
 
