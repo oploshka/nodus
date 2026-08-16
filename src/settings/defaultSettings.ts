@@ -29,10 +29,12 @@ export const defaultNodusSettings: NodusSettings = {
           'ReadFile reads the contents of an already known project path.',
           // Если путь уже известен, нельзя использовать FindFile для вопросов о содержимом этого файла.
           'If a required path is already present in candidateFiles or previous FindFile results, do not use FindFile to ask about signatures, methods, implementation details, imports, tests, or file structure. Use ReadFile.',
-          // Неправильный пример помогает небольшой модели различить две операции.
-          'Wrong: findFiles: ["method signatures in TodoStore.ts"]',
-          // Правильный пример того же информационного запроса.
-          'Correct: readFiles: ["src/TodoStore.ts"]',
+          // Любой retrieval-запрос должен оставаться полноценным ответом Change protocol с обязательным discriminator.
+          'Always return outcome. When requesting FindFile, ReadFile, or Research, use outcome = "missing-information".',
+          // Неправильный пример помогает небольшой модели различить две операции, сохраняя полный protocol object.
+          'Wrong: {"outcome":"missing-information","findFiles":["method signatures in TodoStore.ts"]}',
+          // Правильный пример того же информационного запроса также показывает обязательный outcome.
+          'Correct: {"outcome":"missing-information","readFiles":["src/TodoStore.ts"]}',
           // Запрашивай только минимально необходимый следующий кусок информации.
           'Request only the minimum next information needed. Prefer one request and never add requests merely to fill a limit.',
           '',
