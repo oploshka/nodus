@@ -61,19 +61,25 @@ Format handler превращает текст в object вида `{ text: strin
 
 ### Raw
 
-Универсальный компактный FIELD-value формат:
+Raw — простой block-first формат. Каждое поле начинается с `#<fieldName>`, значение пишется со следующей строки и продолжается до следующего `#`-поля или конца ответа:
 
 ```text
-status completed
-summary Change prepared
+#status
+completed
+
+#summary
+Change prepared
 ```
 
-Raw handler знает только общий синтаксис `field value`. Он не знает Planner/Worker/Research semantics и не решает cardinality поля. Каждое встреченное значение сначала сохраняется как occurrence:
+Raw handler не знает Planner/Worker/Research semantics и не решает cardinality поля. Каждое встреченное поле сохраняется как raw occurrence:
 
 ```text
-status completed
-files src/A.ts
-files src/B.ts
+#status
+completed
+#files
+src/A.ts
+#files
+src/B.ts
 ```
 
 ```ts
@@ -83,30 +89,15 @@ files src/B.ts
 }
 ```
 
-Далее common schema нормализует representation согласно ожидаемому типу: scalar получает одно значение, array получает все occurrences, number/boolean/option приводятся и проверяются.
+Далее common schema нормализует representation согласно ожидаемому типу: scalar получает одно значение, array получает occurrences, number/boolean/option приводятся и проверяются.
 
-Для многострочного или structured value используется явный блок `#field`. Всё до следующего `#field` или конца ответа сохраняется как одно raw occurrence:
-
-```text
-status completed
-#files
-[
-  "src/A.ts",
-  "src/B.ts"
-]
-```
-
-Raw handler не интерпретирует содержимое блока. Common schema знает ожидаемый тип `files` и нормализует block value в `array<string>`.
-
-Для object в простом случае по-прежнему можно использовать JSON одного объекта на той же строке:
+Компактная форма `#field value` допускается parser как tolerant input, но модель инструктируется всегда переносить value на следующую строку:
 
 ```text
-input {"path":"src/Cli/Cli.ts"}
-edits {"path":"src/A.ts","instruction":"Change A"}
-edits {"path":"src/B.ts","instruction":"Change B"}
+#status completed
 ```
 
-Для structured array допустим блок:
+Для structured array/object содержимое поля может быть JSON:
 
 ```text
 #edits
@@ -116,7 +107,9 @@ edits {"path":"src/B.ts","instruction":"Change B"}
 ]
 ```
 
-Если schema ожидает `array<object>`, repeated `edits` или structured block нормализуются в один и тот же итоговый тип. Модели не нужно сериализовать root JSON object.
+Raw handler не интерпретирует содержимое блока. Common schema знает ожидаемый тип и выполняет materialization/validation.
+
+При выделении блока parser удаляет только форматную оболочку на границах: один пустой leading line и до двух trailing blank lines. Внутренние переносы и indentation сохраняются.
 
 Operation-specific mini-language внутри Raw запрещён.
 
