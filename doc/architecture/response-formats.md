@@ -36,7 +36,7 @@ schema: {
       description: 'Result state.',
       optionList: [
         { id: 'completed', description: 'Work is finished.' },
-        { id: 'failed', description: 'Work cannot be finished.' },
+        { id: 'failed', description: 'Cannot finish.' },
       ],
     },
     summary: {
@@ -85,7 +85,20 @@ files src/B.ts
 
 Далее common schema нормализует representation согласно ожидаемому типу: scalar получает одно значение, array получает все occurrences, number/boolean/option приводятся и проверяются.
 
-Для object в первом приближении используется JSON одного объекта на той же строке:
+Для многострочного или structured value используется явный блок `#field`. Всё до следующего `#field` или конца ответа сохраняется как одно raw occurrence:
+
+```text
+status completed
+#files
+[
+  "src/A.ts",
+  "src/B.ts"
+]
+```
+
+Raw handler не интерпретирует содержимое блока. Common schema знает ожидаемый тип `files` и нормализует block value в `array<string>`.
+
+Для object в простом случае по-прежнему можно использовать JSON одного объекта на той же строке:
 
 ```text
 input {"path":"src/Cli/Cli.ts"}
@@ -93,7 +106,17 @@ edits {"path":"src/A.ts","instruction":"Change A"}
 edits {"path":"src/B.ts","instruction":"Change B"}
 ```
 
-Если schema ожидает `array<object>`, repeated `edits` становятся массивом объектов на этапе schema normalization. Модели не нужно сериализовать root JSON object или JSON array для repeated Raw fields.
+Для structured array допустим блок:
+
+```text
+#edits
+[
+  {"path":"src/A.ts","instruction":"Change A"},
+  {"path":"src/B.ts","instruction":"Change B"}
+]
+```
+
+Если schema ожидает `array<object>`, repeated `edits` или structured block нормализуются в один и тот же итоговый тип. Модели не нужно сериализовать root JSON object.
 
 Operation-specific mini-language внутри Raw запрещён.
 
