@@ -1,1 +1,1 @@
-export type { ProjectFileFact, ProjectIndex } from './FileMap.js';
+export type { ProjectFileFact, ProjectIndex } from './File/FileMap.js';
