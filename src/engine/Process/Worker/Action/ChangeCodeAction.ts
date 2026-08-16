@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import type { ProjectFileSearch } from '@engine/Project/File/ProjectFileSearch.js';
+import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { ActionModelOptions, ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
@@ -73,7 +73,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
 
   public constructor(
     private readonly fileSystem: FileSystem,
-    private readonly fileSearch: ProjectFileSearch,
+    private readonly fileIndex: ProjectFileIndex,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly profile: ChangeCodeActionProfile,
@@ -153,7 +153,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
       else if (item.kind === 'read') paths.add(item.path);
       else for (const source of item.value.sources) paths.add(source.path);
     }
-    for (const file of this.fileSearch.search(`${context.task.description}\n${context.step.goal}`, 16)) paths.add(file.path);
+    for (const file of this.fileIndex.findFiles(`${context.task.description}\n${context.step.goal}`, 16)) paths.add(file.path);
     return [...paths].slice(0, 24);
   }
 }
