@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NullLogger } from '@app/Logging/Logger.js';
-import { Project } from '@engine/Project/Project.js';
+import { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { ResearchResolveOptions, ResearchResolver, ResolvedResearch } from '@engine/Research/ResearchTypes.js';
@@ -20,7 +20,7 @@ describe('ResearchStore', () => {
     const fixture = await TestProject.create('research-cache', { 'A.ts': 'export const a = 1;\n' });
     try {
       const logger = new NullLogger();
-      const project = new Project({ id: 'p', root: fixture.root, scanMode: 'manual' }, logger);
+      const project = new ProjectFiles({ id: 'p', root: fixture.root, scanMode: 'manual' }, logger);
       await project.open();
       const store = new ResearchStore(project, logger);
       const resolver = new CountingResolver('A.ts');
@@ -45,7 +45,7 @@ describe('ResearchStore', () => {
     const fixture = await TestProject.create('research-not-found', { 'A.ts': 'export const a = 1;\n' });
     try {
       const logger = new NullLogger();
-      const project = new Project({ id: 'p', root: fixture.root, scanMode: 'manual' }, logger);
+      const project = new ProjectFiles({ id: 'p', root: fixture.root, scanMode: 'manual' }, logger);
       await project.open();
       const store = new ResearchStore(project, logger);
       let calls = 0;
