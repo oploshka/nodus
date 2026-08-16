@@ -1,7 +1,7 @@
 import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import type { EditPreparationContext, EditPrepareResult } from '@engine/Edit/EditTypes.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
+import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
@@ -16,7 +16,7 @@ const schema: ModelResponseSchema = { description: 'Complete resulting content f
 export class FullFileEditStrategy implements EditStrategy {
   public readonly id = 'edit' as const;
   public constructor(
-    private readonly project: ProjectFiles,
+    private readonly fileSystem: FileSystem,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly language: LanguageConfiguration,
@@ -42,7 +42,7 @@ export class FullFileEditStrategy implements EditStrategy {
       response: { format: ModelResponseFormat.Json, schema },
       settings: { maxTokens: 8192, ...context.settings },
     });
-    const responsePath = await this.project.resolvePath(response.path);
+    const responsePath = await this.fileSystem.resolvePath(response.path);
     if (responsePath !== path) return { status: 'not-completed', reason: `Edit path mismatch: expected ${path}, received ${responsePath}` };
     return { status: 'completed', path, content: preserveEol(context.source, response.content), operations: 1 };
   }
