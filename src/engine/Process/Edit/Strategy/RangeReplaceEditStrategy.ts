@@ -2,7 +2,7 @@ import { RangeReplaceApplicator, type RangeReplaceOperation } from '@engine/Edit
 import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import type { EditPreparationContext, EditPrepareResult } from '@engine/Edit/EditTypes.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
+import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
@@ -28,7 +28,7 @@ export class RangeReplaceEditStrategy implements EditStrategy {
   public readonly id = 'range-replace' as const;
   private readonly presentation = new EditPresentation();
   public constructor(
-    private readonly project: ProjectFiles,
+    private readonly fileSystem: FileSystem,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly language: LanguageConfiguration,
@@ -54,11 +54,7 @@ export class RangeReplaceEditStrategy implements EditStrategy {
               step: context.step,
               instruction: context.edit.instruction,
               authoritativeSource: { path, content: context.source },
-              recovery: attempt === 1 ? undefined : {
-                attempt,
-                previousError: lastError,
-                previousOperations,
-              },
+              recovery: attempt === 1 ? undefined : { attempt, previousError: lastError, previousOperations },
             },
             format: ModelRequestFormat.Json,
             guidance: [
@@ -81,7 +77,7 @@ export class RangeReplaceEditStrategy implements EditStrategy {
           settings: { maxTokens: 4096, ...context.settings },
         });
         previousOperations = response.operations;
-        const responsePath = await this.project.resolvePath(response.path);
+        const responsePath = await this.fileSystem.resolvePath(response.path);
         if (responsePath !== path) throw new Error(`Range replace path mismatch: expected ${path}, received ${responsePath}`);
         if (response.operations.length === 0) throw new Error(`Range replace returned no operations for ${path}`);
         const content = this.applicator.apply(context.source, response.operations, path);
@@ -89,23 +85,11 @@ export class RangeReplaceEditStrategy implements EditStrategy {
         return { status: 'completed', path, content, operations: response.operations.length };
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
-        if (attempt < this.maxEditAttempts) {
-          this.logger.warn('engine.edit.strategy.retry', {
-            strategy: this.id,
-            path,
-            editAttempt: attempt,
-            maxEditAttempts: this.maxEditAttempts,
-            error: lastError,
-            presentation: this.presentation,
-          });
-        }
+        if (attempt < this.maxEditAttempts) this.logger.warn('engine.edit.strategy.retry', { strategy: this.id, path, editAttempt: attempt, maxEditAttempts: this.maxEditAttempts, error: lastError, presentation: this.presentation });
       }
     }
 
-    return {
-      status: 'not-completed',
-      reason: `Range replace recovery limit reached (${this.maxEditAttempts}) for ${path}. Last error: ${lastError ?? 'unknown edit error'}`,
-    };
+    return { status: 'not-completed', reason: `Range replace recovery limit reached (${this.maxEditAttempts}) for ${path}. Last error: ${lastError ?? 'unknown edit error'}` };
   }
 
   private editModelLogger(): EngineLogger {

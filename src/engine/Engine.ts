@@ -1,6 +1,5 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Planner } from '@engine/Planner/Planner.js';
-import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import { Task } from '@engine/Task/Task.js';
 import { TaskRun } from '@engine/Task/TaskRun.js';
 import type { Worker } from '@engine/Worker/Worker.js';
@@ -18,7 +17,7 @@ export class Engine {
   private readonly pendingEdits = new Map<string, ProjectEditor>();
 
   public constructor(
-    private readonly project: ProjectFiles,
+    private readonly projectId: string,
     private readonly planner: Planner,
     private readonly workers: ReadonlyArray<Worker>,
     private readonly determine: Determine,
@@ -28,9 +27,9 @@ export class Engine {
   ) {}
 
   public async run(description: string): Promise<TaskRun> {
-    const task = new Task(description, this.project.id);
+    const task = new Task(description, this.projectId);
     const edit = this.createEdit();
-    const instrument = new ProcessInstrument(this.project, edit);
+    const instrument = new ProcessInstrument(edit);
     this.logger.info('engine.task.start', { taskId: task.id, description, presentation: this.presentation });
 
     this.logger.info('planner.plan.start', { taskId: task.id, presentation: this.planner.presentation });
@@ -50,11 +49,7 @@ export class Engine {
       this.logger.info('determine.start', { taskId: task.id, stepId: step.id, options: availableWorkers.length, presentation: this.determine.presentation });
       const worker = await this.determine.option({
         goal: step.goal,
-        options: availableWorkers.map((candidate) => ({
-          id: candidate.id,
-          description: candidate.description,
-          value: candidate,
-        })),
+        options: availableWorkers.map((candidate) => ({ id: candidate.id, description: candidate.description, value: candidate })),
       });
       this.logger.info('determine.finish', { taskId: task.id, stepId: step.id, optionId: worker.id, workerName: worker.name, workerPresentation: worker.presentation, presentation: this.determine.presentation });
       this.logger.info('engine.worker.selected', { taskId: task.id, stepId: step.id, workerId: worker.id, workerName: worker.name, workerPresentation: worker.presentation });
@@ -72,12 +67,10 @@ export class Engine {
           this.pendingEdits.set(task.id, edit);
         } else {
           this.pendingEdits.delete(task.id);
-
           this.logger.info('engine.test.start', { taskId: task.id, changedPaths: applied.paths });
           const tested = await this.engineTest.run({ task, changedPaths: applied.paths });
-          if (tested.status === 'passed') {
-            this.logger.info('engine.test.passed', { taskId: task.id, tests: tested.tests });
-          } else {
+          if (tested.status === 'passed') this.logger.info('engine.test.passed', { taskId: task.id, tests: tested.tests });
+          else {
             this.logger.warn('engine.test.failed', { taskId: task.id, reason: tested.reason, tests: tested.tests });
             result = { status: 'not-completed', reason: tested.reason, canContinue: true };
           }

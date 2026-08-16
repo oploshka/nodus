@@ -5,7 +5,9 @@ import { runCli } from '@app/Cli/Cli.js';
 import { scanProject } from '@app/Cli/ScanProject.js';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import { CompositeLogger, ConsoleLogger, FileLogger } from '@app/Logging/Logger.js';
-import { Project } from '@engine/Project/Project.js';
+import { DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH } from '@engine/Project/File/ProjectFileIndexStore.js';
+import { DEFAULT_RESEARCH_CACHE_PATH } from '@engine/Research/ResearchStore.js';
+import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
 
 interface StartupOptions {
   configPath: string;
@@ -31,20 +33,17 @@ async function main(args: string[]): Promise<void> {
     logPath,
   });
 
-  // Main owns process input and app-level startup concerns. The same Project
-  // instance is injected into Engine and the temporary /scan CLI command.
-  const project = new Project(configuration.project, logger);
-  if (options.clearCache) await clearProjectCache(project);
+  if (options.clearCache) await clearProjectCache(configuration.project);
 
-  await project.open();
-  if (options.scan && configuration.project.scanMode !== 'on-open') await project.scan();
+  const target = await Bootstrap.createTarget(configuration.project, logger);
+  if (options.scan && configuration.project.scanMode !== 'on-open') await target.scan();
 
-  const engine = await Bootstrap.createEngine(configuration, { logger, project });
+  const engine = await Bootstrap.createEngine(configuration, { logger, target });
 
   await runCli({
     engine,
-    projectId: project.id,
-    scanProject: () => scanProject(project),
+    projectId: target.id,
+    scanProject: () => scanProject(target.scan),
   });
   logger.info('app.exit');
 }
@@ -65,12 +64,12 @@ function parseStartupOptions(args: string[]): StartupOptions {
   return { configPath, clearCache, clearLogs, scan };
 }
 
-async function clearProjectCache(project: Project): Promise<void> {
-  const paths = [project.configuration.indexCachePath, project.configuration.researchCachePath];
-  for (const path of paths) {
-    if (!path) continue;
-    await rm(resolve(project.root, path), { force: true });
-  }
+async function clearProjectCache(configuration: ProjectConfiguration): Promise<void> {
+  const paths = [
+    configuration.indexCachePath ?? DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH,
+    configuration.researchCachePath ?? DEFAULT_RESEARCH_CACHE_PATH,
+  ];
+  for (const path of paths) await rm(resolve(configuration.root, path), { force: true });
 }
 
 function fileTimestamp(): string {

@@ -1,6 +1,8 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
+import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
+
+export const DEFAULT_RESEARCH_CACHE_PATH = '.nodus/research-cache.json';
 
 interface StoreFile {
   version: 1;
@@ -11,15 +13,15 @@ export class ResearchStore {
   private readonly entries = new Map<string, ResearchAnswer>();
 
   public constructor(
-    private readonly project: ProjectFiles,
+    private readonly fileSystem: FileSystem,
     private readonly logger: EngineLogger,
-    private readonly cachePath?: string,
+    private readonly cachePath = DEFAULT_RESEARCH_CACHE_PATH,
   ) {}
 
   public async open(): Promise<void> {
     if (!this.cachePath) return;
     try {
-      const raw = await this.project.read(this.cachePath);
+      const raw = await this.fileSystem.read(this.cachePath);
       const parsed = JSON.parse(raw) as StoreFile;
       if (parsed.version !== 1) return;
       for (const entry of parsed.entries) this.entries.set(this.key(entry.question), entry);
@@ -33,7 +35,7 @@ export class ResearchStore {
     if (!entry) return undefined;
     for (const source of entry.sources) {
       try {
-        if (await this.project.hash(source.path) !== source.hash) {
+        if (await this.fileSystem.hash(source.path) !== source.hash) {
           this.entries.delete(this.key(question));
           this.logger.info('research.cache.stale', { question, source: source.path });
           return undefined;
@@ -61,6 +63,7 @@ export class ResearchStore {
 
   private async persist(): Promise<void> {
     if (!this.cachePath) return;
-    await this.project.write(this.cachePath, JSON.stringify({ version: 1, entries: this.all() } satisfies StoreFile, null, 2));
+    const content = JSON.stringify({ version: 1, entries: this.all() } satisfies StoreFile, null, 2);
+    await this.fileSystem.write(this.cachePath, content);
   }
 }

@@ -2,7 +2,7 @@ import { ReplaceApplicator, type ReplaceOperation } from '@engine/Edit/Applicato
 import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import type { EditPreparationContext, EditPrepareResult } from '@engine/Edit/EditTypes.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
+import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
@@ -17,7 +17,7 @@ const schema: ModelResponseSchema = { description: 'Exact guarded replacements f
 export class ReplaceEditStrategy implements EditStrategy {
   public readonly id = 'replace' as const;
   public constructor(
-    private readonly project: ProjectFiles,
+    private readonly fileSystem: FileSystem,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly language: LanguageConfiguration,
@@ -50,7 +50,7 @@ export class ReplaceEditStrategy implements EditStrategy {
           response: { format: ModelResponseFormat.Json, schema },
           settings: { maxTokens: 4096, ...context.settings },
         });
-        const responsePath = await this.project.resolvePath(response.path);
+        const responsePath = await this.fileSystem.resolvePath(response.path);
         if (responsePath !== path) throw new Error(`Replace path mismatch: expected ${path}, received ${responsePath}`);
         if (response.operations.length === 0) throw new Error(`Replace returned no operations for ${path}`);
         return { status: 'completed', path, content: this.applicator.apply(context.source, response.operations, path), operations: response.operations.length };

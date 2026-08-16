@@ -3,11 +3,11 @@ import { ConsoleLogger } from '@app/Logging/Logger.js';
 import { ModelDetermine } from '@engine/Determine/ModelDetermine.js';
 import { Engine } from '@engine/Engine.js';
 import { ModelPlanner } from '@engine/Planner/ModelPlanner.js';
-import { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import { BoundedModelResearchResolver } from '@engine/Research/BoundedModelResearchResolver.js';
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
 import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEditStrategy.js';
@@ -26,6 +26,12 @@ import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { CodeWorker } from '@engine/Worker/CodeWorker.js';
 import { DocumentationWorker } from '@engine/Worker/DocumentationWorker.js';
 import { AgentWorker } from '@engine/Worker/AgentWorker.js';
+import { FileScanner } from '@engine/Common/Tools/FileScanner.js';
+import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
+import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
+import { ProjectFileIndexStore } from '@engine/Project/File/ProjectFileIndexStore.js';
+import { ProjectFileSearch } from '@engine/Project/File/ProjectFileSearch.js';
+import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
 import { isAgentModelAdapter } from '@model/Adapter/AgentModelAdapter.js';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter.js';
@@ -40,16 +46,53 @@ import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.j
 import type { NodusSettings } from '../settings/NodusSettings.js';
 import { defaultNodusSettings } from '../settings/defaultSettings.js';
 
+/** App composition capability for one configured target. */
+export interface iTargetRuntime {
+  id: string;
+  root: string;
+  fileSystem: FileSystem;
+  fileSearch: ProjectFileSearch;
+  scan(): Promise<ProjectFileIndex>;
+  clearIndex(): Promise<void>;
+}
+
 export interface BootstrapOverrides {
   logger?: EngineLogger;
   model?: ModelAdapter;
-  project?: ProjectFiles;
+  target?: iTargetRuntime;
   engineTest?: EngineTest;
   settings?: NodusSettings;
 }
 
 /** Composition root for Engine dependencies. */
 export class Bootstrap {
+  public static async createTarget(configuration: ProjectConfiguration, logger: EngineLogger): Promise<iTargetRuntime> {
+    const scanner = new FileScanner();
+    const indexStore = new ProjectFileIndexStore(configuration.root, configuration.id, logger, configuration.indexCachePath);
+    let index = await indexStore.load();
+    const pathResolver = new PathResolver(configuration.root);
+    const fileSystem = new FileSystem(configuration.root, pathResolver, () => index, logger, configuration.exclude);
+    const fileSearch = new ProjectFileSearch(() => index);
+
+    const scan = async (): Promise<ProjectFileIndex> => {
+      index = await scanner.scan(configuration);
+      await indexStore.save(index);
+      logger.info('project.scan', { files: index.files.length });
+      return index;
+    };
+
+    if (scanner.shouldScanOnOpen(configuration.scanMode)) await scan();
+
+    return {
+      id: configuration.id,
+      root: configuration.root,
+      fileSystem,
+      fileSearch,
+      scan,
+      clearIndex: () => indexStore.clear(),
+    };
+  }
+
   public static async createEngine(
     configuration: AppConfiguration,
     overrides: BootstrapOverrides = {},
@@ -65,22 +108,21 @@ export class Bootstrap {
     );
     const model = new ModelRunner(adapter, configuration.model);
 
-    const project = overrides.project ?? new ProjectFiles(configuration.project, logger);
-    if (!overrides.project) await project.open();
+    const target = overrides.target ?? await this.createTarget(configuration.project, logger);
 
-    const researchStore = new ResearchStore(project, logger, project.configuration.researchCachePath);
+    const researchStore = new ResearchStore(target.fileSystem, logger, configuration.project.researchCachePath);
     await researchStore.open();
     const research = new Research(
       researchStore,
-      new BoundedModelResearchResolver(project, model, logger, language.nodus),
-      project,
+      new BoundedModelResearchResolver(target.fileSystem, target.fileSearch, model, logger, language.nodus),
+      target.fileSystem,
       logger,
     );
 
     const researchAction = new ResearchAction(research, workerAdaptation.research.guidance);
 
     const codeWorker = new CodeWorker(
-      new ChangeCodeAction(project, model, logger, {
+      new ChangeCodeAction(target.fileSystem, target.fileSearch, model, logger, {
         ...workerAdaptation.profiles.code,
         adaptationGuidance: workerAdaptation.change.guidance,
         language,
@@ -92,7 +134,7 @@ export class Bootstrap {
     );
 
     const documentationWorker = new DocumentationWorker(
-      new ChangeCodeAction(project, model, logger, {
+      new ChangeCodeAction(target.fileSystem, target.fileSearch, model, logger, {
         ...workerAdaptation.profiles.documentation,
         adaptationGuidance: workerAdaptation.change.guidance,
         language,
@@ -109,39 +151,37 @@ export class Bootstrap {
       workers.push(new AgentWorker(
         new AgentRunner(adapter, configuration.model),
         tools,
-        { projectRoot: project.root, exclude: project.configuration.exclude ?? [] },
+        { projectRoot: target.root, exclude: configuration.project.exclude ?? [] },
         logger,
         configuration.runtime?.maxAgentRounds,
         language,
       ));
     }
 
-    const editValidator = new EditValidator([
-      new JsonEditValidationCheck(),
-    ]);
-    const createEdit = () => new ProjectEditor(project, logger, [
-      new RangeReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-      new ReplaceEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+    const editValidator = new EditValidator([new JsonEditValidationCheck()]);
+    const createEdit = () => new ProjectEditor(target.fileSystem, logger, [
+      new RangeReplaceEditStrategy(target.fileSystem, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+      new ReplaceEditStrategy(target.fileSystem, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
       new DiffEditStrategy(model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-      new FullFileEditStrategy(project, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
+      new FullFileEditStrategy(target.fileSystem, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
     ], editValidator);
 
     return new Engine(
-      project,
+      target.id,
       new ModelPlanner(model, logger, language.nodus, settings.process.planner.template),
       workers,
       new ModelDetermine(model, logger, language.nodus),
       createEdit,
-      overrides.engineTest ?? createEngineTest(configuration, project),
+      overrides.engineTest ?? createEngineTest(configuration, target.root),
       logger,
     );
   }
 }
 
-function createEngineTest(configuration: AppConfiguration, project: ProjectFiles): EngineTest {
+function createEngineTest(configuration: AppConfiguration, root: string): EngineTest {
   const tests: CommandEngineTest[] = [];
-  if (configuration.engineTest?.typecheck) tests.push(new TypecheckEngineTest(project.root, configuration.engineTest.typecheck));
-  if (configuration.engineTest?.unit) tests.push(new UnitEngineTest(project.root, configuration.engineTest.unit));
+  if (configuration.engineTest?.typecheck) tests.push(new TypecheckEngineTest(root, configuration.engineTest.typecheck));
+  if (configuration.engineTest?.unit) tests.push(new UnitEngineTest(root, configuration.engineTest.unit));
   return tests.length === 0 ? new ResolveEngineTest() : new CompositeEngineTest(tests);
 }
 
