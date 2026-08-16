@@ -3,7 +3,7 @@ import { ConsoleLogger } from '@app/Logging/Logger.js';
 import { ModelDetermine } from '@engine/Determine/ModelDetermine.js';
 import { Engine } from '@engine/Engine.js';
 import { ModelPlanner } from '@engine/Planner/ModelPlanner.js';
-import { Project } from '@engine/Project/Project.js';
+import { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import { BoundedModelResearchResolver } from '@engine/Research/BoundedModelResearchResolver.js';
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
@@ -43,7 +43,7 @@ import { defaultNodusSettings } from '../settings/defaultSettings.js';
 export interface BootstrapOverrides {
   logger?: EngineLogger;
   model?: ModelAdapter;
-  project?: Project;
+  project?: ProjectFiles;
   engineTest?: EngineTest;
   settings?: NodusSettings;
 }
@@ -65,7 +65,7 @@ export class Bootstrap {
     );
     const model = new ModelRunner(adapter, configuration.model);
 
-    const project = overrides.project ?? new Project(configuration.project, logger);
+    const project = overrides.project ?? new ProjectFiles(configuration.project, logger);
     if (!overrides.project) await project.open();
 
     const researchStore = new ResearchStore(project, logger, project.configuration.researchCachePath);
@@ -138,7 +138,7 @@ export class Bootstrap {
   }
 }
 
-function createEngineTest(configuration: AppConfiguration, project: Project): EngineTest {
+function createEngineTest(configuration: AppConfiguration, project: ProjectFiles): EngineTest {
   const tests: CommandEngineTest[] = [];
   if (configuration.engineTest?.typecheck) tests.push(new TypecheckEngineTest(project.root, configuration.engineTest.typecheck));
   if (configuration.engineTest?.unit) tests.push(new UnitEngineTest(project.root, configuration.engineTest.unit));
