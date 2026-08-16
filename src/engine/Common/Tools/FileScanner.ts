@@ -1,19 +1,19 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, relative, resolve, sep } from 'node:path';
 import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
-import type { FileFact, FileMap } from '@engine/Project/File/FileMap.js';
+import type { ProjectFileInfo, ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue']);
 
-/** Filesystem utility that builds structural facts about project files. */
+/** Filesystem utility that builds the structural project-file index. */
 export class FileScanner {
-  public async scan(configuration: ProjectConfiguration): Promise<FileMap> {
-    const files: FileFact[] = [];
+  public async scan(configuration: ProjectConfiguration): Promise<ProjectFileIndex> {
+    const files: ProjectFileInfo[] = [];
     await this.walk(configuration.root, configuration.root, configuration, files);
     return { version: 1, projectId: configuration.id, root: configuration.root, scannedAt: new Date().toISOString(), files };
   }
 
-  private async walk(root: string, directory: string, configuration: ProjectConfiguration, output: FileFact[]): Promise<void> {
+  private async walk(root: string, directory: string, configuration: ProjectConfiguration, output: ProjectFileInfo[]): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
       const absolutePath = resolve(directory, entry.name);
