@@ -27,6 +27,26 @@ describe('common ModelResponseSchema', () => {
     expect(validateResponseSchema({ fields: { readFiles: { type: 'filePathList' } } }, raw)).toEqual({ readFiles: ['src/A.ts', 'src/B.ts', 'src/C.ts'] });
   });
 
+  it('normalizes the narrow edit list format used by ChangeCodeAction', () => {
+    const raw = new RawResponseFormatHandler().parse([
+      '#edits',
+      '- path: src/TodoStore.ts',
+      '  instruction: Add delete(id) returning a boolean.',
+      '',
+      '- path: test/TodoService.test.ts',
+      '  instruction: Add two tests:',
+      '  1. Existing id returns true.',
+      '  2. Missing id returns false.',
+    ].join('\n'));
+
+    expect(validateResponseSchema({ fields: { edits: { type: 'editList' } } }, raw)).toEqual({
+      edits: [
+        { path: 'src/TodoStore.ts', instruction: 'Add delete(id) returning a boolean.' },
+        { path: 'test/TodoService.test.ts', instruction: 'Add two tests:\n1. Existing id returns true.\n2. Missing id returns false.' },
+      ],
+    });
+  });
+
   it('keeps ordinary string arrays strict instead of splitting multiline blocks', () => {
     const raw = new RawResponseFormatHandler().parse('#files\nsrc/A.ts\nsrc/B.ts');
     expect(validateResponseSchema({ fields: { files: { type: 'array', items: { type: 'string' } } } }, raw)).toEqual({ files: ['src/A.ts\nsrc/B.ts'] });
