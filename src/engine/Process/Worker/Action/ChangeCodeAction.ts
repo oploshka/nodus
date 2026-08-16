@@ -1,7 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import type { ProjectFileSearch } from '@engine/Project/File/ProjectFileSearch.js';
-import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { ActionModelOptions, ActionResult, WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
@@ -14,11 +13,15 @@ import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.j
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import type { EditStrategyId, ProjectEditRequest } from '@engine/Edit/EditTypes.js';
+import type { tWorkerContextItem } from '@engine/Worker/WorkerContext.js';
+import type { sSearchProjectActionInput } from './SearchProjectAction.js';
 
 interface ChangeDecision {
   outcome: 'ready' | 'missing-information' | 'already-completed' | 'failed';
   summary?: string;
   reason?: string;
+  searchQueries?: string[];
+  readPaths?: string[];
   questions?: string[];
   edits?: Array<{ path: string; instruction: string }>;
 }
@@ -42,6 +45,8 @@ const decisionSchema: ModelResponseSchema = {
     ] },
     summary: { type: 'string', optional: true },
     reason: { type: 'string', optional: true },
+    searchQueries: { type: 'array', items: { type: 'string' }, optional: true },
+    readPaths: { type: 'array', items: { type: 'string' }, optional: true },
     questions: { type: 'array', items: { type: 'string' }, optional: true },
     edits: { type: 'array', optional: true, items: { type: 'object', fields: { path: { type: 'string' }, instruction: { type: 'string' } } } },
   },
@@ -50,14 +55,16 @@ const decisionSchema: ModelResponseSchema = {
 export interface ChangeCodeActionInput extends ActionModelOptions {
   task: Task;
   step: PlanStep;
-  knowledge: ReadonlyArray<ResearchAnswer>;
+  context: ReadonlyArray<tWorkerContextItem>;
 }
 
 export interface ChangeCodeActionData { summary: string; edit?: ProjectEditRequest }
 export interface ResearchActionRequest { question: string }
+export interface ReadActionRequest { path: string }
+export type tChangeCodeActionRequest = ResearchActionRequest | ReadActionRequest | sSearchProjectActionInput;
 
 /** Worker-side change intent producer. Technical edit serialization belongs to Engine/Edit. */
-export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, ResearchActionRequest> {
+export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, tChangeCodeActionRequest> {
   public readonly id = 'change-code';
   public readonly presentation: ActionPresentation;
   public readonly name: string;
@@ -81,7 +88,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     this.method = this.presentation.detail();
   }
 
-  public async run(context: ChangeCodeActionInput): Promise<ActionResult<ChangeCodeActionData, ResearchActionRequest>> {
+  public async run(context: ChangeCodeActionInput): Promise<ActionResult<ChangeCodeActionData, tChangeCodeActionRequest>> {
     const decision = await callModel<ChangeDecision>(this.model, this.logger, {
       request: {
         message: 'Determine the concrete project edits required to complete the assigned PlanStep now.',
@@ -90,7 +97,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
           step: context.step,
           purpose: this.profile.purpose,
           candidateFiles: this.candidateFiles(context),
-          knowledge: context.knowledge.map((item) => ({ question: item.question, status: item.status, answer: item.answer, sources: item.sources.map((source) => source.path) })),
+          context: context.context.map(serializeContext),
         },
         format: ModelRequestFormat.Json,
         guidance: [
@@ -99,8 +106,10 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
           ...new ModelLanguagePolicy(this.profile.language).mixedProjectEdit(),
           'This Action only describes what must change. Do not generate diff, replacement blocks, line ranges, or complete file contents.',
           'Treat summary and reason as internal Nodus fields.',
-          'If safe execution requires project facts that are not supplied, return only the smallest bounded questions needed for the next attempt.',
-          'Return at most 3 questions.',
+          'When information is missing, request the cheapest sufficient operation: searchQueries to locate files, readPaths to inspect known files, and questions only for cross-file analysis or project knowledge that cannot be answered by direct retrieval.',
+          'Do not use questions to ask for a file path, exact signature, type fields, or file contents when search/read can answer it.',
+          'Read paths must come from candidateFiles, prior search results, or prior context; do not invent paths.',
+          'Return at most 3 missing-information requests in total.',
           'Every edit.path must be relative to the project root.',
           'Each edit.instruction must describe the required semantic result for exactly that file, without prescribing an edit serialization format.',
           'One coherent change may edit multiple files when required for the same outcome.',
@@ -115,9 +124,13 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     if (decision.outcome === 'already-completed') return { status: 'completed', data: { summary: decision.summary ?? 'Requested outcome is already present.' } };
     if (decision.outcome === 'failed') return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed under the supplied constraints.', canContinue: false };
     if (decision.outcome === 'missing-information') {
-      const questions = (decision.questions ?? []).map((question) => question.trim()).filter(Boolean).slice(0, 3);
-      if (questions.length === 0) throw new Error('Attempt reported missing information without concrete questions.');
-      return { status: 'not-completed', reason: decision.reason ?? 'Concrete project knowledge is required before editing safely.', canContinue: true, requests: questions.map((question) => ({ actionId: 'research', input: { question } })) };
+      const requests = [
+        ...(decision.searchQueries ?? []).map((query) => ({ actionId: 'search', input: { query: query.trim() } })),
+        ...(decision.readPaths ?? []).map((path) => ({ actionId: 'read', input: { path: path.trim() } })),
+        ...(decision.questions ?? []).map((question) => ({ actionId: 'research', input: { question: question.trim() } })),
+      ].filter((request) => Object.values(request.input)[0]).slice(0, 3);
+      if (requests.length === 0) throw new Error('Attempt reported missing information without a concrete retrieval or research request.');
+      return { status: 'not-completed', reason: decision.reason ?? 'Additional project context is required before editing safely.', canContinue: true, requests };
     }
 
     const edits = (decision.edits ?? []).slice(0, this.maxEditsPerAttempt);
@@ -135,10 +148,26 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
 
   private candidateFiles(context: ChangeCodeActionInput): string[] {
     const paths = new Set<string>();
-    for (const source of context.knowledge.flatMap((item) => item.sources)) paths.add(source.path);
+    for (const item of context.context) {
+      if (item.kind === 'search') for (const path of item.paths) paths.add(path);
+      else if (item.kind === 'read') paths.add(item.path);
+      else for (const source of item.value.sources) paths.add(source.path);
+    }
     for (const file of this.fileSearch.search(`${context.task.description}\n${context.step.goal}`, 16)) paths.add(file.path);
     return [...paths].slice(0, 24);
   }
+}
+
+function serializeContext(item: tWorkerContextItem): unknown {
+  if (item.kind === 'search') return item;
+  if (item.kind === 'read') return item;
+  return {
+    kind: 'research',
+    question: item.value.question,
+    status: item.value.status,
+    answer: item.value.answer,
+    sources: item.value.sources.map((source) => source.path),
+  };
 }
 
 function strategyLabel(strategy: EditStrategyId) {
