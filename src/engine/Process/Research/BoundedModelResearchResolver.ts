@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
+import type { iProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
@@ -18,7 +18,7 @@ const researchSchema: ModelResponseSchema = {
 export class BoundedModelResearchResolver implements ResearchResolver {
   public constructor(
     private readonly fileSystem: FileSystem,
-    private readonly fileIndex: ProjectFileIndex,
+    private readonly fileIndex: iProjectFileIndex,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly nodusLanguage = 'en',
