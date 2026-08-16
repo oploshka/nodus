@@ -1,5 +1,5 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { Project } from '@engine/Project/Project.js';
+import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
@@ -64,7 +64,7 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
   public readonly description = 'Determine the smallest coherent set of project edits needed for one PlanStep.';
 
   public constructor(
-    private readonly project: Project,
+    private readonly project: ProjectFiles,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly profile: ChangeCodeActionProfile,
