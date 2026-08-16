@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NullLogger } from '@app/Logging/Logger.js';
-import { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
+import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
+import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { ResearchResolveOptions, ResearchResolver, ResolvedResearch } from '@engine/Research/ResearchTypes.js';
@@ -15,16 +16,19 @@ class CountingResolver implements ResearchResolver {
   }
 }
 
+function files(root: string, logger: NullLogger): FileSystem {
+  return new FileSystem(root, new PathResolver(root), () => undefined, logger, []);
+}
+
 describe('ResearchStore', () => {
   it('invalidates a cached answer when a source hash changes', async () => {
     const fixture = await TestProject.create('research-cache', { 'A.ts': 'export const a = 1;\n' });
     try {
       const logger = new NullLogger();
-      const project = new ProjectFiles({ id: 'p', root: fixture.root, scanMode: 'manual' }, logger);
-      await project.open();
-      const store = new ResearchStore(project, logger);
+      const fileSystem = files(fixture.root, logger);
+      const store = new ResearchStore(fileSystem, logger);
       const resolver = new CountingResolver('A.ts');
-      const research = new Research(store, resolver, project, logger);
+      const research = new Research(store, resolver, fileSystem, logger);
 
       const first = await research.ask('how is a implemented?');
       const second = await research.ask('how is a implemented?');
@@ -45,9 +49,8 @@ describe('ResearchStore', () => {
     const fixture = await TestProject.create('research-not-found', { 'A.ts': 'export const a = 1;\n' });
     try {
       const logger = new NullLogger();
-      const project = new ProjectFiles({ id: 'p', root: fixture.root, scanMode: 'manual' }, logger);
-      await project.open();
-      const store = new ResearchStore(project, logger);
+      const fileSystem = files(fixture.root, logger);
+      const store = new ResearchStore(fileSystem, logger);
       let calls = 0;
       const resolver: ResearchResolver = {
         async resolve() {
@@ -60,7 +63,7 @@ describe('ResearchStore', () => {
           };
         },
       };
-      const research = new Research(store, resolver, project, logger);
+      const research = new Research(store, resolver, fileSystem, logger);
 
       const first = await research.ask('unknown thing?');
       const second = await research.ask('unknown thing?');
@@ -72,5 +75,4 @@ describe('ResearchStore', () => {
       await fixture.dispose();
     }
   });
-
 });
