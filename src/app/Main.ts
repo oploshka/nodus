@@ -5,7 +5,7 @@ import { runCli } from '@app/Cli/Cli.js';
 import { scanProject } from '@app/Cli/ScanProject.js';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import { CompositeLogger, ConsoleLogger, FileLogger } from '@app/Logging/Logger.js';
-import { DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH } from '@engine/Project/File/ProjectFileIndexStore.js';
+import { DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH } from '@engine/Project/File/Index/ProjectFileIndex_Store.js';
 import { DEFAULT_RESEARCH_CACHE_PATH } from '@engine/Research/ResearchStore.js';
 import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
 
