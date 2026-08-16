@@ -1,7 +1,7 @@
-import type { Project } from '@engine/Project/Project.js';
+import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 
 /** App-level administrative command kept outside Engine task orchestration. */
-export async function scanProject(project: Project): Promise<number> {
-  const index = await project.scan();
+export async function scanProject(scan: () => Promise<ProjectFileIndex>): Promise<number> {
+  const index = await scan();
   return index.files.length;
 }
