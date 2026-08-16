@@ -70,6 +70,29 @@ describe('ModelRunner', () => {
     expect(adapter.requests[0].messages[1].content).toContain('"available"');
   });
 
+  it('places supplied conversation history before the current user turn', async () => {
+    const adapter = new SingleResponseAdapter('{"status":"completed"}');
+    const runner = new ModelRunner(adapter, { provider: 'openai-compatible', endpoint: 'unused', model: 'test' });
+
+    await runner.run({
+      request: {
+        message: 'Continue with the returned result.',
+        data: { result: 'file-content' },
+        format: ModelRequestFormat.Json,
+        history: [
+          { role: 'user', content: 'Inspect src/A.ts.' },
+          { role: 'assistant', content: '#status\naction' },
+        ],
+      },
+      response: { format: ModelResponseFormat.Json, schema: decisionSchema },
+    });
+
+    expect(adapter.requests[0].messages.map(({ role }) => role)).toEqual(['system', 'user', 'assistant', 'user']);
+    expect(adapter.requests[0].messages[1].content).toBe('Inspect src/A.ts.');
+    expect(adapter.requests[0].messages[2].content).toBe('#status\naction');
+    expect(adapter.requests[0].messages[3].content).toContain('file-content');
+  });
+
   it('ModelCaller logs the complete result and exposes only data', async () => {
     const adapter = new SingleResponseAdapter('{"status":"completed"}');
     const runner = new ModelRunner(adapter, { provider: 'openai-compatible', endpoint: 'unused', model: 'test' });
@@ -88,7 +111,6 @@ describe('ModelRunner', () => {
     expect(events[1].value).toHaveProperty('exchange');
     expect(events[1].value).toHaveProperty('meta');
   });
-
 
   it('ModelCaller logs the model exchange when response schema validation fails', async () => {
     const adapter = new SingleResponseAdapter('{"unexpected":true}');
