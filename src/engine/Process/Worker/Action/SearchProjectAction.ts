@@ -1,5 +1,5 @@
 import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
-import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
+import type { iProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import type { sWorkerSearchContext } from '@engine/Worker/WorkerContext.js';
 
@@ -15,7 +15,7 @@ export class SearchProjectAction implements WorkerAction<sSearchProjectActionInp
   public readonly name = this.presentation.name();
   public readonly description = 'Find likely project files without model analysis.';
 
-  public constructor(private readonly index: ProjectFileIndex, private readonly maxResults = 12) {}
+  public constructor(private readonly index: iProjectFileIndex, private readonly maxResults = 12) {}
 
   public async run(input: sSearchProjectActionInput) {
     const query = input.query.trim();
