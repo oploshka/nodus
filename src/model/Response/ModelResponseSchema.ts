@@ -106,9 +106,7 @@ function describeField(name: string, field: ModelResponseFieldInfo, depth: numbe
 
 function decodeField(field: ModelResponseFieldInfo, value: unknown, path: string): unknown {
   if (field.type === 'array') {
-    const items: unknown[] = Array.isArray(value)
-      ? value
-      : parseArrayValue(value, path);
+    const items = normalizeArrayValue(value, path);
     return items.map((item, index) => decodeField(field.items, item, `${path}[${index}]`));
   }
 
@@ -157,6 +155,17 @@ function decodeField(field: ModelResponseFieldInfo, value: unknown, path: string
   return result;
 }
 
+function normalizeArrayValue(value: unknown, path: string): unknown[] {
+  if (!Array.isArray(value)) return parseArrayValue(value, path);
+
+  if (value.length === 1 && typeof value[0] === 'string') {
+    const parsed = tryParseStructuredValue(value[0]);
+    if (Array.isArray(parsed)) return parsed;
+  }
+
+  return value;
+}
+
 function parseArrayValue(value: unknown, path: string): unknown[] {
   const parsed = parseStructuredValue(value, path);
   if (!Array.isArray(parsed)) throw new ModelResponseSchemaError(path, 'Expected array', value);
@@ -171,6 +180,14 @@ function unwrapSingleOccurrence(value: unknown, path: string): unknown {
 
 function parseStructuredValue(value: unknown, path: string): unknown {
   if (typeof value !== 'string') return value;
+  const parsed = tryParseStructuredValue(value);
+  if (parsed === undefined) {
+    throw new ModelResponseSchemaError(path, 'Expected JSON representation of structured value', value);
+  }
+  return parsed;
+}
+
+function tryParseStructuredValue(value: string): unknown {
   try { return JSON.parse(value); }
-  catch { throw new ModelResponseSchemaError(path, 'Expected JSON representation of structured value', value); }
+  catch { return undefined; }
 }
