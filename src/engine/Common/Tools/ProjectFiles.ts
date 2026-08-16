@@ -3,16 +3,16 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { FileMap, FileFact } from '@engine/Project/FileMap.js';
+import type { ProjectFileIndex, ProjectFileInfo } from '@engine/Project/File/ProjectFileIndex.js';
 import { FileScanner } from './FileScanner.js';
 import { PathResolver } from './PathResolver.js';
 
 /**
- * Physical project-file access and the structural FileMap lifecycle.
- * Semantic project knowledge belongs to the Project subsystem, not here.
+ * Transitional physical project-file access facade.
+ * Its remaining responsibilities should continue to move into focused file tools.
  */
 export class ProjectFiles {
-  private _map?: FileMap;
+  private _index?: ProjectFileIndex;
   private readonly pathResolver: PathResolver;
 
   public readonly configuration: ProjectConfiguration;
@@ -35,24 +35,22 @@ export class ProjectFiles {
 
   public get id(): string { return this.configuration.id; }
   public get root(): string { return this.configuration.root; }
-  public get map(): FileMap | undefined { return this._map; }
-  /** Compatibility accessor while callers migrate from ProjectIndex to FileMap. */
-  public get index(): FileMap | undefined { return this._map; }
+  public get index(): ProjectFileIndex | undefined { return this._index; }
 
   public async open(): Promise<void> {
-    await this.loadMap();
+    await this.loadIndex();
     if (this.configuration.scanMode === 'on-open') await this.scan();
   }
 
-  public async scan(): Promise<FileMap> {
-    this._map = await this.scanner.scan(this.configuration);
-    await this.saveMap();
-    this.logger.info('project.scan', { files: this._map.files.length });
-    return this._map;
+  public async scan(): Promise<ProjectFileIndex> {
+    this._index = await this.scanner.scan(this.configuration);
+    await this.saveIndex();
+    this.logger.info('project.scan', { files: this._index.files.length });
+    return this._index;
   }
 
   public async resolvePath(path: string): Promise<string> {
-    const resolved = await this.pathResolver.resolveExisting(path, this._map);
+    const resolved = await this.pathResolver.resolveExisting(path, this._index);
     this.logPathCorrection(path, resolved);
     return resolved;
   }
@@ -82,8 +80,8 @@ export class ProjectFiles {
     return createHash('sha256').update(content).digest('hex');
   }
 
-  public candidateFiles(question: string, limit = 6): FileFact[] {
-    const files = this._map?.files ?? [];
+  public candidateFiles(question: string, limit = 6): ProjectFileInfo[] {
+    const files = this._index?.files ?? [];
     const tokens = Array.from(new Set(question.toLowerCase().match(/[a-zа-яё0-9_$-]{3,}/gi) ?? []));
     const scored = files.map((file) => {
       const haystack = [file.path, ...file.imports, ...file.exports].join(' ').toLowerCase();
@@ -111,21 +109,21 @@ export class ProjectFiles {
     return resolve(this.root, ...projectPath.split('/'));
   }
 
-  private async loadMap(): Promise<void> {
+  private async loadIndex(): Promise<void> {
     const cachePath = this.configuration.indexCachePath;
     if (!cachePath) return;
     try {
-      const parsed = JSON.parse(await readFile(this.resolveProjectPath(cachePath), 'utf8')) as FileMap;
-      if (parsed.version === 1 && parsed.projectId === this.id) this._map = parsed;
+      const parsed = JSON.parse(await readFile(this.resolveProjectPath(cachePath), 'utf8')) as ProjectFileIndex;
+      if (parsed.version === 1 && parsed.projectId === this.id) this._index = parsed;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') this.logger.warn('project.index.load.failed', String(error));
     }
   }
 
-  private async saveMap(): Promise<void> {
-    if (!this._map || !this.configuration.indexCachePath) return;
+  private async saveIndex(): Promise<void> {
+    if (!this._index || !this.configuration.indexCachePath) return;
     const path = this.resolveProjectPath(this.configuration.indexCachePath);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify(this._map, null, 2), 'utf8');
+    await writeFile(path, JSON.stringify(this._index, null, 2), 'utf8');
   }
 }
