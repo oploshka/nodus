@@ -4,7 +4,7 @@ import { callModel } from '@model/Runner/ModelCaller.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
-import type { Project } from '@engine/Project/Project.js';
+import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import type { ResolvedResearch, ResearchResolveOptions, ResearchResolver } from '@engine/Research/ResearchTypes.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 
@@ -16,7 +16,7 @@ const researchSchema: ModelResponseSchema = {
 
 export class BoundedModelResearchResolver implements ResearchResolver {
   public constructor(
-    private readonly project: Project,
+    private readonly project: ProjectFiles,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly nodusLanguage = 'en',
