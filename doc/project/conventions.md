@@ -38,7 +38,7 @@ Technical/category directories могут оставаться lowercase, ког
 
 - `s` — structure: пассивная структура данных. Объявляется через `interface`, например `sTargetConfig`.
 - `i` — interface/capability: контракт поведения, преимущественно набор действий. Объявляется через `interface`, например `iFileReader`. Значения допустимы, но не должны превращать capability в DTO.
-- `v` — value: alias простого значения, literal union или другой value-level type, например `vProjectId` или `vFilePath`.
+- `p` — primitive: семантический alias над primitive/value-domain, например `pProjectId`, `pFilePath`, `pPort` или literal union `pWorkerStatus`. Используется для value-like типов, а не для произвольного `type`.
 - `t` — transformed/derived type: вычисляемый, преобразованный или составной type, когда `interface` не выражает нужную семантику, например результат `ReturnType`, `Awaited`, conditional/mapped type.
 
 Префиксы пишутся в нижнем регистре, чтобы визуально отделять категорию от PascalCase-имени. Старые contracts не переименовываются массово только ради соглашения; новые создаются по новому правилу, а существующие приводятся к нему при содержательной переработке соответствующей зоны.
@@ -51,8 +51,8 @@ Technical/category directories могут оставаться lowercase, ког
 
 ```ts
 interface sTargetConfig {
-  id: string;
-  root: string;
+  id: pProjectId;
+  root: pFilePath;
 }
 ```
 
