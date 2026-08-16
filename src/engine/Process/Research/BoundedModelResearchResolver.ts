@@ -1,10 +1,11 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
+import type { ProjectFileSearch } from '@engine/Project/File/ProjectFileSearch.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
-import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import type { ResolvedResearch, ResearchResolveOptions, ResearchResolver } from '@engine/Research/ResearchTypes.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 
@@ -16,7 +17,8 @@ const researchSchema: ModelResponseSchema = {
 
 export class BoundedModelResearchResolver implements ResearchResolver {
   public constructor(
-    private readonly project: ProjectFiles,
+    private readonly fileSystem: FileSystem,
+    private readonly fileSearch: ProjectFileSearch,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly nodusLanguage = 'en',
@@ -25,7 +27,7 @@ export class BoundedModelResearchResolver implements ResearchResolver {
   ) {}
 
   public async resolve(question: string, options?: ResearchResolveOptions): Promise<ResolvedResearch> {
-    const candidates = this.project.candidateFiles(question, this.maxFiles);
+    const candidates = this.fileSearch.search(question, this.maxFiles);
     if (candidates.length === 0) {
       return {
         status: 'not-found',
@@ -37,7 +39,7 @@ export class BoundedModelResearchResolver implements ResearchResolver {
 
     const sourceBlocks: string[] = [];
     const paths: string[] = [];
-    const readFile = options?.readFile ?? ((path: string) => this.project.read(path));
+    const readFile = options?.readFile ?? ((path: string) => this.fileSystem.read(path));
     for (const candidate of candidates) {
       const content = await readFile(candidate.path);
       paths.push(candidate.path);
