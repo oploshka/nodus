@@ -7,7 +7,7 @@ import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import { CompositeLogger, ConsoleLogger, FileLogger } from '@app/Logging/Logger.js';
 import { DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH } from '@engine/Project/File/ProjectFileIndexStore.js';
 import { DEFAULT_RESEARCH_CACHE_PATH } from '@engine/Research/ResearchStore.js';
-import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
+import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
 
 interface StartupOptions {
   configPath: string;
@@ -19,24 +19,24 @@ interface StartupOptions {
 async function main(args: string[]): Promise<void> {
   const options = parseStartupOptions(args);
   const configuration = await ConfigurationLoader.load(options.configPath);
-  const logDirectory = resolve(process.cwd(), 'log', 'runtime', configuration.project.id);
+  const logDirectory = resolve(process.cwd(), 'log', 'runtime', configuration.target.id);
 
   if (options.clearLogs) await rm(logDirectory, { recursive: true, force: true });
 
   const logPath = resolve(logDirectory, `${fileTimestamp()}-nodus.log`);
   const logger = new CompositeLogger([new ConsoleLogger(configuration.language?.response), new FileLogger(logPath)]);
   logger.info('app.startup', {
-    projectId: configuration.project.id,
+    projectId: configuration.target.id,
     clearCache: options.clearCache,
     clearLogs: options.clearLogs,
     scan: options.scan,
     logPath,
   });
 
-  if (options.clearCache) await clearProjectCache(configuration.project);
+  if (options.clearCache) await clearTargetCache(configuration.target);
 
-  const target = await Bootstrap.createTarget(configuration.project, logger);
-  if (options.scan && configuration.project.scanMode !== 'on-open') await target.scan();
+  const target = await Bootstrap.createTarget(configuration.target, logger);
+  if (options.scan && configuration.target.scanMode !== 'on-open') await target.scan();
 
   const engine = await Bootstrap.createEngine(configuration, { logger, target });
 
@@ -64,7 +64,7 @@ function parseStartupOptions(args: string[]): StartupOptions {
   return { configPath, clearCache, clearLogs, scan };
 }
 
-async function clearProjectCache(configuration: ProjectConfiguration): Promise<void> {
+async function clearTargetCache(configuration: sTargetConfig): Promise<void> {
   const paths = [
     configuration.indexCachePath ?? DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH,
     configuration.researchCachePath ?? DEFAULT_RESEARCH_CACHE_PATH,
