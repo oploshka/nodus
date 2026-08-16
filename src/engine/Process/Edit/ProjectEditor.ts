@@ -1,4 +1,4 @@
-import type { Project } from '@engine/Project/Project.js';
+import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import { EditPresentation } from '@engine/Presentation/EditPresentation.js';
 import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
@@ -43,7 +43,7 @@ export class ProjectEditor {
   private files = new Map<string, BufferedFile>();
 
   public constructor(
-    private readonly project: Project,
+    private readonly project: ProjectFiles,
     private readonly logger: EngineLogger,
     strategies: ReadonlyArray<EditStrategy>,
     private readonly validator: EditValidator = new EditValidator(),
@@ -58,11 +58,6 @@ export class ProjectEditor {
     return this.files.get(projectPath)?.current ?? this.project.read(projectPath);
   }
 
-  /**
-   * Store already materialized file content in the task-local state.
-   * This is primarily an adapter for Worker tools that already operate on complete file content.
-   * Create/delete semantics are intentionally not handled yet.
-   */
   public async write(path: string, content: string): Promise<void> {
     const projectPath = await this.project.resolvePath(path);
     const validation = await this.validator.validate([{ path: projectPath, content }]);
@@ -86,7 +81,6 @@ export class ProjectEditor {
     });
   }
 
-  /** Add one semantic edit request to the current task-local state without writing Project files. */
   public async change(task: Task, step: PlanStep, request: ProjectEditRequest): Promise<ProjectEditResult> {
     if (request.edits.length === 0) {
       return { status: 'completed', files: 0, operations: 0, strategy: request.strategy, paths: [] };

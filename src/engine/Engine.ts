@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { Planner } from '@engine/Planner/Planner.js';
-import type { Project } from '@engine/Project/Project.js';
+import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import { Task } from '@engine/Task/Task.js';
 import { TaskRun } from '@engine/Task/TaskRun.js';
 import type { Worker } from '@engine/Worker/Worker.js';
@@ -18,7 +18,7 @@ export class Engine {
   private readonly pendingEdits = new Map<string, ProjectEditor>();
 
   public constructor(
-    private readonly project: Project,
+    private readonly project: ProjectFiles,
     private readonly planner: Planner,
     private readonly workers: ReadonlyArray<Worker>,
     private readonly determine: Determine,

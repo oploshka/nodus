@@ -3,13 +3,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { ProjectConfiguration } from '@engine/Type/EngineConfiguration.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { ProjectFileIndex, ProjectFileInfo } from '@engine/Project/File/ProjectFileIndex.js';
-import { FileScanner } from './FileScanner.js';
-import { PathResolver } from './PathResolver.js';
+import type { ProjectFileIndex, ProjectFileInfo } from './ProjectFileIndex.js';
+import { FileScanner } from '@engine/Common/Tools/FileScanner.js';
+import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 
 /**
- * Transitional physical project-file access facade.
- * Its remaining responsibilities should continue to move into focused file tools.
+ * Transitional facade for physical project-file access and ProjectFileIndex lifecycle.
+ * Low-level filesystem mechanics stay in Common/Tools; project-file state belongs here.
  */
 export class ProjectFiles {
   private _index?: ProjectFileIndex;

@@ -2,7 +2,7 @@ import { ReplaceApplicator, type ReplaceOperation } from '@engine/Edit/Applicato
 import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import type { EditPreparationContext, EditPrepareResult } from '@engine/Edit/EditTypes.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { Project } from '@engine/Project/Project.js';
+import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
@@ -17,7 +17,7 @@ const schema: ModelResponseSchema = { description: 'Exact guarded replacements f
 export class ReplaceEditStrategy implements EditStrategy {
   public readonly id = 'replace' as const;
   public constructor(
-    private readonly project: Project,
+    private readonly project: ProjectFiles,
     private readonly model: ModelRunner,
     private readonly logger: EngineLogger,
     private readonly language: LanguageConfiguration,

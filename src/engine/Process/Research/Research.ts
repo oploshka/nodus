@@ -1,5 +1,5 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { Project } from '@engine/Project/Project.js';
+import type { ProjectFiles } from '@engine/Project/File/ProjectFiles.js';
 import type { ResearchAnswer, ResearchResolveOptions, ResearchResolver } from '@engine/Research/ResearchTypes.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
@@ -9,7 +9,7 @@ export class Research {
   public constructor(
     private readonly store: ResearchStore,
     private readonly resolver: ResearchResolver,
-    private readonly project: Project,
+    private readonly project: ProjectFiles,
     private readonly logger: EngineLogger,
   ) {}
 
@@ -30,7 +30,6 @@ export class Research {
         sources: [],
         createdAt: new Date().toISOString(),
       };
-      // Do not cache misses: a later project change/index refresh may make the same question resolvable.
       this.logger.info('research.not-found', { question, reason: resolved.reason, presentation: this.presentation });
       return answer;
     }
