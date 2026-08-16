@@ -32,7 +32,7 @@ import { FileScanner } from '@engine/Common/Tools/FileScanner.js';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import { ProjectFileIndexStore } from '@engine/Project/File/ProjectFileIndexStore.js';
-import { ProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/ProjectFileIndex.js';
+import { ProjectFileIndex, type iProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/ProjectFileIndex.js';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
 import { isAgentModelAdapter } from '@model/Adapter/AgentModelAdapter.js';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter.js';
@@ -52,7 +52,7 @@ export interface iTargetRuntime {
   id: string;
   root: string;
   fileSystem: FileSystem;
-  fileIndex: ProjectFileIndex;
+  fileIndex: iProjectFileIndex;
   scan(): Promise<sProjectFileIndexState>;
   clearIndex(): Promise<void>;
 }
@@ -80,7 +80,7 @@ export class Bootstrap {
     };
     const fileIndex = new ProjectFileIndex(initialState);
     const pathResolver = new PathResolver(configuration.root);
-    const fileSystem = new FileSystem(configuration.root, pathResolver, () => fileIndex, logger, configuration.exclude);
+    const fileSystem = new FileSystem(configuration.root, pathResolver, () => fileIndex.snapshot(), logger, configuration.exclude);
 
     const scan = async (): Promise<sProjectFileIndexState> => {
       const state = await scanner.scan(configuration);
