@@ -1,5 +1,5 @@
 {
-  "project": {
+  "target": {
     "id": "my-project",
     "root": ".",
     "scanMode": "on-open",
