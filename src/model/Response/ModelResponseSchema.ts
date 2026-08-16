@@ -104,8 +104,18 @@ function describeField(name: string, field: ModelResponseFieldInfo, depth: numbe
   return `${indent}- ${name}: ${field.type}${optional}${description}`;
 }
 
-
 function decodeField(field: ModelResponseFieldInfo, value: unknown, path: string): unknown {
+  if (field.type === 'array') {
+    if (!Array.isArray(value)) {
+      const parsed = parseStructuredValue(value, path);
+      if (!Array.isArray(parsed)) throw new ModelResponseSchemaError(path, 'Expected array', value);
+      value = parsed;
+    }
+    return value.map((item, index) => decodeField(field.items, item, `${path}[${index}]`));
+  }
+
+  value = unwrapSingleOccurrence(value, path);
+
   if (field.type === 'any') return value;
 
   if (field.type === 'string') {
@@ -132,27 +142,27 @@ function decodeField(field: ModelResponseFieldInfo, value: unknown, path: string
     return match.id;
   }
 
-  if (field.type === 'object') {
-    const parsed = parseStructuredValue(value, path);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new ModelResponseSchemaError(path, 'Expected object', value);
-    }
-    const result: Record<string, unknown> = {};
-    const record = parsed as Record<string, unknown>;
-    for (const [name, child] of Object.entries(field.fields)) {
-      const childValue = record[name];
-      if (childValue === undefined || childValue === null) {
-        if (child.optional) continue;
-        throw new ModelResponseSchemaError(`${path}.${name}`, 'Required field is missing', childValue);
-      }
-      result[name] = decodeField(child, childValue, `${path}.${name}`);
-    }
-    return result;
-  }
-
   const parsed = parseStructuredValue(value, path);
-  if (!Array.isArray(parsed)) throw new ModelResponseSchemaError(path, 'Expected array', value);
-  return parsed.map((item, index) => decodeField(field.items, item, `${path}[${index}]`));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new ModelResponseSchemaError(path, 'Expected object', value);
+  }
+  const result: Record<string, unknown> = {};
+  const record = parsed as Record<string, unknown>;
+  for (const [name, child] of Object.entries(field.fields)) {
+    const childValue = record[name];
+    if (childValue === undefined || childValue === null) {
+      if (child.optional) continue;
+      throw new ModelResponseSchemaError(`${path}.${name}`, 'Required field is missing', childValue);
+    }
+    result[name] = decodeField(child, childValue, `${path}.${name}`);
+  }
+  return result;
+}
+
+function unwrapSingleOccurrence(value: unknown, path: string): unknown {
+  if (!Array.isArray(value)) return value;
+  if (value.length !== 1) throw new ModelResponseSchemaError(path, 'Expected a single value', value);
+  return value[0];
 }
 
 function parseStructuredValue(value: unknown, path: string): unknown {

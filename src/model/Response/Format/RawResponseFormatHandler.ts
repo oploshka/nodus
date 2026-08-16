@@ -4,10 +4,11 @@ import type { ModelResponseFormatHandler } from '@model/Response/Format/ModelRes
 /**
  * Generic FIELD-value raw representation.
  *
- * This handler intentionally knows nothing about Planner/Worker operations.
- * Every non-empty line is parsed as `<field> <value>` (or `<field>: <value>`).
- * Repeated fields become arrays. Structured field values may be one-line JSON
- * and are interpreted later by the common response schema validator.
+ * This handler intentionally knows nothing about Planner/Worker operations or
+ * schema cardinality. Every non-empty line is parsed as `<field> <value>` (or
+ * `<field>: <value>`) and every field is represented as an array of raw value
+ * occurrences. The common response schema later decides whether those values
+ * represent a scalar, array, object, or another supported field type.
  */
 export class RawResponseFormatHandler implements ModelResponseFormatHandler {
   public readonly format = ModelResponseFormat.Raw;
@@ -15,14 +16,15 @@ export class RawResponseFormatHandler implements ModelResponseFormatHandler {
   public instructions(): string {
     return [
       'Return only raw field lines. Do not add prose or markdown fences.',
-      'Use one field per line: <fieldName> <value>.',
+      'Use one field value per line: <fieldName> <value>.',
       'Use the exact field names from the schema.',
-      'For object or array values, put valid JSON on the same line.',
+      'For array fields, repeat the field once per item.',
+      'For object values, put valid JSON for that object on the same line.',
     ].join('\n');
   }
 
   public parse(content: string): unknown {
-    const result: Record<string, unknown> = {};
+    const result: Record<string, string[]> = {};
     for (const sourceLine of content.replace(/\r\n/g, '\n').trim().split('\n')) {
       const line = sourceLine.trim();
       if (!line) continue;
@@ -30,10 +32,7 @@ export class RawResponseFormatHandler implements ModelResponseFormatHandler {
       if (!match) continue;
       const key = match[1].trim();
       const value = match[2].trim();
-      const existing = result[key];
-      if (existing === undefined) result[key] = value;
-      else if (Array.isArray(existing)) existing.push(value);
-      else result[key] = [existing, value];
+      (result[key] ??= []).push(value);
     }
     return result;
   }

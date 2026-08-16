@@ -29,6 +29,47 @@ describe('common ModelResponseSchema', () => {
     });
   });
 
+  it('normalizes repeated raw values according to array item schema', () => {
+    const raw = new RawResponseFormatHandler().parse([
+      'status completed',
+      'files src/A.ts',
+      'files src/B.ts',
+      'edits {"path":"src/A.ts","instruction":"Change A"}',
+      'edits {"path":"src/B.ts","instruction":"Change B"}',
+    ].join('\n'));
+    const result = validateResponseSchema({
+      fields: {
+        status: schema.fields.status,
+        files: { type: 'array', items: { type: 'string' } },
+        edits: {
+          type: 'array',
+          items: {
+            type: 'object',
+            fields: {
+              path: { type: 'string' },
+              instruction: { type: 'string' },
+            },
+          },
+        },
+      },
+    }, raw);
+
+    expect(result).toEqual({
+      status: 'completed',
+      files: ['src/A.ts', 'src/B.ts'],
+      edits: [
+        { path: 'src/A.ts', instruction: 'Change A' },
+        { path: 'src/B.ts', instruction: 'Change B' },
+      ],
+    });
+  });
+
+  it('keeps a single raw array occurrence as a one-item array', () => {
+    const raw = new RawResponseFormatHandler().parse('files src/A.ts');
+    expect(validateResponseSchema({
+      fields: { files: { type: 'array', items: { type: 'string' } } },
+    }, raw)).toEqual({ files: ['src/A.ts'] });
+  });
 
   it('describes nested fields inside arrays of objects to the model', () => {
     const instructions = responseSchemaInstructions({

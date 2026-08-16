@@ -19,8 +19,8 @@ response schema + response format
 -> model
 -> wire response
 -> response format handler
--> JS object
--> common schema validation/normalization
+-> intermediate representation
+-> common schema normalization/validation
 -> ModelRunResult.data
 ```
 
@@ -68,13 +68,32 @@ status completed
 summary Change prepared
 ```
 
-или структурированное значение в одной строке:
+Raw handler знает только общий синтаксис `field value`. Он не знает Planner/Worker/Research semantics и не решает cardinality поля. Каждое встреченное значение сначала сохраняется как occurrence:
+
+```text
+status completed
+files src/A.ts
+files src/B.ts
+```
+
+```ts
+{
+  status: ['completed'],
+  files: ['src/A.ts', 'src/B.ts'],
+}
+```
+
+Далее common schema нормализует representation согласно ожидаемому типу: scalar получает одно значение, array получает все occurrences, number/boolean/option приводятся и проверяются.
+
+Для object в первом приближении используется JSON одного объекта на той же строке:
 
 ```text
 input {"path":"src/Cli/Cli.ts"}
+edits {"path":"src/A.ts","instruction":"Change A"}
+edits {"path":"src/B.ts","instruction":"Change B"}
 ```
 
-Raw handler знает только общий синтаксис `field value`. Он не знает Planner/Worker/Research semantics. Repeated fields становятся массивом.
+Если schema ожидает `array<object>`, repeated `edits` становятся массивом объектов на этапе schema normalization. Модели не нужно сериализовать root JSON object или JSON array для repeated Raw fields.
 
 Operation-specific mini-language внутри Raw запрещён.
 
