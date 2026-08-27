@@ -59,6 +59,7 @@ class PrototypeReplan implements iProcessModule {
         id: 'repair-process',
         variables: ['task', 'repair', 'validation'],
         input: { task: 'task' },
+        output: { validation: 'validation' },
         steps: [
           {
             kind: 'action',
