@@ -1,6 +1,7 @@
 export default {
   id: 'default',
   prompt: 'planner',
+  response: 'planner',
   schemas: [
     'code-change',
   ],
