@@ -14,6 +14,7 @@
     "test:e2e": "vitest run --project e2e --passWithNoTests",
     "check:docs": "tsx target/script/check-docs.ts",
     "nodus:project": "tsx src/app/Main.ts target/project/nodus.config.json --clear-cache --clear-logs --scan",
+    "prototype:automation": "tsx target/benchmark/AutomationRuntimePrototype.ts",
     "benchmark:raw-agent": "tsx target/benchmark/RawAgentBenchmark.ts",
     "benchmark:change-context": "tsx target/benchmark/ChangeContextPresentationBenchmark.ts",
     "benchmark:change-action-probe": "tsx target/benchmark/ChangeActionProbeBenchmark.ts",
