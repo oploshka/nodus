@@ -4,5 +4,8 @@ export default {
   schemas: [
     'code-change',
   ],
-  allowCustomSchema: false,
+  classification: {
+    options: ['schema', 'chain', 'custom'],
+    allowCustom: false,
+  },
 };
