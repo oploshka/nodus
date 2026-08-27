@@ -76,4 +76,20 @@ Action может определить `onFailure`. Это controlled recovery c
 - `responses/change-code.js`;
 - `prompts/*.md`.
 
+## Запуск прототипа
+
+Обычная цепочка:
+
+```bash
+npm run prototype:automation -- "Prototype task"
+```
+
+Recovery через `Validate -> Replan -> repair process -> Validate`:
+
+```bash
+npm run prototype:automation -- --fail-once "Prototype task"
+```
+
+Prototype runner использует простые локальные модули без LLM и печатает итоговые variables и trace, чтобы можно было увидеть вложенность, parent links и передачу результатов.
+
 Это ещё не замена текущему Engine/Planner pipeline. Прототип проверяет contracts загрузки, вложенных процессов, parent hierarchy, явного data flow и recovery через Replan перед интеграцией в основной runtime.
