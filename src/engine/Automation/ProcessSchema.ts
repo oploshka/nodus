@@ -17,7 +17,7 @@ export interface sProcessAction {
   /** Save the full module result into this process variable. */
   saveAs?: string;
   /** Recovery chain executed only when this action fails. */
-  onFailure?: sProcessNode[];
+  onFailure?: tProcessNode[];
 }
 
 export interface sProcessSequence {
@@ -29,11 +29,11 @@ export interface sProcessSequence {
   input?: Record<string, string>;
   /** Parent variable -> child variable reference. */
   output?: Record<string, string>;
-  steps: sProcessNode[];
+  steps: tProcessNode[];
 }
 
-export type sProcessNode = sProcessAction | sProcessSequence;
-export type sProcessSchema = sProcessSequence;
+export type tProcessNode = sProcessAction | sProcessSequence;
+export interface sProcessSchema extends sProcessSequence {}
 
 export interface sProcessModuleResult {
   status: pProcessStatus;
