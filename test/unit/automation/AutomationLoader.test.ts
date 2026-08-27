@@ -15,6 +15,7 @@ describe('AutomationLoader', () => {
     const root = await mkdtemp(join(tmpdir(), 'nodus-automation-'));
     temporaryRoots.push(root);
     await mkdir(join(root, 'prompts'));
+    await writeFile(join(root, 'package.json'), '{"type":"module"}', 'utf8');
     await writeFile(join(root, 'prompts', 'planner.md'), '# Planner\n\nPlan the task.\n', 'utf8');
     await writeFile(join(root, 'index.js'), `
       export default {
