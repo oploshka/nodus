@@ -3,12 +3,12 @@ import type {
   iProcessModule,
   sProcessAction,
   sProcessModuleResult,
-  sProcessNode,
   sProcessNodeRef,
   sProcessRunResult,
   sProcessSchema,
   sProcessSequence,
   sProcessTraceEntry,
+  tProcessNode,
 } from './ProcessSchema.js';
 
 interface sNodeExecutionResult {
@@ -82,7 +82,7 @@ export class ProcessRuntime {
   }
 
   private async executeNode(
-    node: sProcessNode,
+    node: tProcessNode,
     scope: ProcessScope,
     parent: sProcessNodeRef,
   ): Promise<sNodeExecutionResult> {
@@ -137,7 +137,7 @@ export class ProcessRuntime {
   }
 
   private async executeRecovery(
-    steps: ReadonlyArray<sProcessNode>,
+    steps: ReadonlyArray<tProcessNode>,
     scope: ProcessScope,
     parent: sProcessNodeRef,
   ): Promise<sNodeExecutionResult> {
