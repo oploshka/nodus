@@ -72,7 +72,7 @@ describe('ProcessRuntime', () => {
   });
 
   it('creates an explicit child scope for a nested sequence and exports selected values', async () => {
-    const worker = new TestModule('worker', (input) => ({ status: 'completed', value: `${input.task}:done` }));
+    const worker = new TestModule('worker', (input) => ({ status: 'completed', value: `${String(input.task)}:done` }));
     const runtime = new ProcessRuntime([worker]);
     const schema: sProcessSchema = {
       kind: 'sequence',
