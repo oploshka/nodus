@@ -93,3 +93,7 @@ npm run prototype:automation -- --fail-once "Prototype task"
 Prototype runner использует простые локальные модули без LLM и печатает итоговые variables и trace, чтобы можно было увидеть вложенность, parent links и передачу результатов.
 
 Это ещё не замена текущему Engine/Planner pipeline. Прототип проверяет contracts загрузки, вложенных процессов, parent hierarchy, явного data flow и recovery через Replan перед интеграцией в основной runtime.
+
+## Следующее направление
+
+После первого prototype сформирован более простой model-facing контракт: Planner редактирует саму schema, шаги адресуются локальными номерами вместо model-generated `id`, context выбирается через `PARENT / PREVIOUS / STEP`, а Replan переписывает только невыполненный хвост. Полное описание, end-to-end failure/replan пример и TODO зафиксированы в [`process-schema-v2.md`](./process-schema-v2.md).
