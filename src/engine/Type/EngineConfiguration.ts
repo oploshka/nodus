@@ -1,4 +1,4 @@
-export interface ProjectConfiguration {
+export interface sTargetConfig {
   id: string;
   root: string;
   scanMode?: 'manual' | 'on-open';

@@ -10,7 +10,7 @@ Vitest отвечает за runner, assertions, filtering, projects, timeouts �
 
 - `unit` — быстрые изолированные тесты;
 - `integration` — deterministic vertical slices со scripted model adapter;
-- `model` — те же Nodus scenarios с реальной моделью;
+- `model` — те же Nodus scenarios с реальной моделью; отдельные файлы могут отсутствовать, пока нет актуальных model scenarios;
 - `e2e` — запуск через app/configuration/CLI boundary.
 
 Model/e2e projects запускаются без file-level parallelism, чтобы локальные модели не конкурировали за один endpoint.
@@ -26,9 +26,13 @@ Model/e2e projects запускаются без file-level parallelism, что�
 - `LoggedModelAdapter` — wrapper adapter для записи model traffic;
 - `TestFileLogger` — человекочитаемый timestamped log scenario run.
 
+Повторно используемые test doubles и небольшие fixtures складываются в `target/mock`, а не размазываются по отдельным unit-тестам.
+
 ## Logs
 
 Отдельного runtime `Trace` storage нет. Runtime events пишутся через обычный logger interface. В тестах logger подменяется `TestFileLogger`, а model adapter может быть wrapped в `LoggedModelAdapter`/queue adapter.
+
+Все runtime/test логи постепенно сводятся под корневую `log/` с разделением по зонам. `TestFileLogger` по умолчанию пишет в `log/test`; конкретный harness может выбрать другую zone или directory. Полноценная конфигурация log root остаётся отдельной задачей.
 
 Логи предназначены прежде всего для debug нестабильных model runs и по умолчанию не являются assertion contract.
 
@@ -45,6 +49,8 @@ npm run test:integration
 npm run test:model
 npm run test:e2e
 ```
+
+Документация о real-model прогонах вынесена в `doc/development/model-testing.md`.
 
 ## Model boundary tests
 

@@ -1,5 +1,5 @@
 {
-  "project": {
+  "target": {
     "id": "my-project",
     "root": ".",
     "scanMode": "on-open",
@@ -20,8 +20,18 @@
   },
   "runtime": {
     "maxWorkerAttempts": 4,
-    "maxResearchRequests": 4,
+    "maxResearchRequests": 1,
     "maxAgentRounds": 12
+  },
+  "engineTest": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "timeoutMs": 120000
+    },
+    "unit": {
+      "command": "npm test",
+      "timeoutMs": 120000
+    }
   },
   "language": {
     "project": "en",

@@ -9,6 +9,8 @@
 - `TestProject` создаёт временный файловый target;
 - `QueueModelAdapter` даёт deterministic model transport;
 - `LoggedModelAdapter` сохраняет model traffic;
-- `TestFileLogger` пишет человекочитаемую execution trace.
+- `TestFileLogger` пишет человекочитаемую execution trace в корневую `log/` с zone-based размещением.
+
+Повторно используемые test doubles и маленькие fixtures принадлежат `target/mock`; scenario/runtime harness остаётся здесь.
 
 Assertions и test lifecycle остаются ответственностью Vitest и файлов из `test/`.

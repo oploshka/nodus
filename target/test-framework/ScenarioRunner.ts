@@ -33,7 +33,7 @@ export async function runScenario(
     : new QueueModelAdapter([...definition.modelResponses], logger);
 
   const configuration: AppConfiguration = {
-    project: {
+    target: {
       id: `test-${definition.id}`,
       root: project.root,
       scanMode: 'on-open',

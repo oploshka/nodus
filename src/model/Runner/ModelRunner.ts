@@ -86,6 +86,7 @@ export class ModelRunner {
       responseSchemaInstructions(input.response.schema),
     ].filter((value): value is string => Boolean(value && value.trim())).join('\n\n');
     if (system) messages.push({ role: 'system', content: system });
+    if (input.request.history?.length) messages.push(...input.request.history.map((message) => ({ ...message })));
 
     const user = [
       input.request.message.trim(),
@@ -125,18 +126,11 @@ export class ModelRunner {
       const parsed = validateResponseSchema<TOutput>(input.response.schema, wireValue);
       return { data: parsed, ...modelRun };
     } catch (error) {
-      // Preserve the exact model exchange even when parsing/schema validation fails.
-      // ModelCaller can log it without coupling ModelRunner to a logger.
       if (error instanceof Error) (error as ModelRunError).modelRun = modelRun;
       throw error;
     }
   }
 
-  /**
-   * Thin specialized call for the real diff use-case. It does not introduce a
-   * second runner lifecycle: it only supplies Diff format + a common schema and
-   * performs the target-path semantic check that belongs to this specialization.
-   */
   public async diffFile(input: DiffFileRunInput): Promise<ModelRunResult<UnifiedDiffModelResponse>> {
     const schema: ModelResponseSchema = {
       description: `Unified diff for exactly ${input.path}`,

@@ -1,0 +1,41 @@
+{
+  "target": {
+    "id": "todo-project",
+    "root": ".",
+    "scanMode": "manual",
+    "exclude": [
+      "node_modules",
+      "dist",
+      ".git",
+      ".nodus"
+    ]
+  },
+  "model": {
+    "provider": "openai-compatible",
+    "endpoint": "http://localhost:5001/v1",
+    "model": "koboldcpp",
+    "temperature": 0,
+    "maxTokens": 4096,
+    "requestTimeoutMs": 600000
+  },
+  "runtime": {
+    "maxWorkerAttempts": 4,
+    "maxResearchRequests": 1,
+    "maxAgentRounds": 12
+  },
+  "engineTest": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "timeoutMs": 120000
+    },
+    "unit": {
+      "command": "npm test",
+      "timeoutMs": 120000
+    }
+  },
+  "language": {
+    "project": "en",
+    "nodus": "en",
+    "response": "ru"
+  }
+}

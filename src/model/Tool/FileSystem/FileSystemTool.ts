@@ -22,11 +22,18 @@ export class FileSystemTool implements Tool {
 
       switch (action) {
         case 'read':
-          return { ok: true, data: await readFile(absolutePath, 'utf8') };
+          return {
+            ok: true,
+            data: context.fileAccess ? await context.fileAccess.read(path) : await readFile(absolutePath, 'utf8'),
+          };
         case 'write': {
           const content = String(input.content ?? '');
-          await mkdir(dirname(absolutePath), { recursive: true });
-          await writeFile(absolutePath, content, 'utf8');
+          if (context.fileAccess) {
+            await context.fileAccess.write(path, content);
+          } else {
+            await mkdir(dirname(absolutePath), { recursive: true });
+            await writeFile(absolutePath, content, 'utf8');
+          }
           return { ok: true, data: { path } };
         }
         case 'list': {
@@ -37,6 +44,9 @@ export class FileSystemTool implements Tool {
           };
         }
         case 'delete':
+          if (context.fileAccess) {
+            return { ok: false, error: 'Task-local Edit does not support file deletion yet.' };
+          }
           await rm(absolutePath, { recursive: true, force: true });
           return { ok: true, data: { path } };
         case 'exists': {

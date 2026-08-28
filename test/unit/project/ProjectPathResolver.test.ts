@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { ProjectPathResolver } from '@engine/Project/ProjectPathResolver.js';
-import type { ProjectIndex } from '@engine/Project/ProjectIndex.js';
+import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
+import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import { TestProject } from '@test-framework/TestProject.js';
 
-function index(root: string, paths: string[]): ProjectIndex {
+function index(root: string, paths: string[]): ProjectFileIndex {
   return {
     version: 1,
     projectId: 'test',
@@ -17,14 +17,14 @@ function index(root: string, paths: string[]): ProjectIndex {
   };
 }
 
-describe('ProjectPathResolver', () => {
+describe('PathResolver', () => {
   it('keeps canonical project-root-relative paths unchanged and requires existing files', async () => {
     const fixture = await TestProject.create('path-canonical', {
       'src/engine/Planner/ModelPlanner.ts': 'export {};\n',
       'nodus.config.example.json': '{}\n',
     });
     try {
-      const resolver = new ProjectPathResolver(fixture.root);
+      const resolver = new PathResolver(fixture.root);
       const projectIndex = index(fixture.root, ['src/engine/Planner/ModelPlanner.ts', 'nodus.config.example.json']);
 
       await expect(resolver.resolveExisting('src/engine/Planner/ModelPlanner.ts', projectIndex))
@@ -41,7 +41,7 @@ describe('ProjectPathResolver', () => {
   it('accepts decorated and absolute references only when they resolve inside the project', async () => {
     const fixture = await TestProject.create('path-absolute', { 'src/app/Main.ts': 'export {};\n' });
     try {
-      const resolver = new ProjectPathResolver(fixture.root);
+      const resolver = new PathResolver(fixture.root);
       const absolute = resolve(fixture.root, 'src/app/Main.ts');
 
       await expect(resolver.resolveExisting('`src/app/Main.ts`')).resolves.toBe('src/app/Main.ts');
@@ -55,7 +55,7 @@ describe('ProjectPathResolver', () => {
   it('repairs a wrong prefix when the index has one unambiguous existing match', async () => {
     const fixture = await TestProject.create('path-repair', { 'nodus.config.example.json': '{}\n' });
     try {
-      const resolver = new ProjectPathResolver(fixture.root);
+      const resolver = new PathResolver(fixture.root);
       const projectIndex = index(fixture.root, ['nodus.config.example.json']);
 
       await expect(resolver.resolveExisting('src/app/Config/nodus.config.example.json', projectIndex))
@@ -71,7 +71,7 @@ describe('ProjectPathResolver', () => {
       'src/b/config.json': '{}\n',
     });
     try {
-      const resolver = new ProjectPathResolver(fixture.root);
+      const resolver = new PathResolver(fixture.root);
       const projectIndex = index(fixture.root, ['src/a/config.json', 'src/b/config.json']);
 
       await expect(resolver.resolveExisting('wrong/config.json', projectIndex))
@@ -87,7 +87,7 @@ describe('ProjectPathResolver', () => {
     const outsideFile = join(outside, 'outside.ts');
     await writeFile(outsideFile, 'export {};\n');
     try {
-      const resolver = new ProjectPathResolver(fixture.root);
+      const resolver = new PathResolver(fixture.root);
       await expect(resolver.resolveExisting('../outside.ts')).rejects.toThrow('escapes project root');
       await expect(resolver.resolveExisting(outsideFile)).rejects.toThrow('outside project root');
       await expect(resolver.resolveExisting(pathToFileURL(outsideFile).href)).rejects.toThrow('outside project root');
@@ -102,7 +102,7 @@ describe('ProjectPathResolver', () => {
       '.git/config': '[core]\n',
     });
     try {
-      const resolver = new ProjectPathResolver(fixture.root);
+      const resolver = new PathResolver(fixture.root);
       await expect(resolver.resolveTarget('node_modules/pkg/index.js')).rejects.toThrow('not writable by Nodus');
       await expect(resolver.resolveTarget('.git/config')).rejects.toThrow('not writable by Nodus');
       await expect(resolver.resolveTarget('.nodus/cache.json')).resolves.toBe('.nodus/cache.json');
@@ -118,7 +118,7 @@ describe('ProjectPathResolver', () => {
       'src/app/Main.ts': 'export {};\n',
     });
     try {
-      const resolver = new ProjectPathResolver(fixture.root);
+      const resolver = new PathResolver(fixture.root);
       const exclude = ['dist', 'src/generated'];
 
       await expect(resolver.resolveTarget('dist/generated.js', exclude)).rejects.toThrow('blocked by dist');
@@ -133,7 +133,7 @@ describe('ProjectPathResolver', () => {
     const fixture = await TestProject.create('path-target');
     try {
       await mkdir(resolve(fixture.root, 'src/New'), { recursive: true });
-      const resolver = new ProjectPathResolver(fixture.root);
+      const resolver = new PathResolver(fixture.root);
       await expect(resolver.resolveTarget('src/New/File.ts', ['dist'])).resolves.toBe('src/New/File.ts');
       await expect(resolver.resolveTarget('dist/NewFile.ts', ['dist'])).rejects.toThrow('not writable by Nodus');
       await expect(resolver.resolveTarget('../outside/File.ts')).rejects.toThrow('escapes project root');

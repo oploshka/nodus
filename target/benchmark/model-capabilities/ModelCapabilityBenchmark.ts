@@ -1,13 +1,20 @@
+import { createHash } from 'node:crypto';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { extname, join, resolve } from 'node:path';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import { FileLogger } from '@app/Logging/Logger.js';
-import { Project } from '@engine/Project/Project.js';
+import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
+import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
+import { ProcessInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
+import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
+import { ProjectFileSearch } from '@engine/Project/File/ProjectFileSearch.js';
 import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
+import { ReadProjectAction } from '@engine/Worker/Action/ReadProjectAction.js';
+import { SearchProjectAction } from '@engine/Worker/Action/SearchProjectAction.js';
 import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEditStrategy.js';
 import { ReplaceEditStrategy } from '@engine/Edit/Strategy/ReplaceEditStrategy.js';
 import { DiffEditStrategy } from '@engine/Edit/Strategy/DiffEditStrategy.js';
@@ -80,37 +87,45 @@ const PROFILE = {
   language: LANGUAGE,
 };
 
-
-/**
- * Benchmark-only Project implementation.
- *
- * CodeWorker, ChangeCodeAction and Engine-owned EditStrategy classes still see the normal Project
- * contract, but reads/writes are backed by an in-memory map. This keeps the
- * benchmark focused on model -> semantic edit intent -> Editor strategy/applicator behavior
- * and avoids filesystem copying noise.
- */
-class InMemoryBenchmarkProject extends Project {
+/** Benchmark-only FileSystem backed entirely by memory. */
+class InMemoryBenchmarkFileSystem extends FileSystem {
+  public readonly index: ProjectFileIndex;
   private readonly files: Map<string, string>;
 
-  public constructor(id: string, initialFiles: Record<string, string>, logger: EngineLogger) {
-    super({
-      id,
-      root: resolve('.'),
-      scanMode: 'manual',
-      include: ['src/**/*.ts'],
-      exclude: ['node_modules', 'dist', '.git', '.nodus'],
-    }, logger);
-    this.files = new Map(Object.entries(initialFiles).map(([path, content]) => [this.normalizeMemoryPath(path), content]));
+  public constructor(
+    public readonly id: string,
+    initialFiles: Record<string, string>,
+    logger: EngineLogger,
+  ) {
+    const root = resolve('.');
+    const files = new Map(Object.entries(initialFiles).map(([path, content]) => [normalizeMemoryPath(path), content]));
+    const index: ProjectFileIndex = {
+      version: 1,
+      projectId: id,
+      root,
+      scannedAt: new Date(0).toISOString(),
+      files: [...files.entries()].map(([path, content]) => ({
+        path,
+        extension: extname(path),
+        size: Buffer.byteLength(content, 'utf8'),
+        modifiedAt: new Date(0).toISOString(),
+        imports: [],
+        exports: [],
+      })),
+    };
+    super(root, new PathResolver(root), () => index, logger, []);
+    this.files = files;
+    this.index = index;
   }
 
   public override async resolvePath(path: string): Promise<string> {
-    const normalized = this.normalizeMemoryPath(path);
+    const normalized = normalizeMemoryPath(path);
     if (!this.files.has(normalized)) throw new Error(`In-memory project file does not exist: ${normalized}`);
     return normalized;
   }
 
   public override async resolveTargetPath(path: string): Promise<string> {
-    return this.normalizeMemoryPath(path);
+    return normalizeMemoryPath(path);
   }
 
   public override async read(path: string): Promise<string> {
@@ -125,19 +140,23 @@ class InMemoryBenchmarkProject extends Project {
     this.files.set(normalized, content);
   }
 
-  public content(path: string): string | undefined {
-    return this.files.get(this.normalizeMemoryPath(path));
+  public override async hash(path: string): Promise<string> {
+    return createHash('sha256').update(await this.read(path)).digest('hex');
   }
 
-  private normalizeMemoryPath(path: string): string {
-    const normalized = path.replace(/\\/g, '/').replace(/^\.\//, '');
-    if (!normalized || normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) {
-      throw new Error(`Invalid in-memory project path: ${path}`);
-    }
-    const parts = normalized.split('/');
-    if (parts.some((part) => part === '..' || part === '')) throw new Error(`Invalid in-memory project path: ${path}`);
-    return parts.filter((part) => part !== '.').join('/');
+  public content(path: string): string | undefined {
+    return this.files.get(normalizeMemoryPath(path));
   }
+}
+
+function normalizeMemoryPath(path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/^\.\//, '');
+  if (!normalized || normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) {
+    throw new Error(`Invalid in-memory project path: ${path}`);
+  }
+  const parts = normalized.split('/');
+  if (parts.some((part) => part === '..' || part === '')) throw new Error(`Invalid in-memory project path: ${path}`);
+  return parts.filter((part) => part !== '.').join('/');
 }
 
 const CASES: BenchmarkCase[] = [
@@ -345,7 +364,10 @@ class BenchmarkAdapter implements ModelAdapter {
 
   public async complete(request: ModelRequest): Promise<RawModelResponse> {
     const user = [...request.messages].reverse().find((message) => message.role === 'user')?.content ?? '';
-    if (user.startsWith('Attempt to complete the assigned PlanStep now.')) {
+    if (
+      user.includes('Determine the concrete project edits required to complete the assigned PlanStep now.') ||
+      user.includes('Attempt to complete the assigned PlanStep now.')
+    ) {
       return {
         content: JSON.stringify({
           outcome: 'ready',
@@ -395,7 +417,7 @@ async function main(): Promise<void> {
   for (let repeat = 1; repeat <= args.repeat; repeat += 1) {
     for (const strategy of strategies) {
       for (const benchmarkCase of CASES) {
-        const result = await runCase(configuration, strategy, benchmarkCase, timestamp, repeat, benchmarkLogPath, editsLogPath);
+        const result = await runCase(configuration, strategy, benchmarkCase, repeat, benchmarkLogPath, editsLogPath);
         results.push(result);
         const mark = result.correct && result.status === 'completed' ? '✓' : '✗';
         console.log(
@@ -432,89 +454,90 @@ async function runCase(
   configuration: Awaited<ReturnType<typeof ConfigurationLoader.load>>,
   strategy: StrategyId,
   benchmarkCase: BenchmarkCase,
-  timestamp: string,
   repeat: number,
   benchmarkLogPath: string,
   editsLogPath: string,
 ): Promise<CaseResult> {
   const logger = new FileLogger(benchmarkLogPath);
-  const project = new InMemoryBenchmarkProject(`model-capability-${benchmarkCase.id}`, benchmarkCase.files, logger);
+  const fileSystem = new InMemoryBenchmarkFileSystem(`model-capability-${benchmarkCase.id}`, benchmarkCase.files, logger);
+  const fileSearch = new ProjectFileSearch(() => fileSystem.index);
 
+  const delegate = new OpenAICompatibleModelAdapter(
+    configuration.model.endpoint,
+    configuration.model.apiKey,
+    configuration.model.requestTimeoutMs,
+  );
+  const adapter = new BenchmarkAdapter(delegate, benchmarkCase.edits);
+  const model = new ModelRunner(adapter, configuration.model);
+  const action = createAction(strategy, fileSystem, fileSearch, model, logger);
+  const worker = new CodeWorker(
+    action,
+    new ReadProjectAction(),
+    new SearchProjectAction(fileSearch),
+    unavailableResearch(),
+    logger,
+    1,
+    0,
+  );
+  const task = new Task(`Benchmark: ${benchmarkCase.description}`, fileSystem.id);
+  const step: PlanStep = {
+    id: 'step-1',
+    goal: benchmarkCase.description,
+    constraints: ['Apply exactly the supplied benchmark edit.', 'Do not change unrelated content.'],
+    decompositionType: 'coherent-outcome',
+  };
+  const editor = new ProjectEditor(fileSystem, logger, [createEditStrategy(strategy, fileSystem, model, logger)]);
+  const instrument = new ProcessInstrument(editor);
+
+  logger.info('benchmark.case.start', { strategy, caseId: benchmarkCase.id, repeat, edits: benchmarkCase.edits });
+  const startedAt = performance.now();
+  let run: WorkerResult;
   try {
-
-    const delegate = new OpenAICompatibleModelAdapter(
-      configuration.model.endpoint,
-      configuration.model.apiKey,
-      configuration.model.requestTimeoutMs,
-    );
-    const adapter = new BenchmarkAdapter(delegate, benchmarkCase.edits);
-    const model = new ModelRunner(adapter, configuration.model);
-    const action = createAction(strategy, project, model, logger);
-    const worker = new CodeWorker(action, unavailableResearch(), logger, 1, 0);
-    const task = new Task(`Benchmark: ${benchmarkCase.description}`, project.id);
-    const step: PlanStep = {
-      id: 'step-1',
-      goal: benchmarkCase.description,
-      constraints: ['Apply exactly the supplied benchmark edit.', 'Do not change unrelated content.'],
-      decompositionType: 'coherent-outcome',
-    };
-
-    logger.info('benchmark.case.start', { strategy, caseId: benchmarkCase.id, repeat, edits: benchmarkCase.edits });
-    const startedAt = performance.now();
-    let run: WorkerResult;
-    try {
-      run = await worker.run(task, step);
-      if (run.status === 'completed' && run.edit) {
-        const summary = run.summary;
-        const editor = new ProjectEditor(project, logger, [createEditStrategy(strategy, project, model, logger)]);
-        const editResult = await editor.apply(task, step, run.edit);
-        run = editResult.status === 'completed'
-          ? { status: 'completed', summary }
-          : { status: 'not-completed', reason: editResult.reason, canContinue: true };
-      }
-    } catch (error) {
-      run = { status: 'failed', reason: error instanceof Error ? error.message : String(error), canContinue: false };
+    run = await worker.run({ task, step }, instrument);
+    if (run.status === 'completed') {
+      const summary = run.summary;
+      const editResult = await editor.apply();
+      run = editResult.status === 'completed'
+        ? { status: 'completed', summary }
+        : { status: 'not-completed', reason: editResult.reason, canContinue: true };
     }
-    const durationMs = performance.now() - startedAt;
-
-    let correct = true;
-    for (const [path, expected] of Object.entries(benchmarkCase.expected)) {
-      const actual = project.content(path);
-      if (actual !== expected) correct = false;
-    }
-
-    const expectedPaths = new Set(Object.keys(benchmarkCase.expected));
-    let unchangedOutsideExpected = true;
-    for (const [path, original] of Object.entries(benchmarkCase.files)) {
-      if (expectedPaths.has(path)) continue;
-      const actual = project.content(path);
-      if (actual !== original) unchangedOutsideExpected = false;
-    }
-
-    const metrics = adapter.forwarded;
-    const result: CaseResult = {
-      timestamp: new Date().toISOString(),
-      strategy,
-      caseId: benchmarkCase.id,
-      status: run.status,
-      correct,
-      unchangedOutsideExpected,
-      durationMs,
-      modelCalls: metrics.length,
-      promptTokens: sum(metrics.map((item) => item.promptTokens)),
-      completionTokens: sum(metrics.map((item) => item.completionTokens)),
-      totalTokens: sum(metrics.map((item) => item.totalTokens)),
-      ...(run.status === 'completed' ? {} : { reason: run.reason }),
-      logPath: benchmarkLogPath,
-    };
-    logger.info('benchmark.case.finish', result);
-    await appendEditDiagnostics(editsLogPath, strategy, benchmarkCase, repeat, adapter.forwarded, project, result);
-    return result;
-  } finally {
-    // Project state exists only in memory; only the three run artifacts are persisted.
+  } catch (error) {
+    run = { status: 'failed', reason: error instanceof Error ? error.message : String(error), canContinue: false };
   }
-}
+  const durationMs = performance.now() - startedAt;
 
+  let correct = true;
+  for (const [path, expected] of Object.entries(benchmarkCase.expected)) {
+    if (fileSystem.content(path) !== expected) correct = false;
+  }
+
+  const expectedPaths = new Set(Object.keys(benchmarkCase.expected));
+  let unchangedOutsideExpected = true;
+  for (const [path, original] of Object.entries(benchmarkCase.files)) {
+    if (expectedPaths.has(path)) continue;
+    if (fileSystem.content(path) !== original) unchangedOutsideExpected = false;
+  }
+
+  const metrics = adapter.forwarded;
+  const result: CaseResult = {
+    timestamp: new Date().toISOString(),
+    strategy,
+    caseId: benchmarkCase.id,
+    status: run.status,
+    correct,
+    unchangedOutsideExpected,
+    durationMs,
+    modelCalls: metrics.length,
+    promptTokens: sum(metrics.map((item) => item.promptTokens)),
+    completionTokens: sum(metrics.map((item) => item.completionTokens)),
+    totalTokens: sum(metrics.map((item) => item.totalTokens)),
+    ...(run.status === 'completed' ? {} : { reason: run.reason }),
+    logPath: benchmarkLogPath,
+  };
+  logger.info('benchmark.case.finish', result);
+  await appendEditDiagnostics(editsLogPath, strategy, benchmarkCase, repeat, adapter.forwarded, fileSystem, result);
+  return result;
+}
 
 async function appendEditDiagnostics(
   editsLogPath: string,
@@ -522,7 +545,7 @@ async function appendEditDiagnostics(
   benchmarkCase: BenchmarkCase,
   repeat: number,
   calls: ForwardedCallMetric[],
-  project: InMemoryBenchmarkProject,
+  fileSystem: InMemoryBenchmarkFileSystem,
   result: CaseResult,
 ): Promise<void> {
   const sections: string[] = [];
@@ -537,7 +560,7 @@ async function appendEditDiagnostics(
 
   sections.push('', 'APPLY / RESULT');
   for (const [path, original] of Object.entries(benchmarkCase.files)) {
-    const actual = project.content(path);
+    const actual = fileSystem.content(path);
     const expected = benchmarkCase.expected[path] ?? original;
     sections.push(`file: ${path}`);
     if (actual === undefined) {
@@ -594,24 +617,25 @@ function compactLineDiff(before: string, after: string): string {
 
 function createAction(
   strategy: StrategyId,
-  project: Project,
+  fileSystem: FileSystem,
+  fileSearch: ProjectFileSearch,
   model: ModelRunner,
   logger: EngineLogger,
 ): WorkerAction<any, any, any> {
-  return new ChangeCodeAction(project, model, logger, { ...PROFILE, strategy });
+  return new ChangeCodeAction(fileSystem, fileSearch, model, logger, { ...PROFILE, strategy });
 }
 
 function createEditStrategy(
   strategy: StrategyId,
-  project: Project,
+  fileSystem: FileSystem,
   model: ModelRunner,
   logger: EngineLogger,
 ): EditStrategy {
   const guidance = PROFILE.guidance;
-  if (strategy === 'replace') return new ReplaceEditStrategy(project, model, logger, PROFILE.language, guidance, 1);
-  if (strategy === 'range-replace') return new RangeReplaceEditStrategy(project, model, logger, PROFILE.language, guidance);
+  if (strategy === 'replace') return new ReplaceEditStrategy(fileSystem, model, logger, PROFILE.language, guidance, 1);
+  if (strategy === 'range-replace') return new RangeReplaceEditStrategy(fileSystem, model, logger, PROFILE.language, guidance);
   if (strategy === 'diff') return new DiffEditStrategy(model, logger, PROFILE.language, guidance, 1);
-  return new FullFileEditStrategy(project, model, logger, PROFILE.language, guidance);
+  return new FullFileEditStrategy(fileSystem, model, logger, PROFILE.language, guidance);
 }
 
 function unavailableResearch(): WorkerAction<any, any, any> {

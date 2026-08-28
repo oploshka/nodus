@@ -1,3 +1,4 @@
+import type { ModelMessage } from '@model/Request/ModelRequest.js';
 import type { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import type { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
@@ -11,6 +12,8 @@ export interface ModelRunRequest {
   format: ModelRequestFormat;
   /** Optional recommendations/constraints for how to perform the work. */
   guidance?: string;
+  /** Optional prior user/assistant turns that belong to the same model interaction. */
+  history?: ReadonlyArray<ModelMessage>;
 }
 
 export interface ModelRunResponse {

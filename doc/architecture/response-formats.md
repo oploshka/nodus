@@ -19,8 +19,8 @@ response schema + response format
 -> model
 -> wire response
 -> response format handler
--> JS object
--> common schema validation/normalization
+-> intermediate representation
+-> common schema normalization/validation
 -> ModelRunResult.data
 ```
 
@@ -36,7 +36,7 @@ schema: {
       description: 'Result state.',
       optionList: [
         { id: 'completed', description: 'Work is finished.' },
-        { id: 'failed', description: 'Work cannot be finished.' },
+        { id: 'failed', description: 'Cannot finish.' },
       ],
     },
     summary: {
@@ -61,20 +61,55 @@ Format handler превращает текст в object вида `{ text: strin
 
 ### Raw
 
-Универсальный компактный FIELD-value формат:
+Raw — простой block-first формат. Каждое поле начинается с `#<fieldName>`, значение пишется со следующей строки и продолжается до следующего `#`-поля или конца ответа:
 
 ```text
-status completed
-summary Change prepared
+#status
+completed
+
+#summary
+Change prepared
 ```
 
-или структурированное значение в одной строке:
+Raw handler не знает Planner/Worker/Research semantics и не решает cardinality поля. Каждое встреченное поле сохраняется как raw occurrence:
 
 ```text
-input {"path":"src/Cli/Cli.ts"}
+#status
+completed
+#files
+src/A.ts
+#files
+src/B.ts
 ```
 
-Raw handler знает только общий синтаксис `field value`. Он не знает Planner/Worker/Research semantics. Repeated fields становятся массивом.
+```ts
+{
+  status: ['completed'],
+  files: ['src/A.ts', 'src/B.ts'],
+}
+```
+
+Далее common schema нормализует representation согласно ожидаемому типу: scalar получает одно значение, array получает occurrences, number/boolean/option приводятся и проверяются.
+
+Компактная форма `#field value` допускается parser как tolerant input, но модель инструктируется всегда переносить value на следующую строку:
+
+```text
+#status completed
+```
+
+Для structured array/object содержимое поля может быть JSON:
+
+```text
+#edits
+[
+  {"path":"src/A.ts","instruction":"Change A"},
+  {"path":"src/B.ts","instruction":"Change B"}
+]
+```
+
+Raw handler не интерпретирует содержимое блока. Common schema знает ожидаемый тип и выполняет materialization/validation.
+
+При выделении блока parser удаляет только форматную оболочку на границах: один пустой leading line и до двух trailing blank lines. Внутренние переносы и indentation сохраняются.
 
 Operation-specific mini-language внутри Raw запрещён.
 

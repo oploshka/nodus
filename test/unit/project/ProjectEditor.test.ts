@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
-import { Project } from '@engine/Project/Project.js';
+import { EditValidator } from '@engine/Edit/Validation/EditValidator.js';
+import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
+import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import { Task } from '@engine/Task/Task.js';
 import type { PlanStep } from '@engine/Planner/Plan.js';
@@ -20,8 +22,8 @@ async function fixture(strategy: EditStrategy) {
   roots.push(root);
   await writeFile(join(root, 'a.ts'), 'A\n', 'utf8');
   await writeFile(join(root, 'b.ts'), 'B\n', 'utf8');
-  const project = new Project({ id: 'test', root, scanMode: 'manual', include: [], exclude: [] }, logger);
-  return { root, project, editor: new ProjectEditor(project, logger, [strategy]) };
+  const fileSystem = new FileSystem(root, new PathResolver(root), () => undefined, logger, []);
+  return { root, projectId: 'test', editor: new ProjectEditor(fileSystem, logger, [strategy]), fileSystem };
 }
 
 function scripted(outputs: Record<string, string>): EditStrategy {
@@ -36,21 +38,28 @@ function scripted(outputs: Record<string, string>): EditStrategy {
 }
 
 describe('ProjectEditor', () => {
-  it('prepares and commits the complete multi-file set', async () => {
-    const { root, project, editor } = await fixture(scripted({ 'a.ts': 'AA\n', 'b.ts': 'BB\n' }));
-    const result = await editor.apply(new Task('task', project.id), step, {
+  it('prepares the complete multi-file set before applying it', async () => {
+    const { root, projectId, editor } = await fixture(scripted({ 'a.ts': 'AA\n', 'b.ts': 'BB\n' }));
+    const task = new Task('task', projectId);
+    const prepared = await editor.change(task, step, {
       strategy: 'range-replace',
       edits: [
         { path: 'a.ts', instruction: 'change A' },
         { path: 'b.ts', instruction: 'change B' },
       ],
     });
-    expect(result).toEqual({ status: 'completed', files: 2, operations: 2, strategy: 'range-replace' });
+
+    expect(prepared.status).toBe('completed');
+    expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('A\n');
+    expect(await readFile(join(root, 'b.ts'), 'utf8')).toBe('B\n');
+
+    const applied = await editor.apply();
+    expect(applied.status).toBe('completed');
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('AA\n');
     expect(await readFile(join(root, 'b.ts'), 'utf8')).toBe('BB\n');
   });
 
-  it('does not write anything when one edit cannot be prepared', async () => {
+  it('does not accumulate anything when one edit cannot be prepared', async () => {
     const strategy: EditStrategy = {
       id: 'range-replace',
       async prepare(context) {
@@ -58,12 +67,13 @@ describe('ProjectEditor', () => {
         return { status: 'completed', path: context.edit.path, content: 'AA\n', operations: 1 };
       },
     };
-    const { root, project, editor } = await fixture(strategy);
-    const result = await editor.apply(new Task('task', project.id), step, {
+    const { root, projectId, editor } = await fixture(strategy);
+    const result = await editor.change(new Task('task', projectId), step, {
       strategy: 'range-replace',
       edits: [{ path: 'a.ts', instruction: 'change A' }, { path: 'b.ts', instruction: 'change B' }],
     });
     expect(result).toEqual({ status: 'not-completed', reason: 'cannot prepare b' });
+    expect((await editor.apply()).status).toBe('completed');
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('A\n');
     expect(await readFile(join(root, 'b.ts'), 'utf8')).toBe('B\n');
   });
@@ -75,12 +85,14 @@ describe('ProjectEditor', () => {
         return { status: 'completed', path: context.edit.path, content: context.source + context.edit.instruction + '\n', operations: 1 };
       },
     };
-    const { root, project, editor } = await fixture(strategy);
-    const result = await editor.apply(new Task('task', project.id), step, {
+    const { root, projectId, editor } = await fixture(strategy);
+    const prepared = await editor.change(new Task('task', projectId), step, {
       strategy: 'range-replace',
       edits: [{ path: 'a.ts', instruction: 'first' }, { path: 'a.ts', instruction: 'second' }],
     });
-    expect(result.status).toBe('completed');
+    expect(prepared.status).toBe('completed');
+    expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('A\n');
+    expect((await editor.apply()).status).toBe('completed');
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('A\nfirst\nsecond\n');
   });
 
@@ -93,28 +105,28 @@ describe('ProjectEditor', () => {
     };
     const diff: EditStrategy = {
       id: 'diff',
-      async prepare(context) {
-        return { status: 'completed', path: context.edit.path, content: 'AA\n', operations: 1 };
+      async prepare() {
+        return { status: 'completed', path: 'a.ts', content: 'AA\n', operations: 1 };
       },
     };
     const root = await mkdtemp(join(tmpdir(), 'nodus-editor-fallback-'));
     roots.push(root);
     await writeFile(join(root, 'a.ts'), 'A\n', 'utf8');
-    const project = new Project({ id: 'test', root, scanMode: 'manual', include: [], exclude: [] }, logger);
-    const editor = new ProjectEditor(project, logger, [range, diff], {
+    const fileSystem = new FileSystem(root, new PathResolver(root), () => undefined, logger, []);
+    const editor = new ProjectEditor(fileSystem, logger, [range, diff], new EditValidator(), {
       'range-replace': ['diff'],
       replace: [],
       diff: [],
       edit: [],
     });
 
-    const result = await editor.apply(new Task('task', project.id), step, {
+    const prepared = await editor.change(new Task('task', 'test'), step, {
       strategy: 'range-replace',
       edits: [{ path: 'a.ts', instruction: 'change A' }],
     });
 
-    expect(result.status).toBe('completed');
+    expect(prepared.status).toBe('completed');
+    expect((await editor.apply()).status).toBe('completed');
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('AA\n');
   });
-
 });

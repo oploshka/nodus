@@ -4,6 +4,7 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 
 export interface TestLoggerOptions {
   directory?: string;
+  zone?: string;
   now?: () => Date;
 }
 
@@ -17,7 +18,7 @@ export class TestFileLogger implements EngineLogger {
 
   public constructor(label: string, options: TestLoggerOptions = {}) {
     this.now = options.now ?? (() => new Date());
-    const directory = options.directory ?? join(process.cwd(), 'test', 'logs');
+    const directory = options.directory ?? join(process.cwd(), 'log', options.zone ?? 'test');
     mkdirSync(directory, { recursive: true });
     const timestamp = this.fileTimestamp(this.now());
     this.path = join(directory, `${timestamp}_${this.safe(label)}.log`);

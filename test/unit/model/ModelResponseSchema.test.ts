@@ -4,48 +4,81 @@ import { RawResponseFormatHandler } from '@model/Response/Format/RawResponseForm
 
 const schema: ModelResponseSchema = {
   fields: {
-    status: {
-      type: 'option',
-      optionList: [
-        { id: 'completed', description: 'Finished.' },
-        { id: 'failed', description: 'Cannot finish.' },
-      ],
-    },
+    status: { type: 'option', optionList: [{ id: 'completed', description: 'Finished.' }, { id: 'failed', description: 'Cannot finish.' }] },
     summary: { type: 'string', optional: true },
-    input: {
-      type: 'object',
-      optional: true,
-      fields: { path: { type: 'string' } },
-    },
+    input: { type: 'object', optional: true, fields: { path: { type: 'string' } } },
   },
 };
 
 describe('common ModelResponseSchema', () => {
   it('validates the same object contract independently from wire format', () => {
-    const raw = new RawResponseFormatHandler().parse('status completed\ninput {"path":"src/A.ts"}');
-    expect(validateResponseSchema(schema, raw)).toEqual({
-      status: 'completed',
-      input: { path: 'src/A.ts' },
+    const raw = new RawResponseFormatHandler().parse('#status\ncompleted\n#input\n{"path":"src/A.ts"}');
+    expect(validateResponseSchema(schema, raw)).toEqual({ status: 'completed', input: { path: 'src/A.ts' } });
+  });
+
+  it('normalizes repeated raw values according to array item schema', () => {
+    const raw = new RawResponseFormatHandler().parse(['#status', 'completed', '#files', 'src/A.ts', '#files', 'src/B.ts', '#edits', '{"path":"src/A.ts","instruction":"Change A"}', '#edits', '{"path":"src/B.ts","instruction":"Change B"}'].join('\n'));
+    const result = validateResponseSchema({ fields: { status: schema.fields.status, files: { type: 'array', items: { type: 'string' } }, edits: { type: 'array', items: { type: 'object', fields: { path: { type: 'string' }, instruction: { type: 'string' } } } } } }, raw);
+    expect(result).toEqual({ status: 'completed', files: ['src/A.ts', 'src/B.ts'], edits: [{ path: 'src/A.ts', instruction: 'Change A' }, { path: 'src/B.ts', instruction: 'Change B' }] });
+  });
+
+  it('normalizes multiline and bullet-like file path list occurrences', () => {
+    const raw = new RawResponseFormatHandler().parse(['#readFiles', 'src/A.ts', '- src/B.ts', '', '#readFiles', '  src/C.ts  '].join('\n'));
+    expect(validateResponseSchema({ fields: { readFiles: { type: 'filePathList' } } }, raw)).toEqual({ readFiles: ['src/A.ts', 'src/B.ts', 'src/C.ts'] });
+  });
+
+  it('normalizes the narrow edit list format used by ChangeCodeAction', () => {
+    const raw = new RawResponseFormatHandler().parse([
+      '#edits',
+      '- path: src/TodoStore.ts',
+      '  instruction: Add delete(id) returning a boolean.',
+      '',
+      '- path: test/TodoService.test.ts',
+      '  instruction: Add two tests:',
+      '  1. Existing id returns true.',
+      '  2. Missing id returns false.',
+    ].join('\n'));
+
+    expect(validateResponseSchema({ fields: { edits: { type: 'editList' } } }, raw)).toEqual({
+      edits: [
+        { path: 'src/TodoStore.ts', instruction: 'Add delete(id) returning a boolean.' },
+        { path: 'test/TodoService.test.ts', instruction: 'Add two tests:\n1. Existing id returns true.\n2. Missing id returns false.' },
+      ],
     });
   });
 
+  it('keeps ordinary string arrays strict instead of splitting multiline blocks', () => {
+    const raw = new RawResponseFormatHandler().parse('#files\nsrc/A.ts\nsrc/B.ts');
+    expect(validateResponseSchema({ fields: { files: { type: 'array', items: { type: 'string' } } } }, raw)).toEqual({ files: ['src/A.ts\nsrc/B.ts'] });
+  });
+
+  it('keeps a single raw array occurrence as a one-item array', () => {
+    const raw = new RawResponseFormatHandler().parse('#files\nsrc/A.ts');
+    expect(validateResponseSchema({ fields: { files: { type: 'array', items: { type: 'string' } } } }, raw)).toEqual({ files: ['src/A.ts'] });
+  });
+
+  it('accepts compact #field value form', () => {
+    const raw = new RawResponseFormatHandler().parse('#status completed\n#summary Change prepared');
+    expect(validateResponseSchema(schema, raw)).toEqual({ status: 'completed', summary: 'Change prepared' });
+  });
+
+  it('normalizes a multiline raw block as one structured array value', () => {
+    const raw = new RawResponseFormatHandler().parse(['#status', 'completed', '#files', '[', '  "src/A.ts",', '  "src/B.ts"', ']'].join('\n'));
+    expect(validateResponseSchema({ fields: { status: schema.fields.status, files: { type: 'array', items: { type: 'string' } } } }, raw)).toEqual({ status: 'completed', files: ['src/A.ts', 'src/B.ts'] });
+  });
+
+  it('normalizes a multiline raw block containing an array of objects', () => {
+    const raw = new RawResponseFormatHandler().parse(['#status', 'completed', '#edits', '[', '  {"path":"src/A.ts","instruction":"Change A"},', '  {"path":"src/B.ts","instruction":"Change B"}', ']'].join('\n'));
+    expect(validateResponseSchema({ fields: { status: schema.fields.status, edits: { type: 'array', items: { type: 'object', fields: { path: { type: 'string' }, instruction: { type: 'string' } } } } } }, raw)).toEqual({ status: 'completed', edits: [{ path: 'src/A.ts', instruction: 'Change A' }, { path: 'src/B.ts', instruction: 'Change B' }] });
+  });
+
+  it('preserves internal block whitespace while removing only boundary blank lines', () => {
+    const raw = new RawResponseFormatHandler().parse('#summary\n\n  first\n  second\n\n');
+    expect(raw).toEqual({ summary: ['  first\n  second'] });
+  });
 
   it('describes nested fields inside arrays of objects to the model', () => {
-    const instructions = responseSchemaInstructions({
-      fields: {
-        steps: {
-          type: 'array',
-          items: {
-            type: 'object',
-            fields: {
-              goal: { type: 'string' },
-              constraints: { type: 'array', items: { type: 'string' }, optional: true },
-            },
-          },
-        },
-      },
-    });
-
+    const instructions = responseSchemaInstructions({ fields: { steps: { type: 'array', items: { type: 'object', fields: { goal: { type: 'string' }, constraints: { type: 'array', items: { type: 'string' }, optional: true } } } } } });
     expect(instructions).toContain('- steps: array');
     expect(instructions).toContain('- item: object');
     expect(instructions).toContain('- goal: string');
@@ -53,7 +86,6 @@ describe('common ModelResponseSchema', () => {
   });
 
   it('rejects an unknown option id', () => {
-    expect(() => validateResponseSchema(schema, { status: 'maybe' }))
-      .toThrow(ModelResponseSchemaError);
+    expect(() => validateResponseSchema(schema, { status: 'maybe' })).toThrow(ModelResponseSchemaError);
   });
 });

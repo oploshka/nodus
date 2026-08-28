@@ -5,6 +5,39 @@
       "@app/*": [
         "src/app/*"
       ],
+      "@engine/Planner/*": [
+        "src/engine/Process/Planner/*"
+      ],
+      "@engine/Determine/*": [
+        "src/engine/Process/Determine/*"
+      ],
+      "@engine/Worker/*": [
+        "src/engine/Process/Worker/*"
+      ],
+      "@engine/Research/*": [
+        "src/engine/Process/Research/*"
+      ],
+      "@engine/Edit/*": [
+        "src/engine/Process/Edit/*"
+      ],
+      "@engine/EngineTest/*": [
+        "src/engine/Process/EngineTest/*"
+      ],
+      "@engine/Task/*": [
+        "src/engine/Common/Task/*"
+      ],
+      "@engine/Project/*": [
+        "src/engine/Project/*"
+      ],
+      "@engine/Presentation/*": [
+        "src/engine/Common/Presentation/*"
+      ],
+      "@engine/Language/*": [
+        "src/engine/Common/Language/*"
+      ],
+      "@engine/Metrics/*": [
+        "src/engine/Common/Metrics/*"
+      ],
       "@engine/*": [
         "src/engine/*"
       ],

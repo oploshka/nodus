@@ -12,11 +12,12 @@
     "test:integration": "vitest run --project integration",
     "test:model": "vitest run --project model --passWithNoTests",
     "test:e2e": "vitest run --project e2e --passWithNoTests",
-    "check:docs": "tsx scripts/check-docs.ts",
-    "dev": "tsx src/app/Main.ts",
+    "check:docs": "tsx target/script/check-docs.ts",
+    "nodus:project": "tsx src/app/Main.ts target/project/nodus.config.json --clear-cache --clear-logs --scan",
     "benchmark:raw-agent": "tsx target/benchmark/RawAgentBenchmark.ts",
-    "benchmark:model-capabilities": "tsx target/benchmark/model-capabilities/ModelCapabilityBenchmark.ts",
-    "dev:project": "tsx src/app/Main.ts nodus.todo.config.example.json"
+    "benchmark:change-context": "tsx target/benchmark/ChangeContextPresentationBenchmark.ts",
+    "benchmark:change-action-probe": "tsx target/benchmark/ChangeActionProbeBenchmark.ts",
+    "benchmark:model-capabilities": "tsx target/benchmark/model-capabilities/ModelCapabilityBenchmark.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
