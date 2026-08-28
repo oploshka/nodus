@@ -33,7 +33,6 @@ export class ConfigurationLoader {
         endpoint: parsed.model.endpoint,
         model: parsed.model.model,
       },
-      ...(parsed.automation ? { automation: { root: resolve(base, parsed.automation.root) } } : {}),
       ...(parsed.runtime ? { runtime: { ...parsed.runtime } } : {}),
       ...(parsed.language ? { language: { ...parsed.language } } : {}),
     };
