@@ -2,98 +2,77 @@
 
 Статус: эксперимент.
 
-Цель прототипа — проверить идею Nodus как runtime, который исполняет настраиваемые схемы, а не как одну фиксированную цепочку `Planner -> Worker -> Edit -> Validation`.
+Цель — проверить Nodus как runtime, который исполняет настраиваемые и версионируемые schemas, а не одну фиксированную цепочку `Planner -> Worker -> Edit -> Validation`.
+
+Актуальный рабочий process contract описан в `doc/research/process-schema-v2.md`. Старый prototype с `kind/use/saveAs/variables` заменён локальной step-моделью.
 
 ## Разделение данных
 
-`automation/` хранит пользовательские и версионируемые определения поведения Nodus: схемы, presets и prompts. Служебные cache/log/state данные не должны жить в этой директории.
+`automation/` хранит пользовательские и версионируемые определения поведения Nodus: schemas, planner/worker presets, prompts и response contracts.
 
-Чистые тексты prompts хранятся отдельно в Markdown. JavaScript-файлы связывают prompts, presets и schemas.
+Служебные cache/log/state/session/index данные не должны жить в `automation/`; для них предназначен runtime storage `.nodus/`.
 
-## Process schema
+Чистые тексты prompts хранятся отдельно в Markdown. JavaScript связывает prompts, presets, schemas и transition-функции.
 
-Прототип использует два типа узлов:
+## Текущий prototype
 
-- `sequence` — цепочка с собственным набором переменных и вложенными шагами;
-- `action` — вызов Core-модуля (`worker`, `validate`, `replan` и будущих модулей).
+Core contract использует:
 
-Пример:
+```text
+STEP.SEQUENCE
+STEP.QUALIFY
+STEP.PLAN
+STEP.WORKER
+STEP.ACTION
+STEP.VALIDATE
+STEP.REPLAN
+```
+
+Каждая `SEQUENCE` имеет локальную one-based нумерацию. Шаг получает только явно выбранный context:
 
 ```js
-{
-  kind: 'sequence',
-  id: 'code-change',
-  variables: ['task', 'implementation', 'validation'],
-  steps: [
-    {
-      kind: 'action',
-      id: 'implement',
-      use: 'worker',
-      preset: 'code',
-      input: { task: 'task' },
-      saveAs: 'implementation',
-    },
-    {
-      kind: 'action',
-      id: 'validate',
-      use: 'validate',
-      input: { changes: 'implementation.value' },
-      saveAs: 'validation',
-    },
-  ],
+input: {
+  context: {
+    parent: true,
+    previous: true,
+    steps: [1, 2],
+  },
 }
 ```
 
-## Scope и передача результатов
+После выполнения step может вызвать `transition(plan, step)`. В функцию передаётся только текущая локальная sequence; transition может переписать только хвост после выполненного шага.
 
-Ключи переменных объявляются схемой. Action не получает весь накопленный context автоматически: `input` явно связывает поля входа с переменными процесса.
+Planner сам описан schema:
 
-`saveAs` сохраняет полный результат модуля. Поэтому следующий action может использовать как весь результат (`validation`), так и конкретное поле (`implementation.value`).
-
-Вложенная `sequence` получает только явно переданные значения через `input` и возвращает только явно указанные значения через `output`.
-
-## Parent
-
-Runtime передаёт каждому исполняемому узлу ссылку на непосредственного родителя. Это фиксирует структурную вложенность отдельно от причинных связей и data flow.
-
-## Failure и Replan
-
-Action может определить `onFailure`. Это controlled recovery chain, а не скрытый общий agent loop.
-
-`Replan` рассматривается как обычный Core-модуль. В прототипе любой модуль может вернуть вложенный `process`; ожидаемый основной случай — `Replan`, который на основании ошибки формирует следующую задачу/процесс исправления.
-
-Пока не фиксируется, насколько далеко Replan имеет право перестраивать исходную схему.
-
-## Automation package
-
-Папка загружается через `automation/index.js`. Entry point экспортирует definitions, а prompts указывает как отдельные `.md` файлы.
-
-Текущий prototype package содержит:
-
-- `schemas/code-change.js`;
-- `planners/default.js`;
-- `workers/code.js`;
-- `responses/change-code.js`;
-- `prompts/*.md`.
-
-## Запуск прототипа
-
-Обычная цепочка:
-
-```bash
-npm run prototype:automation -- "Prototype task"
+```text
+QUALIFY
+  ├─ SIMPLE  -> WORKER
+  ├─ MULTI   -> PLAN -> nested SEQUENCE
+  └─ PROCESS -> PLAN -> nested SEQUENCE
 ```
 
-Recovery через `Validate -> Replan -> repair process -> Validate`:
+Planner планирует semantic tasks. Operational Actions остаются внутри Worker.
+
+## Запуск prototype
+
+Простой task:
 
 ```bash
-npm run prototype:automation -- --fail-once "Prototype task"
+npm run prototype:automation -- "Сформулировать один итоговый ответ"
 ```
 
-Prototype runner использует простые локальные модули без LLM и печатает итоговые variables и trace, чтобы можно было увидеть вложенность, parent links и передачу результатов.
+Принудительно проверить multi-task route:
 
-Это ещё не замена текущему Engine/Planner pipeline. Прототип проверяет contracts загрузки, вложенных процессов, parent hierarchy, явного data flow и recovery через Replan перед интеграцией в основной runtime.
+```bash
+npm run prototype:automation -- --multi "Сравнить JSON, YAML и JavaScript как форматы конфигурации"
+```
 
-## Следующее направление
+Проверить route для явно заданного процесса:
 
-После первого prototype сформирован более простой model-facing контракт: Planner редактирует саму schema, шаги адресуются локальными номерами вместо model-generated `id`, context выбирается через `PARENT / PREVIOUS / STEP`, а Replan переписывает только невыполненный хвост. Полное описание, end-to-end failure/replan пример и TODO зафиксированы в [`process-schema-v2.md`](./process-schema-v2.md).
+```bash
+npm run prototype:automation -- --process "Исследовать варианты, сравнить их, затем выбрать итог"
+```
+
+Prototype использует локальные fake Planner/Worker modules: он проверяет schema mutation, qualifier routing, nested local numbering и context wiring без зависимости от реальной модели или test project.
+
+Следующий этап — подключить model-backed `QUALIFY/PLAN`, затем отдельно реализовать `ACTION.ASK_USER` и Replan benchmarks на том же contract.
