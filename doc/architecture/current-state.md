@@ -81,9 +81,9 @@ Core Worker API и concrete automation Workers разделены.
 
 Schema-driven Worker наследует `WorkerSchema` и предоставляет `getSchema()`. Custom Worker наследует `WorkerMethod` и предоставляет `run()`. `getImplementation()` сообщает Core, какой путь использовать.
 
-Production code/documentation flow пока использует Core `IterativeWorker`; concrete классы вынесены в `automation/Worker/`. Это временный compatibility path до появления подтверждённой Worker schema для code execution.
+Production code/documentation flow пока использует Core `WorkerIterativeRunner`; concrete классы вынесены в `automation/Worker/`. Это временный compatibility path до появления подтверждённой Worker schema для code execution.
 
-`ChangeCodeAction` определяет semantic edit intent. `IterativeWorker` передаёт intent в `Edit.change()`, а Research при необходимости читает файлы через `Edit.read()`.
+`ChangeCodeAction` определяет semantic edit intent. `WorkerIterativeRunner` передаёт intent в `Edit.change()`, а Research при необходимости читает файлы через `Edit.read()`.
 
 Worker возвращает production Engine:
 
@@ -97,7 +97,7 @@ Engine не должен знать, какие Actions Worker счёл необ
 
 Research — bounded service с persistent cache. Cache entry хранит source files и hashes; `not-found` не кешируется.
 
-Research, вызванный из `IterativeWorker`, может читать source content через текущий Edit, поэтому следующий step способен увидеть накопленные изменения предыдущего. Cache/hash semantics пока остаются основанными на физическом Project и могут не учитывать task-local content.
+Research, вызванный из `WorkerIterativeRunner`, может читать source content через текущий Edit, поэтому следующий step способен увидеть накопленные изменения предыдущего. Cache/hash semantics пока остаются основанными на физическом Project и могут не учитывать task-local content.
 
 ## Engine-owned Edit
 
