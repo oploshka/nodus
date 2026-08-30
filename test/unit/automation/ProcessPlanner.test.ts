@@ -3,15 +3,14 @@ import {
   PlanProcessModule,
   QualifyProcessModule,
   ReplanProcessModule,
-  type iProcessPlanner,
-  type sProcessPlanningRequest,
-  type sProcessReplanningRequest,
-} from '@engine/Automation/ProcessPlanner.js';
-import {
-  MODULE_RESULT,
-  STEP,
-  type sProcessExecutionContext,
-} from '@engine/Automation/ProcessSchema.js';
+} from '@engine/Planner/PlannerModule.js';
+import type {
+  iProcessPlanner,
+  sProcessPlanningRequest,
+  sProcessReplanningRequest,
+} from '@engine/Planner/PlannerTsType.js';
+import { MODULE_RESULT, STEP } from '@engine/Process/ProcessSchema.js';
+import type { sProcessExecutionContext } from '@engine/Process/ProcessTsType.js';
 
 const TASK_TYPE = {
   SIMPLE: 'SIMPLE',
@@ -54,7 +53,7 @@ class CapturingPlanner implements iProcessPlanner {
 
 const rootContext = (overrides: Partial<sProcessExecutionContext> = {}): sProcessExecutionContext => ({
   parent: 'Original task',
-  steps: {},
+  steps: [],
   step: 1,
   path: [1],
   ...overrides,

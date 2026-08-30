@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { ProcessRuntime } from '@engine/Automation/ProcessRuntime.js';
-import {
-  MODULE_RESULT,
-  STEP,
-  type iProcessModule,
-  type sProcessExecutionContext,
-  type sProcessOutput,
-  type sProcessSchema,
-  type tProcessExecutableStep,
-  type tProcessModuleResult,
-} from '@engine/Automation/ProcessSchema.js';
+import { ProcessRuntime } from '@engine/Process/ProcessRuntime.js';
+import { MODULE_RESULT, STEP } from '@engine/Process/ProcessSchema.js';
+import { StepRef } from '@engine/Process/StepRef.js';
+import type {
+  iProcessModule,
+  sProcessExecutionContext,
+  sProcessOutput,
+  sProcessSchema,
+  tProcessExecutableStep,
+  tProcessModuleResult,
+} from '@engine/Process/ProcessTsType.js';
 
 class TestModule implements iProcessModule {
   public readonly calls: Array<{ step: tProcessExecutableStep; context: sProcessExecutionContext }> = [];
@@ -34,7 +34,7 @@ class TestModule implements iProcessModule {
 }
 
 describe('ProcessRuntime v2', () => {
-  it('builds a step context only from parent, previous and selected local steps', async () => {
+  it('resolves model-facing local step numbers to stable runtime StepRef objects', async () => {
     const worker = new TestModule(STEP.WORKER, (_step, context) => ({
       status: 'SUCCESS',
       value: `worker-${context.step}`,
@@ -50,15 +50,17 @@ describe('ProcessRuntime v2', () => {
     };
 
     const result = await runtime.run(schema, 'root task');
+    const context = worker.calls[2]?.context;
 
     expect(result.status).toBe('SUCCESS');
-    expect(worker.calls[2]?.context).toEqual({
-      parent: 'root task',
-      previous: { status: 'SUCCESS', value: 'worker-2' },
-      steps: { 1: { status: 'SUCCESS', value: 'worker-1' } },
-      step: 3,
-      path: [3],
-    });
+    expect(context?.parent).toBe('root task');
+    expect(context?.previous).toEqual({ status: 'SUCCESS', value: 'worker-2' });
+    expect(context?.step).toBe(3);
+    expect(context?.path).toEqual([3]);
+    expect(context?.steps).toHaveLength(1);
+    expect(context?.steps[0]).toBeInstanceOf(StepRef);
+    expect(context?.steps[0]?.number).toBe(1);
+    expect(context?.steps[0]?.output).toEqual({ status: 'SUCCESS', value: 'worker-1' });
   });
 
   it('keeps parent knowledge local when entering a nested sequence', async () => {
@@ -141,6 +143,23 @@ describe('ProcessRuntime v2', () => {
     expect(planStep.schema?.task).toBe('planned task');
     expect(planStep.schema?.steps[0]?.output?.value).toBe('semantic child:planned task');
     expect(worker.calls[0]?.context.path).toEqual([1, 1]);
+  });
+
+  it('uses the final local step output as the sequence output without semantic aggregation', async () => {
+    const worker = new TestModule(STEP.WORKER, (step) => ({ status: 'SUCCESS', value: step.task }));
+    const runtime = new ProcessRuntime([worker]);
+    const schema: sProcessSchema = {
+      type: STEP.SEQUENCE,
+      steps: [
+        { type: STEP.WORKER, task: 'research one' },
+        { type: STEP.WORKER, task: 'final synthesis' },
+      ],
+    };
+
+    const result = await runtime.run(schema);
+
+    expect(result.output).toEqual({ status: 'SUCCESS', value: 'final synthesis' });
+    expect(schema.output).toEqual({ status: 'SUCCESS', value: 'final synthesis' });
   });
 
   it('keeps a failed step as history and can recover through REPLAN schema', async () => {
