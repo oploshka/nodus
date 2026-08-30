@@ -66,8 +66,8 @@ describe('ModelPlanner', () => {
     expect(system).toContain('independent-outcome');
     expect(system).toContain('dependency');
     expect(system).toContain('separate-deliverable');
-    expect(system).toContain('never by files, architectural layers, implementation phases');
-    expect(system).toContain('return exactly one coherent-outcome step');
+    expect(system).toContain('implementation layers, files');
+    expect(system).toContain('Default to exactly one PlanStep');
   });
 
   it('uses language.nodus for the model-facing plan contract', async () => {
