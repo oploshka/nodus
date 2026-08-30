@@ -154,12 +154,15 @@ describe('ProcessRuntime v2', () => {
     }));
     const replan = new TestModule(STEP.REPLAN, () => ({
       status: 'SUCCESS',
-      value: [
-        {
-          type: STEP.WORKER,
-          task: 'repair validation failure',
-        },
-      ],
+      value: {
+        task: 'original task',
+        steps: [
+          {
+            type: STEP.WORKER,
+            task: 'repair validation failure',
+          },
+        ],
+      },
     }));
     const worker = new TestModule(STEP.WORKER, (step) => ({
       status: 'SUCCESS',
@@ -178,9 +181,18 @@ describe('ProcessRuntime v2', () => {
               type: STEP.REPLAN,
               input: { context: { parent: true, previous: true } },
               transition: (localPlan, replanStep) => {
-                const next = localPlan.steps[replanStep - 1]?.output?.value;
-                if (!Array.isArray(next)) throw new Error('Expected replanned steps.');
-                localPlan.steps.splice(replanStep, localPlan.steps.length - replanStep, ...next);
+                const next = localPlan.steps[replanStep - 1]?.output?.value as {
+                  task?: unknown;
+                  steps?: unknown;
+                } | undefined;
+                if (!next || typeof next.task !== 'string' || !Array.isArray(next.steps)) {
+                  throw new Error('Expected replanned sequence.');
+                }
+                localPlan.steps.splice(replanStep, localPlan.steps.length - replanStep, {
+                  type: STEP.SEQUENCE,
+                  task: next.task,
+                  steps: next.steps,
+                });
               },
             });
           },
@@ -193,8 +205,9 @@ describe('ProcessRuntime v2', () => {
     expect(result.status).toBe('SUCCESS');
     expect(schema.steps[0]?.output).toEqual({ status: 'FAILURE', reason: 'validation failed' });
     expect(replan.calls[0]?.context.previous).toEqual({ status: 'FAILURE', reason: 'validation failed' });
-    expect(schema.steps.map((step) => step.type)).toEqual([STEP.VALIDATE, STEP.REPLAN, STEP.WORKER]);
+    expect(schema.steps.map((step) => step.type)).toEqual([STEP.VALIDATE, STEP.REPLAN, STEP.SEQUENCE]);
     expect(worker.calls[0]?.step.task).toBe('repair validation failure');
+    expect(worker.calls[0]?.context.path).toEqual([3, 1]);
   });
 
   it('rejects references to future or nonexistent local steps', async () => {
