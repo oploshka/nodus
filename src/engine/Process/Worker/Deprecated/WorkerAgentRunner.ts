@@ -1,5 +1,5 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { WorkerResult, WorkerRunData } from '@engine/Worker/Worker.js';
+import type { WorkerResult, WorkerRunData } from '@engine/Worker/Deprecated/Worker.js';
 import type { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
 import type { AgentRunner } from '@model/Runner/AgentRunner.js';
@@ -12,7 +12,7 @@ export interface sWorkerAgentOwner {
   presentation: WorkerPresentation;
 }
 
-/** Generic bounded agent execution used by automation-defined Agent Workers. */
+/** Legacy production agent execution. New Process Worker code must not depend on Deprecated. */
 export class WorkerAgentRunner {
   public constructor(
     private readonly agent: AgentRunner,

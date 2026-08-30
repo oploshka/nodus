@@ -1,45 +1,71 @@
 # Worker
 
-В Nodus 0.5 Worker разделён на Core-механику и конкретный versioned automation module.
+В Nodus 0.5 Worker разделён на automation-facing contract, Core execution adapter и временный legacy compatibility path.
 
-Core хранит контракт в `src/engine/Process/Worker/`, а конкретные `WorkerCode`, `WorkerDocumentation` и `WorkerAgent` живут в `automation/Worker/`. Это отделяет вопрос «что такое Worker и как Core его исполняет» от пользовательской конфигурации конкретного Worker.
+```text
+src/engine/Process/Worker/
+  Contract/
+    WorkerSchema.ts
+    WorkerMethod.ts
+    WorkerTsType.ts
 
-## Process Worker contract
+  WorkerRunner.ts
+  WorkerResolver.ts
 
-Automation Worker сообщает Core способ исполнения через `getImplementation()`.
+  Deprecated/
+    Worker.ts
+    WorkerContext.ts
+    WorkerIterativeRunner.ts
+    WorkerAgentRunner.ts
+```
 
-Поддерживаются два варианта:
+## Contract
 
-- `SCHEMA` — Worker возвращает локальную Process schema; Core сам исполняет её;
-- `METHOD` — Worker предоставляет custom `run(request)` для поведения, которое пока удобнее выразить кодом.
+`Contract/` — API, на который должны опираться новые automation Workers. Новый Process-код не должен импортировать `Deprecated/`.
 
-`WorkerSchema` — abstract base для schema-driven Worker и требует `getId()` + `getSchema()`.
+Worker сообщает Core способ исполнения через `getImplementation()`:
 
-`WorkerMethod` — abstract base для custom Worker и требует `getId()` + `run()`.
+- `SCHEMA` — Worker предоставляет локальную Process schema;
+- `METHOD` — Worker предоставляет custom `run(request)`.
 
-`WorkerRunner` не является родителем конкретных Workers. Это adapter `STEP.WORKER -> automation Worker`: он собирает `task/context`, читает implementation type и либо возвращает `MODULE_RESULT.SCHEMA` в `ProcessRuntime`, либо вызывает method.
+`WorkerSchema` требует `getId()` + `getSchema()`. `WorkerMethod` требует `getId()` + `run()`.
+
+```text
+Worker
+  -> getImplementation()
+       -> SCHEMA -> schema
+       -> METHOD -> method(request)
+```
+
+Core остаётся единственным исполнителем schema.
+
+## Runner / Resolver
+
+`WorkerRunner` — adapter `STEP.WORKER -> automation Worker`. Он не является superclass concrete Worker.
+
+`WorkerResolver` выполняет только deterministic selection:
+
+- `step.preset` -> exact Worker id;
+- один доступный Worker -> использовать его;
+- несколько Workers без `preset` -> error.
+
+Semantic/model-based выбор Worker не спрятан внутрь Resolver и остаётся отдельной будущей границей.
 
 ```text
 STEP.WORKER
   -> WorkerRunner
+  -> WorkerResolver
   -> Worker.getImplementation()
-       -> SCHEMA -> ProcessRuntime executes schema
-       -> METHOD -> custom run(request)
+       -> SCHEMA -> ProcessRuntime
+       -> METHOD -> custom method
 ```
 
-## Текущий compatibility path
+## Deprecated
 
-Миграция production Engine на новый Process contract ещё не завершена целиком. Существующий code/documentation execution пока использует Core `WorkerIterativeRunner`, но concrete классы уже вынесены в `automation/Worker/`.
+`Deprecated/` содержит старый production Worker contract и механики, которые всё ещё завязаны на `Task`, `PlanStep`, `WorkerInstrument`, `completed/not-completed/failed` и старый retrieval context.
 
-Agent-specific bounded loop извлечён из concrete Worker в Core `WorkerAgentRunner`; `automation/WorkerAgent` оставляет только идентичность и подключение этого механизма.
+Они сохраняются только для переходного production path. Новая архитектура не должна проектироваться вокруг этих типов и не должна импортировать `Deprecated/`.
 
-Для code/documentation текущий iterative flow по-прежнему использует:
+Concrete legacy `WorkerCode` / `WorkerDocumentation` пока используют `Deprecated/WorkerIterativeRunner`. Agent compatibility path использует `Deprecated/WorkerAgentRunner`. Это временное состояние, а не новый Worker API.
 
-- `ChangeCodeAction` — semantic edit intent;
-- `FindFileAction` / `ReadFileAction` — дешёвый retrieval;
-- `ResearchAction` — bounded project research;
-- Engine-owned Edit — task-local чтение, накопление и применение изменений.
-
-`WorkerCode` планируется переводить на schema-driven форму отдельно, когда будет зафиксирована полезная Worker schema; сам факт наличия `WorkerSchema` не является причиной преждевременно переписывать iterative lifecycle.
-
-Technical EditStrategy и applicators принадлежат Engine Edit layer. Подробности: [`edit.md`](edit.md).
+Следующий schema-driven `WorkerCode` должен строиться от `Contract/`, а не переписывать `WorkerIterativeRunner` строка-в-строку.
