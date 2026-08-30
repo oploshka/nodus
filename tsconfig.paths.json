@@ -9,7 +9,7 @@
         "src/engine/Process/Process/*"
       ],
       "@engine/Step/*": [
-        "src/engine/Process/Step/*"
+        "src/engine/Step/*"
       ],
       "@engine/Planner/*": [
         "src/engine/Process/Planner/*"
@@ -18,10 +18,10 @@
         "src/engine/Process/Determine/*"
       ],
       "@engine/Action/*": [
-        "src/engine/Process/Step/Action/*"
+        "src/engine/Step/Action/*"
       ],
       "@engine/Worker/Action/*": [
-        "src/engine/Process/Step/Action/*"
+        "src/engine/Step/Action/*"
       ],
       "@engine/Worker/*": [
         "src/engine/Process/Worker/*"

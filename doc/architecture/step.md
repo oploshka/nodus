@@ -1,6 +1,6 @@
 # Step
 
-`Step/` — новая ветка Process architecture в Nodus 0.5. Она не переписывает существующие `Worker/` и `Planner/` на месте: текущая структура остаётся как переходная реализация, а общая механика строится отдельно и проверяется на нескольких semantic roles.
+`src/engine/Step/` — новая schema-driven ветка исполнения semantic Process steps в Nodus 0.5. Она находится на одном уровне с `src/engine/Process/`: Process владеет языком и runtime schema, Step — общей механикой исполнения конкретных semantic roles.
 
 ## Общая механика
 
@@ -31,12 +31,10 @@ StepSchema                 StepMethod
 
 Сейчас `Planner*` привязан только к `STEP.PLAN`. `REPLAN` намеренно не склеивается с Planner автоматически: это отдельный semantic Step, и его границу нужно подтвердить отдельно.
 
-## Action
+## Migration boundary
 
-Action физически перенесён под `Process/Step/Action/`. Старые aliases `@engine/Action/*` и `@engine/Worker/Action/*` временно указывают на новое расположение, поэтому concrete Action implementation можно разбирать постепенно.
+Новые Worker/Planner contracts и runners живут только под `src/engine/Step/`. Старые `src/engine/Process/Worker/` и `src/engine/Process/Planner/` сохраняют только `Deprecated/` compatibility implementation до её разбора.
 
-`ActionRunner` отличается от default `StepRunner` только role-specific binding: implementation id берётся из обязательного поля `action`, а не из `preset`.
+Action полностью перенесён в `src/engine/Step/Action/`. Старые aliases `@engine/Action/*` и `@engine/Worker/Action/*` временно указывают на новое расположение.
 
-## Что пока не меняется
-
-`Determine`, `Edit`, `EngineTest` и `Research` этим этапом не переосмысляются и не перемещаются. Их границы будут рассматриваться отдельно после того, как Step abstraction проявит реальные требования к capabilities и результатам.
+`Determine`, `Edit`, `EngineTest` и `Research` этим этапом не переосмысляются и не перемещаются.
