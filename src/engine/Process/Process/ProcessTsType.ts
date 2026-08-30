@@ -1,5 +1,5 @@
 import { MODULE_RESULT, STEP } from './ProcessSchema.js';
-import type { StepRef } from './StepRef.js';
+import type { ProcessStepRef } from './Kit/ProcessStepRef.js';
 
 export type pProcessStatus = 'SUCCESS' | 'FAILURE';
 
@@ -54,7 +54,7 @@ export interface sProcessSchema extends sProcessSequence {}
 export interface sProcessExecutionContext {
   parent?: unknown;
   previous?: sProcessOutput;
-  steps: ReadonlyArray<StepRef>;
+  steps: ReadonlyArray<ProcessStepRef>;
   step: number;
   path: ReadonlyArray<number>;
 }

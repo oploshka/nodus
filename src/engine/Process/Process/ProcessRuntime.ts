@@ -1,5 +1,5 @@
 import { MODULE_RESULT, STEP } from './ProcessSchema.js';
-import { StepRef } from './StepRef.js';
+import { ProcessStepRef } from './Kit/ProcessStepRef.js';
 import type {
   iProcessModule,
   sProcessExecutionContext,
@@ -128,7 +128,7 @@ export class ProcessRuntime {
     path: number[],
   ): sProcessExecutionContext {
     const config = plan.steps[index]?.input?.context;
-    const selectedSteps: StepRef[] = [];
+    const selectedSteps: ProcessStepRef[] = [];
 
     for (const stepNumber of config?.steps ?? []) {
       if (!Number.isInteger(stepNumber) || stepNumber < 1 || stepNumber > index) {
@@ -136,7 +136,7 @@ export class ProcessRuntime {
       }
       const target = plan.steps[stepNumber - 1];
       if (!target?.output) throw new Error(`Local step ${stepNumber} has no output.`);
-      selectedSteps.push(new StepRef(stepNumber, target));
+      selectedSteps.push(new ProcessStepRef(stepNumber, target));
     }
 
     const previous = config?.previous && index > 0

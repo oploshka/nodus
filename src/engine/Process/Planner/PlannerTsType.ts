@@ -2,7 +2,7 @@ import type {
   sProcessExecutionContext,
   sProcessOutput,
   tProcessStep,
-} from '../ProcessTsType.js';
+} from '@engine/Process/ProcessTsType.js';
 
 export interface sProcessPlanningRequest {
   task: string;

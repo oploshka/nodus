@@ -1,11 +1,11 @@
-import { MODULE_RESULT, STEP } from '../ProcessSchema.js';
+import { MODULE_RESULT, STEP } from '@engine/Process/ProcessSchema.js';
 import type {
   iProcessModule,
   sProcessExecutionContext,
   tProcessExecutableStep,
   tProcessModuleResult,
   tProcessStep,
-} from '../ProcessTsType.js';
+} from '@engine/Process/ProcessTsType.js';
 import type { iProcessPlanner } from './PlannerTsType.js';
 
 export class QualifyProcessModule implements iProcessModule {
