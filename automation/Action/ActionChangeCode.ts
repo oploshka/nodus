@@ -15,7 +15,7 @@ import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import type { EditStrategyId, ProjectEditRequest } from '@engine/Edit/EditTypes.js';
 import type { tWorkerContextItem } from '@engine/Worker/WorkerContext.js';
-import type { sFindFileActionInput } from './FindFileAction.js';
+import type { sFindFileActionInput } from './ActionFindFile.js';
 
 interface ChangeDecision {
   outcome: 'ready' | 'missing-information' | 'already-completed' | 'failed';
