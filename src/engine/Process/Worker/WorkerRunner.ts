@@ -9,13 +9,17 @@ import {
   WORKER_IMPLEMENTATION,
   type iWorkerModule,
   type sWorkerRequest,
-} from './WorkerTsType.js';
+} from './Contract/WorkerTsType.js';
+import { WorkerResolver, type iWorkerResolver } from './WorkerResolver.js';
 
-/** Process adapter for one automation Worker. Core decides whether to execute its schema or method. */
+/** Process adapter for automation Workers. Core decides which Worker to use and how to execute it. */
 export class WorkerRunner implements iProcessModule {
   public readonly type = STEP.WORKER;
 
-  public constructor(public readonly worker: iWorkerModule) {}
+  public constructor(
+    public readonly workers: ReadonlyArray<iWorkerModule>,
+    private readonly resolver: iWorkerResolver = new WorkerResolver(),
+  ) {}
 
   public async execute(
     step: tProcessExecutableStep,
@@ -26,8 +30,9 @@ export class WorkerRunner implements iProcessModule {
       throw new Error('WORKER requires a non-empty self-contained task.');
     }
 
+    const worker = this.resolver.resolve(step.preset, this.workers);
     const request: sWorkerRequest = { task, context };
-    const implementation = this.worker.getImplementation();
+    const implementation = worker.getImplementation();
 
     switch (implementation.type) {
       case WORKER_IMPLEMENTATION.SCHEMA:
