@@ -6,9 +6,41 @@
 
 Актуальный рабочий process contract описан в `doc/research/process-schema-v2.md`.
 
-## Разделение данных
+## Engine boundary
 
-`automation/` хранит версионируемое поведение Nodus и группируется по механизмам, а не по типам файлов:
+Исполняющая механика больше не принадлежит `Automation`:
+
+```text
+src/engine/
+  Process/
+    ProcessRuntime.ts
+    ProcessSchema.ts
+    ProcessTsType.ts
+    StepRef.ts
+
+    Action/
+      Action.ts
+      ...
+
+    Worker/
+      WorkerSchema.ts
+      WorkerRunner.ts
+      WorkerTsType.ts
+
+    Planner/
+      PlannerResolver.ts
+      PlannerModule.ts
+      PlannerTsType.ts
+
+  Automation/
+    AutomationLoader.ts
+```
+
+`Process` задаёт язык и правила исполнения. `Automation` только загружает versioned behavior из `automation/`.
+
+## Automation data
+
+`automation/` группируется по механизмам, а не по типам файлов:
 
 ```text
 automation/
@@ -31,9 +63,7 @@ automation/
       WorkerCodeResponse.js
 ```
 
-Prompt и response contract colocated с механизмом, которому они принадлежат. Глобальных `prompts/`, `responses/` и `schemas/` registries больше нет.
-
-Внутри automation package используется native Node alias `#automation/*`.
+Prompt и response contract colocated с механизмом, которому они принадлежат. Внутри automation package используется native Node alias `#automation/*`.
 
 Служебные cache/log/state/session/index данные остаются в `.nodus/`.
 
@@ -41,7 +71,7 @@ Prompt и response contract colocated с механизмом, которому 
 
 Core фиксирует язык исполнения: `STEP.SEQUENCE`, `QUALIFY`, `PLAN`, `WORKER`, `ACTION`, `VALIDATE`, `REPLAN`.
 
-Конкретные classifier options и Action ids не являются Core enum. Например `SIMPLE/MULTI/PROCESS` принадлежат `QualifierTask`, а Worker сам объявляет набор нужных ему Actions.
+Конкретные classifier options и Action ids не являются Core enum. Например `SIMPLE/MULTI/PROCESS` принадлежат `QualifierTask`, а Worker объявляет нужный ему набор Actions.
 
 Модуль на опрос Core возвращает ровно один из двух результатов:
 
@@ -54,17 +84,40 @@ SCHEMA
 
 Planner обычно возвращает `SCHEMA`. Worker может вернуть `OUTPUT` или `SCHEMA`. Action ожидается terminal executor и обычно возвращает `OUTPUT`.
 
+## Worker boundary
+
+Core-side Worker состоит из двух простых частей:
+
+```text
+WorkerSchema = конфигурация Worker
+WorkerRunner = abstract execution boundary
+```
+
+`WorkerSchema` получает prompt, response, Actions и limits. Кастомное поведение наследуется от `WorkerRunner` и реализует `run(request) -> OUTPUT | SCHEMA`.
+
+Конкретная реализация Worker может находиться в `automation/`; Core не должен знать детали её поведения.
+
 ## PlannerResolver
 
 Planner выбирается Core boundary через `PlannerResolver`.
 
 Текущая версия намеренно простая: один Planner — вернуть его; ни одного — configuration error; несколько — error, пока selection policy не реализована.
 
-## Локальная sequence
+## Локальная sequence и StepRef
 
-Каждая `SEQUENCE` имеет локальную one-based нумерацию. Шаг получает только явно выбранный context: `parent`, `previous`, `steps`.
+Persisted/model-facing schema по-прежнему использует простые локальные номера:
+
+```js
+steps: [1, 2, 3]
+```
+
+При исполнении Core проверяет номер и превращает его в runtime-only `StepRef`, который держит ссылку на реальный объект уже выполненного step. Модель `StepRef` не видит.
+
+Это сохраняет простой schema format и одновременно не заставляет внутреннее выполнение повторно адресовать dependency по изменяемой позиции массива.
 
 `transition(plan, step)` получает только текущую локальную sequence и может переписать только невыполненный хвост.
+
+`SEQUENCE.output` не синтезируется Core семантически: успешная sequence отдаёт наружу output своего последнего локального step.
 
 ## Текущий PlannerTask prototype
 
@@ -93,4 +146,4 @@ npm run prototype:automation -- --multi "Сравнить JSON, YAML и JavaScri
 npm run prototype:automation -- --process "Исследовать варианты, сравнить их, затем выбрать итог"
 ```
 
-Prototype использует fake Planner/Worker modules. Он проверяет PlannerResolver, routing, `OUTPUT | SCHEMA`, local numbering и context wiring без зависимости от реальной модели.
+Prototype использует fake Planner и custom `WorkerRunner`. Он проверяет PlannerResolver, routing, `OUTPUT | SCHEMA`, local numbering, `StepRef` и context wiring без зависимости от реальной модели.

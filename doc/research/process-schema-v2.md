@@ -4,6 +4,8 @@
 
 Core является ограничителем и единственным исполнителем process schema. Planner и Worker могут вернуть Core новую локальную schema, но не исполняют её самостоятельно.
 
+Исполняющая механика живёт в `src/engine/Process`; `src/engine/Automation` отвечает только за загрузку versioned automation behavior.
+
 ## STEP
 
 Фиксированный язык исполнения живёт в Core:
@@ -31,7 +33,7 @@ enum STEP {
 }
 ```
 
-Worker определяет, какие Actions ему нужны.
+Action находится на уровне `Process/Action`. Worker определяет, какие Actions ему нужны, но Action не является внутренним типом Worker.
 
 ## Ответ модуля Core
 
@@ -60,7 +62,7 @@ Action  -> чаще OUTPUT
 
 Каждая `SEQUENCE` — отдельная локальная цепочка с нумерацией от `1`.
 
-Контекст шага:
+Model-facing контекст шага остаётся простым:
 
 ```js
 input: {
@@ -73,6 +75,17 @@ input: {
 ```
 
 Runtime отклоняет ссылки на текущие, будущие и несуществующие local steps. Вложенная schema не получает автоматический доступ к внешним уровням.
+
+### StepRef
+
+Числа в persisted schema не являются runtime-ссылками. После проверки Core резолвит каждый выбранный local step в `StepRef`:
+
+```text
+1 -> StepRef(actual step object)
+2 -> StepRef(actual step object)
+```
+
+`StepRef` существует только под капотом и отдаёт output реального выполненного объекта. Модель продолжает писать `steps: [1, 2]` и ничего не знает о ссылочном представлении Runtime.
 
 ## Output
 
@@ -88,7 +101,7 @@ interface sProcessOutput {
 
 У executable step дополнительно может появиться `schema` — это schema, которую module вернул Core.
 
-`SEQUENCE.output` формируется Core как локальный text summary semantic outputs. `QUALIFY` в summary не включается.
+Успешная `SEQUENCE` возвращает копию output последнего локального step. Core не объединяет semantic outputs и не пытается самостоятельно писать summary.
 
 ## transition
 
@@ -96,7 +109,7 @@ interface sProcessOutput {
 
 ## QualifierTask
 
-`SIMPLE/MULTI/PROCESS` больше не являются Core contract. Это vocabulary конкретного `QualifierTask` и хранится рядом с ним.
+`SIMPLE/MULTI/PROCESS` не являются Core contract. Это vocabulary конкретного `QualifierTask` и хранится рядом с ним.
 
 Текущая квалификация может быть заменена другим classifier vocabulary без изменения Core.
 
@@ -129,24 +142,30 @@ Core validates and executes schema
 Worker may execute directly or return another schema
 ```
 
-Planner не должен создавать `STEP.ACTION`: operational Actions принадлежат Worker.
+Planner не должен создавать `STEP.ACTION`: operational Actions принадлежат Worker на уровне выбора доступных capabilities, но сами Action являются Process primitives.
 
 ## Worker
 
-Worker остаётся локально автономным. Он может вернуть `OUTPUT` или `SCHEMA`.
-
-Конкретный Worker colocates config, prompt и response contract:
+Core Worker API разделён на описание и выполнение:
 
 ```text
-automation/
-  Worker/
-    WorkerCode/
-      WorkerCode.js
-      WorkerCodePrompt.md
-      WorkerCodeResponse.js
+Process/Worker/
+  WorkerSchema.ts
+  WorkerRunner.ts
+  WorkerTsType.ts
 ```
 
-Worker также объявляет нужный ему набор Actions. Жёсткий security sandbox по этому списку пока не вводится.
+`WorkerSchema` — concrete config object с `prompt`, `response`, `actions`, `limits`.
+
+`WorkerRunner` — abstract execution boundary. Он связывает `STEP.WORKER` с Worker task/context, а конкретный Worker реализует только:
+
+```ts
+run(request) -> OUTPUT | SCHEMA
+```
+
+Кастомные реализации можно держать в `automation/`, не добавляя их поведение в Core.
+
+Жёсткий security sandbox по списку Actions пока не вводится.
 
 ## Failure / REPLAN
 
@@ -155,6 +174,35 @@ Failed step остаётся в process document с `status: FAILURE`.
 Если transition после failure действительно заменил хвост, Runtime может продолжить через `REPLAN`.
 
 `REPLAN`, как и `PLAN`, может вернуть `SCHEMA`. Core сохраняет и исполняет её на месте REPLAN step.
+
+## Engine structure
+
+```text
+src/engine/
+  Process/
+    ProcessRuntime.ts
+    ProcessSchema.ts
+    ProcessTsType.ts
+    StepRef.ts
+
+    Action/
+      Action.ts
+
+    Worker/
+      WorkerSchema.ts
+      WorkerRunner.ts
+      WorkerTsType.ts
+
+    Planner/
+      PlannerResolver.ts
+      PlannerModule.ts
+      PlannerTsType.ts
+
+  Automation/
+    AutomationLoader.ts
+```
+
+Файлы `*TsType.ts` используются как технические контейнеры TypeScript contracts, чтобы не смешивать их с одноимёнными предметными `Type`.
 
 ## Automation structure
 
@@ -179,4 +227,4 @@ import QualifierTask from '#automation/Qualifier/QualifierTask/QualifierTask.js'
 
 ## Тестовая стратегия
 
-Runtime тестируется детерминированно готовыми schemas и fake modules. Отдельно проверяются module `OUTPUT`, module `SCHEMA`, local context, immutable completed prefix, failure -> REPLAN schema, PlannerResolver и PlannerTask routing.
+Runtime тестируется детерминированно готовыми schemas и fake modules. Отдельно проверяются module `OUTPUT`, module `SCHEMA`, `StepRef`, local context, immutable completed prefix, failure -> REPLAN schema, PlannerResolver, WorkerRunner и PlannerTask routing.
