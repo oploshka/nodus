@@ -2,77 +2,95 @@
 
 Статус: эксперимент.
 
-Цель — проверить Nodus как runtime, который исполняет настраиваемые и версионируемые schemas, а не одну фиксированную цепочку `Planner -> Worker -> Edit -> Validation`.
+Цель — проверить Nodus как ограничивающий Core runtime, который опрашивает подключаемые модули и исполняет возвращаемые ими process schemas.
 
-Актуальный рабочий process contract описан в `doc/research/process-schema-v2.md`. Старый prototype с `kind/use/saveAs/variables` заменён локальной step-моделью.
+Актуальный рабочий process contract описан в `doc/research/process-schema-v2.md`.
 
 ## Разделение данных
 
-`automation/` хранит пользовательские и версионируемые определения поведения Nodus: schemas, planner/worker presets, prompts и response contracts.
-
-Служебные cache/log/state/session/index данные не должны жить в `automation/`; для них предназначен runtime storage `.nodus/`.
-
-Чистые тексты prompts хранятся отдельно в Markdown. JavaScript связывает prompts, presets, schemas и transition-функции.
-
-## Текущий prototype
-
-Core contract использует:
+`automation/` хранит версионируемое поведение Nodus и группируется по механизмам, а не по типам файлов:
 
 ```text
-STEP.SEQUENCE
-STEP.QUALIFY
-STEP.PLAN
-STEP.WORKER
-STEP.ACTION
-STEP.VALIDATE
-STEP.REPLAN
+automation/
+  Planner/
+    PlannerTask/
+      PlannerTask.js
+      PlannerTaskPrompt.md
+      PlannerTaskResponse.js
+
+  Qualifier/
+    QualifierTask/
+      QualifierTask.js
+      QualifierTaskPrompt.md
+      QualifierTaskResponse.js
+
+  Worker/
+    WorkerCode/
+      WorkerCode.js
+      WorkerCodePrompt.md
+      WorkerCodeResponse.js
 ```
 
-Каждая `SEQUENCE` имеет локальную one-based нумерацию. Шаг получает только явно выбранный context:
+Prompt и response contract colocated с механизмом, которому они принадлежат. Глобальных `prompts/`, `responses/` и `schemas/` registries больше нет.
 
-```js
-input: {
-  context: {
-    parent: true,
-    previous: true,
-    steps: [1, 2],
-  },
-}
+Внутри automation package используется native Node alias `#automation/*`.
+
+Служебные cache/log/state/session/index данные остаются в `.nodus/`.
+
+## Core contract
+
+Core фиксирует язык исполнения: `STEP.SEQUENCE`, `QUALIFY`, `PLAN`, `WORKER`, `ACTION`, `VALIDATE`, `REPLAN`.
+
+Конкретные classifier options и Action ids не являются Core enum. Например `SIMPLE/MULTI/PROCESS` принадлежат `QualifierTask`, а Worker сам объявляет набор нужных ему Actions.
+
+Модуль на опрос Core возвращает ровно один из двух результатов:
+
+```text
+OUTPUT
+SCHEMA
 ```
 
-После выполнения step может вызвать `transition(plan, step)`. В функцию передаётся только текущая локальная sequence; transition может переписать только хвост после выполненного шага.
+`OUTPUT` завершает текущую работу модуля. `SCHEMA` передаёт Core локальную schema; Core сохраняет её рядом с вызвавшим step и исполняет сам.
 
-Planner сам описан schema:
+Planner обычно возвращает `SCHEMA`. Worker может вернуть `OUTPUT` или `SCHEMA`. Action ожидается terminal executor и обычно возвращает `OUTPUT`.
+
+## PlannerResolver
+
+Planner выбирается Core boundary через `PlannerResolver`.
+
+Текущая версия намеренно простая: один Planner — вернуть его; ни одного — configuration error; несколько — error, пока selection policy не реализована.
+
+## Локальная sequence
+
+Каждая `SEQUENCE` имеет локальную one-based нумерацию. Шаг получает только явно выбранный context: `parent`, `previous`, `steps`.
+
+`transition(plan, step)` получает только текущую локальную sequence и может переписать только невыполненный хвост.
+
+## Текущий PlannerTask prototype
 
 ```text
 QUALIFY
   ├─ SIMPLE  -> WORKER
-  ├─ MULTI   -> PLAN -> nested SEQUENCE
-  └─ PROCESS -> PLAN -> nested SEQUENCE
+  ├─ MULTI   -> PLAN
+  └─ PROCESS -> PLAN
 ```
 
-Planner планирует semantic tasks. Operational Actions остаются внутри Worker.
+`PLAN` возвращает `SCHEMA`, и Core исполняет её как вложенную локальную schema самого PLAN step.
+
+Planner планирует semantic tasks и не имеет права генерировать `STEP.ACTION`.
 
 ## Запуск prototype
-
-Простой task:
 
 ```bash
 npm run prototype:automation -- "Сформулировать один итоговый ответ"
 ```
 
-Принудительно проверить multi-task route:
-
 ```bash
 npm run prototype:automation -- --multi "Сравнить JSON, YAML и JavaScript как форматы конфигурации"
 ```
-
-Проверить route для явно заданного процесса:
 
 ```bash
 npm run prototype:automation -- --process "Исследовать варианты, сравнить их, затем выбрать итог"
 ```
 
-Prototype использует локальные fake Planner/Worker modules: он проверяет schema mutation, qualifier routing, nested local numbering и context wiring без зависимости от реальной модели или test project.
-
-Следующий этап — подключить model-backed `QUALIFY/PLAN`, затем отдельно реализовать `ACTION.ASK_USER` и Replan benchmarks на том же contract.
+Prototype использует fake Planner/Worker modules. Он проверяет PlannerResolver, routing, `OUTPUT | SCHEMA`, local numbering и context wiring без зависимости от реальной модели.

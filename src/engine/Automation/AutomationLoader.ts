@@ -1,25 +1,20 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { sProcessSchema } from './ProcessSchema.js';
 
 export interface sAutomationPackageSource {
-  prompts?: Record<string, string>;
-  schemas?: Record<string, sProcessSchema>;
   planners?: Record<string, unknown>;
+  qualifiers?: Record<string, unknown>;
   workers?: Record<string, unknown>;
-  responses?: Record<string, unknown>;
   policies?: Record<string, unknown>;
   context?: Record<string, unknown>;
 }
 
 export interface sAutomationPackage {
   root: string;
-  prompts: Readonly<Record<string, string>>;
-  schemas: Readonly<Record<string, sProcessSchema>>;
   planners: Readonly<Record<string, unknown>>;
+  qualifiers: Readonly<Record<string, unknown>>;
   workers: Readonly<Record<string, unknown>>;
-  responses: Readonly<Record<string, unknown>>;
   policies: Readonly<Record<string, unknown>>;
   context: Readonly<Record<string, unknown>>;
 }
@@ -31,17 +26,22 @@ export class AutomationLoader {
     const indexPath = resolve(absoluteRoot, 'index.js');
     const module = await import(pathToFileURL(indexPath).href) as { default?: unknown };
     const source = this.asPackageSource(module.default);
-    const prompts = await this.loadPrompts(absoluteRoot, source.prompts ?? {});
+
+    const [planners, qualifiers, workers, policies, context] = await Promise.all([
+      this.hydrateDefinitions(source.planners ?? {}),
+      this.hydrateDefinitions(source.qualifiers ?? {}),
+      this.hydrateDefinitions(source.workers ?? {}),
+      this.hydrateDefinitions(source.policies ?? {}),
+      this.hydrateDefinitions(source.context ?? {}),
+    ]);
 
     return {
       root: absoluteRoot,
-      prompts,
-      schemas: source.schemas ?? {},
-      planners: source.planners ?? {},
-      workers: source.workers ?? {},
-      responses: source.responses ?? {},
-      policies: source.policies ?? {},
-      context: source.context ?? {},
+      planners,
+      qualifiers,
+      workers,
+      policies,
+      context,
     };
   }
 
@@ -52,14 +52,34 @@ export class AutomationLoader {
     return value as sAutomationPackageSource;
   }
 
-  private static async loadPrompts(
-    root: string,
-    promptFiles: Readonly<Record<string, string>>,
-  ): Promise<Record<string, string>> {
-    const entries = await Promise.all(Object.entries(promptFiles).map(async ([id, relativePath]) => {
-      const content = await readFile(resolve(root, relativePath), 'utf8');
-      return [id, content] as const;
-    }));
+  private static async hydrateDefinitions(
+    definitions: Readonly<Record<string, unknown>>,
+  ): Promise<Record<string, unknown>> {
+    const entries = await Promise.all(Object.entries(definitions).map(async ([id, definition]) => [
+      id,
+      await this.hydrateValue(definition),
+    ] as const));
+
+    return Object.fromEntries(entries);
+  }
+
+  private static async hydrateValue(value: unknown, key?: string): Promise<unknown> {
+    if (key === 'prompt' && value instanceof URL) {
+      if (value.protocol !== 'file:') throw new Error(`Automation prompt must be a file URL: ${value.href}`);
+      return readFile(value, 'utf8');
+    }
+
+    if (Array.isArray(value)) {
+      return Promise.all(value.map((item) => this.hydrateValue(item)));
+    }
+
+    if (typeof value !== 'object' || value === null || value instanceof URL) return value;
+
+    const entries = await Promise.all(Object.entries(value).map(async ([entryKey, entryValue]) => [
+      entryKey,
+      await this.hydrateValue(entryValue, entryKey),
+    ] as const));
+
     return Object.fromEntries(entries);
   }
 }

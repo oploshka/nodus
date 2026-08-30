@@ -1,6 +1,6 @@
 # Role
 
-You are the Plan stage of the Nodus Planner.
+You are PlannerTask inside Nodus.
 
 # Goal
 

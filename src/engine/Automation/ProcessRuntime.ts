@@ -1,4 +1,5 @@
 import {
+  MODULE_RESULT,
   STEP,
   type iProcessModule,
   type sProcessExecutionContext,
@@ -16,13 +17,6 @@ interface sSequenceSummaryEntry {
   value: string;
 }
 
-/**
- * Executes one mutable local sequence at a time.
- *
- * Steps are addressed by one-based positions only inside their current
- * sequence. A transition receives that local sequence and may rewrite only
- * the tail after the completed step.
- */
 export class ProcessRuntime {
   private readonly modules = new Map<STEP, iProcessModule>();
   private trace: sProcessTraceEntry[] = [];
@@ -113,9 +107,25 @@ export class ProcessRuntime {
     if (!module) throw new Error(`Unknown process module: ${step.type}`);
 
     this.trace.push({ path: [...path], type: step.type, status: 'STARTED' });
-    const output = await module.execute(step, context);
+    const result = await module.execute(step, context);
+
+    const output = result.type === MODULE_RESULT.OUTPUT
+      ? result.output
+      : await this.executeReturnedSchema(step, result.schema, context, path);
+
     this.trace.push({ path: [...path], type: step.type, status: output.status });
     return output;
+  }
+
+  private async executeReturnedSchema(
+    step: tProcessExecutableStep,
+    schema: sProcessSequence,
+    context: sProcessExecutionContext,
+    path: number[],
+  ): Promise<sProcessOutput> {
+    step.schema = schema;
+    const childInput = schema.task ?? step.task ?? this.contextPayload(context);
+    return this.executeSequence(schema, childInput, path);
   }
 
   private buildContext(
@@ -161,7 +171,7 @@ export class ProcessRuntime {
     const entries: sSequenceSummaryEntry[] = [];
 
     sequence.steps.forEach((step, index) => {
-      if (step.type === STEP.QUALIFY || step.type === STEP.PLAN || step.type === STEP.REPLAN) return;
+      if (step.type === STEP.QUALIFY) return;
       const value = step.output?.value;
       if (typeof value !== 'string' || value.trim().length === 0) return;
       entries.push({ step: index + 1, value });

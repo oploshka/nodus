@@ -1,5 +1,5 @@
 export default {
-  id: 'planner',
+  id: 'task',
   format: 'json',
   fields: {
     steps: 'array',
