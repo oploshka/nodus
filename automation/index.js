@@ -1,7 +1,7 @@
-import { ChangeCodeAction } from '#automation/Action/ChangeCodeAction.ts';
-import { FindFileAction } from '#automation/Action/FindFileAction.ts';
-import { ReadFileAction } from '#automation/Action/ReadFileAction.ts';
-import { ResearchAction } from '#automation/Action/ResearchAction.ts';
+import { ChangeCodeAction } from '#automation/Action/ActionChangeCode.ts';
+import { FindFileAction } from '#automation/Action/ActionFindFile.ts';
+import { ReadFileAction } from '#automation/Action/ActionReadFile.ts';
+import { ResearchAction } from '#automation/Action/ActionResearch.ts';
 import PlannerTask from '#automation/Planner/PlannerTask/PlannerTask.js';
 import QualifierTask from '#automation/Qualifier/QualifierTask/QualifierTask.js';
 import WorkerAgent from '#automation/Worker/WorkerAgent/WorkerAgent.js';
