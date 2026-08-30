@@ -1,20 +1,19 @@
-import type { sWorkerSchema } from './WorkerTsType.js';
+import {
+  WORKER_IMPLEMENTATION,
+  type iWorkerModule,
+  type sWorkerSchema,
+  type tWorkerImplementation,
+} from './WorkerTsType.js';
 
-export class WorkerSchema {
-  public readonly id: string;
-  public readonly prompt?: string;
-  public readonly response?: unknown;
-  public readonly actions: ReadonlyArray<string>;
-  public readonly limits: Readonly<Record<string, number>>;
+/** Base class for automation Workers whose implementation is expressed as a local Process schema. */
+export abstract class WorkerSchema implements iWorkerModule {
+  public abstract getId(): string;
+  public abstract getSchema(): sWorkerSchema;
 
-  public constructor(schema: sWorkerSchema) {
-    const id = schema.id.trim();
-    if (!id) throw new Error('WorkerSchema requires a non-empty id.');
-
-    this.id = id;
-    this.prompt = schema.prompt;
-    this.response = schema.response;
-    this.actions = [...(schema.actions ?? [])];
-    this.limits = { ...(schema.limits ?? {}) };
+  public getImplementation(): tWorkerImplementation {
+    return {
+      type: WORKER_IMPLEMENTATION.SCHEMA,
+      schema: this.getSchema(),
+    };
   }
 }
