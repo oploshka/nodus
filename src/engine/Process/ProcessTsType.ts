@@ -1,17 +1,5 @@
-export enum STEP {
-  SEQUENCE = 'SEQUENCE',
-  QUALIFY = 'QUALIFY',
-  PLAN = 'PLAN',
-  WORKER = 'WORKER',
-  ACTION = 'ACTION',
-  VALIDATE = 'VALIDATE',
-  REPLAN = 'REPLAN',
-}
-
-export enum MODULE_RESULT {
-  OUTPUT = 'OUTPUT',
-  SCHEMA = 'SCHEMA',
-}
+import { MODULE_RESULT, STEP } from './ProcessSchema.js';
+import type { StepRef } from './StepRef.js';
 
 export type pProcessStatus = 'SUCCESS' | 'FAILURE';
 
@@ -66,7 +54,7 @@ export interface sProcessSchema extends sProcessSequence {}
 export interface sProcessExecutionContext {
   parent?: unknown;
   previous?: sProcessOutput;
-  steps: Readonly<Record<number, sProcessOutput>>;
+  steps: ReadonlyArray<StepRef>;
   step: number;
   path: ReadonlyArray<number>;
 }

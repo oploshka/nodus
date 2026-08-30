@@ -1,21 +1,16 @@
-import {
-  MODULE_RESULT,
-  STEP,
-  type iProcessModule,
-  type sProcessExecutionContext,
-  type sProcessOutput,
-  type sProcessRunResult,
-  type sProcessSchema,
-  type sProcessSequence,
-  type sProcessTraceEntry,
-  type tProcessExecutableStep,
-  type tProcessStep,
-} from './ProcessSchema.js';
-
-interface sSequenceSummaryEntry {
-  step: number;
-  value: string;
-}
+import { MODULE_RESULT, STEP } from './ProcessSchema.js';
+import { StepRef } from './StepRef.js';
+import type {
+  iProcessModule,
+  sProcessExecutionContext,
+  sProcessOutput,
+  sProcessRunResult,
+  sProcessSchema,
+  sProcessSequence,
+  sProcessTraceEntry,
+  tProcessExecutableStep,
+  tProcessStep,
+} from './ProcessTsType.js';
 
 export class ProcessRuntime {
   private readonly modules = new Map<STEP, iProcessModule>();
@@ -76,10 +71,8 @@ export class ProcessRuntime {
       index += 1;
     }
 
-    const completed: sProcessOutput = {
-      status: 'SUCCESS',
-      value: this.buildSequenceSummary(sequence),
-    };
+    const lastOutput = sequence.steps.at(-1)?.output;
+    const completed: sProcessOutput = lastOutput ? { ...lastOutput } : { status: 'SUCCESS' };
     sequence.output = completed;
     this.trace.push({ path: [...path], type: STEP.SEQUENCE, status: 'SUCCESS' });
     return completed;
@@ -135,15 +128,15 @@ export class ProcessRuntime {
     path: number[],
   ): sProcessExecutionContext {
     const config = plan.steps[index]?.input?.context;
-    const selectedSteps: Record<number, sProcessOutput> = {};
+    const selectedSteps: StepRef[] = [];
 
     for (const stepNumber of config?.steps ?? []) {
       if (!Number.isInteger(stepNumber) || stepNumber < 1 || stepNumber > index) {
         throw new Error(`Step ${index + 1} cannot read unavailable local step ${stepNumber}.`);
       }
-      const output = plan.steps[stepNumber - 1]?.output;
-      if (!output) throw new Error(`Local step ${stepNumber} has no output.`);
-      selectedSteps[stepNumber] = output;
+      const target = plan.steps[stepNumber - 1];
+      if (!target?.output) throw new Error(`Local step ${stepNumber} has no output.`);
+      selectedSteps.push(new StepRef(stepNumber, target));
     }
 
     const previous = config?.previous && index > 0
@@ -163,23 +156,8 @@ export class ProcessRuntime {
     return {
       parent: context.parent,
       previous: context.previous,
-      steps: context.steps,
+      steps: Object.fromEntries(context.steps.map((ref) => [ref.number, ref.output])),
     };
-  }
-
-  private buildSequenceSummary(sequence: sProcessSequence): string | undefined {
-    const entries: sSequenceSummaryEntry[] = [];
-
-    sequence.steps.forEach((step, index) => {
-      if (step.type === STEP.QUALIFY) return;
-      const value = step.output?.value;
-      if (typeof value !== 'string' || value.trim().length === 0) return;
-      entries.push({ step: index + 1, value });
-    });
-
-    if (entries.length === 0) return undefined;
-    if (entries.length === 1) return entries[0]?.value;
-    return entries.map((entry) => `STEP ${entry.step}: ${entry.value}`).join('\n');
   }
 
   private applyTransition(

@@ -1,4 +1,4 @@
-import type { iProcessPlanner } from './ProcessPlanner.js';
+import type { iProcessPlanner } from './PlannerTsType.js';
 
 export interface iPlannerResolver {
   resolve(task: string, planners: ReadonlyArray<iProcessPlanner>): iProcessPlanner;
