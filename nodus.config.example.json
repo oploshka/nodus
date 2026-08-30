@@ -18,6 +18,9 @@
     "maxTokens": 4096,
     "requestTimeoutMs": 600000
   },
+  "automation": {
+    "root": "automation"
+  },
   "runtime": {
     "maxWorkerAttempts": 4,
     "maxResearchRequests": 1,
