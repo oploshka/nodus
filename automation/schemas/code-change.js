@@ -4,10 +4,17 @@ function replaceTail(plan, step, ...nextSteps) {
   plan.steps.splice(step, plan.steps.length - step, ...nextSteps);
 }
 
-function appendReplannedSteps(plan, step) {
+function appendReplannedSequence(plan, step) {
   const planned = plan.steps[step - 1]?.output?.value;
-  if (!Array.isArray(planned)) throw new Error('REPLAN output must contain an array of steps.');
-  replaceTail(plan, step, ...planned);
+  if (!planned || typeof planned !== 'object' || typeof planned.task !== 'string' || !Array.isArray(planned.steps)) {
+    throw new Error('REPLAN output must contain { task, steps }.');
+  }
+
+  replaceTail(plan, step, {
+    type: STEP.SEQUENCE,
+    task: planned.task,
+    steps: planned.steps,
+  });
 }
 
 export default {
@@ -42,7 +49,7 @@ export default {
               previous: true,
             },
           },
-          transition: appendReplannedSteps,
+          transition: appendReplannedSequence,
         });
       },
     },
