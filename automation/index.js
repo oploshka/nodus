@@ -1,4 +1,5 @@
 import codeChange from './schemas/code-change.js';
+import planner from './schemas/planner.js';
 import defaultPlanner from './planners/default.js';
 import codeWorker from './workers/code.js';
 import changeCodeResponse from './responses/change-code.js';
@@ -10,6 +11,7 @@ export default {
     'worker-code': 'prompts/worker-code.md',
   },
   schemas: {
+    planner,
     'code-change': codeChange,
   },
   planners: {
