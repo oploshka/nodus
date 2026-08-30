@@ -1,12 +1,15 @@
+import { TASK_TYPE } from '../process.js';
+
 export default {
   id: 'default',
-  prompt: 'planner',
-  response: 'planner',
-  schemas: [
-    'code-change',
-  ],
-  classification: {
-    options: ['schema', 'chain', 'custom'],
-    allowCustom: false,
+  schema: 'planner',
+  qualify: {
+    prompt: 'qualifier',
+    response: 'qualifier',
+    options: Object.values(TASK_TYPE),
+  },
+  plan: {
+    prompt: 'planner',
+    response: 'planner',
   },
 };
