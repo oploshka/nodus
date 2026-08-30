@@ -79,7 +79,10 @@ describe('process planner modules v2', () => {
 
     expect(planner.planRequests[0]?.task).toBe('Original task');
     expect(planner.planRequests[0]?.type).toBe(TASK_TYPE.PROCESS);
-    expect(result.value).toEqual([{ type: STEP.WORKER, task: 'planned semantic task' }]);
+    expect(result.value).toEqual({
+      task: 'Original task',
+      steps: [{ type: STEP.WORKER, task: 'planned semantic task' }],
+    });
   });
 
   it('REPLAN receives the failed previous step and returns a replacement tail', async () => {
@@ -95,7 +98,10 @@ describe('process planner modules v2', () => {
     const result = await module.execute({ type: STEP.REPLAN }, context);
 
     expect(planner.replanRequests[0]?.failure).toEqual(failure);
-    expect(result.value).toEqual([{ type: STEP.WORKER, task: 'repair task' }]);
+    expect(result.value).toEqual({
+      task: 'Original task',
+      steps: [{ type: STEP.WORKER, task: 'repair task' }],
+    });
   });
 
   it('does not allow PLAN to decompose semantic work into ACTION steps', async () => {
