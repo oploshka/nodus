@@ -1,12 +1,12 @@
 # Process schema v2 — рабочий контракт
 
-**Статус:** архитектурная гипотеза после первого `automation-runtime` prototype. Это не текущий runtime contract и не обещание обратной совместимости.
+**Статус:** реализован в automation runtime prototype. Контракт всё ещё экспериментальный и не обещает обратную совместимость.
 
-Цель — сделать process schema самодостаточным, редактируемым и версионируемым документом. Planner не создаёт отдельный «план»: он изменяет саму цепочку schema, после чего Runtime продолжает её выполнение.
+Цель — сделать schema самодостаточным, редактируемым и версионируемым документом. Runtime исполняет переданную schema шаг за шагом; Planner и Replan не создают отдельный скрытый plan, а через `transition` изменяют хвост текущей локальной цепочки.
 
 ## Базовая модель
 
-В перспективе process document может иметь верхний контейнер вида:
+В перспективе process document может иметь верхний контейнер:
 
 ```js
 {
@@ -15,18 +15,19 @@
 }
 ```
 
-Точная структура `data` пока не фиксируется. Важно, что schema должна содержать всё необходимое для понимания и продолжения процесса; документ можно сохранить, изменить, версионировать и позже продолжить с нужной точки.
+Точная структура `data` пока не фиксируется. Текущий prototype работает непосредственно с `schema` и входом root sequence.
 
-Model-facing узлам не нужны обязательные `id`. Внутренние runtime id допустимы для trace/UI/storage, но модель не должна строить ссылки вроде `validate-1-4-3`.
+Model-facing шагам не нужны обязательные `id`. Runtime использует локальную нумерацию и может держать технический path только для trace/debugging.
 
-## Типы узлов
+## STEP
 
-Один `type` определяет исполняемый Core-модуль или структурный узел.
+`type` отвечает за семантику шага:
 
 ```ts
-enum PROCESS_NODE_TYPE {
+enum STEP {
   SEQUENCE = 'SEQUENCE',
-  PLANNER = 'PLANNER',
+  QUALIFY = 'QUALIFY',
+  PLAN = 'PLAN',
   WORKER = 'WORKER',
   ACTION = 'ACTION',
   VALIDATE = 'VALIDATE',
@@ -34,11 +35,26 @@ enum PROCESS_NODE_TYPE {
 }
 ```
 
-`ACTION` остаётся отдельным Core-модулем для конкретной операции. `WORKER` — более автономный исполнитель, который сам может выбирать Actions.
+`ACTION` — конкретная Core-операция. Например пользовательский ввод может быть обычным Action:
 
-## Локальная цепочка и input
+```ts
+enum ACTION {
+  ASK_USER = 'ASK_USER',
+}
+```
 
-Каждая `SEQUENCE` — локальная нумерованная цепочка:
+```js
+{
+  type: STEP.ACTION,
+  action: ACTION.ASK_USER,
+}
+```
+
+При этом Planner сейчас **не имеет права строить semantic plan через ACTION**. Operational Actions принадлежат Worker. `ASK_USER` пока фиксируется как доступная capability для hand-authored/runtime schemas; отдельную policy для разрешённых orchestration Actions в model-generated plan можно добавить позже при реальном кейсе.
+
+## Локальная SEQUENCE
+
+Каждая `SEQUENCE` — отдельная локальная цепочка:
 
 ```text
 STEP 1
@@ -49,228 +65,242 @@ STEP 3
 
 Во вложенной sequence нумерация снова начинается с `1`.
 
-При формировании шага модели нужно ответить только на три простых вопроса о контексте:
+Шаг может содержать самодостаточную semantic task:
 
-```ts
-enum PROCESS_CONTEXT_SOURCE {
-  PARENT = 'PARENT',
-  PREVIOUS = 'PREVIOUS',
-  STEP = 'STEP',
+```js
+{
+  type: STEP.WORKER,
+  task: 'Сравнить три уже исследованных варианта и выбрать лучший.',
 }
 ```
 
-Пример:
+## Input context
+
+Контекст вынесен в отдельную группу:
 
 ```js
 input: {
-  PARENT: true,
-  PREVIOUS: true,
-  STEP: [1, 2],
+  context: {
+    parent: true,
+    previous: true,
+    steps: [1, 2],
+  },
+}
+```
+
+Модель при формировании шага отвечает на три простых вопроса:
+
+- `parent` — нужен ли полный вход непосредственного родителя;
+- `previous` — нужен ли полный output непосредственно предыдущего шага;
+- `steps` — outputs каких ещё уже выполненных шагов текущей локальной sequence нужны.
+
+Дублирование допустимо. Runtime не требует от модели вычислять, совпадает ли `previous` с одним из явно выбранных `steps`.
+
+Runtime отклоняет ссылки на текущий, будущий или несуществующий local step.
+
+### Жёсткая граница родителя
+
+Для шага `3.2.1` `parent` означает строго `3.2`.
+
+Дочерняя sequence не получает автоматического доступа к внешней ветке. Если дочерней работе нужны дополнительные знания, родитель должен получить их сам и сформировать самодостаточный child task/input.
+
+## Output без отдельного step state
+
+Отдельный persisted lifecycle state (`PENDING/RUNNING/...`) пока не нужен. Runtime и так знает текущий исполняемый шаг.
+
+Результат хранится рядом с выполненным шагом:
+
+```ts
+interface sProcessOutput {
+  status: 'SUCCESS' | 'FAILURE';
+  value?: unknown;
+  reason?: string;
+}
+```
+
+`value` для model-facing работы обычно должен быть простым текстом. Если модуль внутри получил сложную структуру, он может нормализовать её в текст.
+
+Позже `output` можно расширить: usage/resources, параметры запроса, timing, структурированный response и другие данные. Для этого не нужен отдельный state object.
+
+`SEQUENCE.output` сейчас наследует итоговое значение последнего шага. Практический паттерн — делать последний шаг sequence итоговым summary, тогда родитель получает компактный результат вместо внутренних деталей.
+
+## Planner как schema
+
+Planner больше не рассматривается как один скрытый Core-монолит. Это переиспользуемая schema, внутри которой есть как минимум `QUALIFY` и при необходимости `PLAN`.
+
+Классификация:
+
+```ts
+enum TASK_TYPE {
+  SIMPLE = 'SIMPLE',
+  MULTI = 'MULTI',
+  PROCESS = 'PROCESS',
 }
 ```
 
 Семантика:
 
-- `PARENT: true` — нужен полный вход непосредственного родителя;
-- `PREVIOUS: true` — нужен полный результат непосредственно предыдущего шага;
-- `STEP: [1, 2]` — дополнительно нужны результаты указанных уже выполненных шагов **текущей локальной sequence**.
-
-Дублирование допустимо. Если `PREVIOUS` совпадает с одним из `STEP`, Runtime может дедуплицировать данные. Это проще и надёжнее, чем заставлять модель вычислять такие совпадения.
-
-Для `STEP 1` доступны только данные родителя. Runtime должен ограничивать выбор `STEP` реально существующими предыдущими номерами, а не принимать произвольные model-generated адреса.
-
-### Жёсткая граница родителя
-
-Для шага `3.2.1` `PARENT` означает строго `3.2`.
-
-`3.2.1` не должен напрямую читать `3`, `3.1`, `2` или другие внешние ветки. Если эти знания нужны, родитель обязан получить их сам и сформировать самодостаточную дочернюю задачу. Иначе должна выполняться другая цепочка.
-
-## Output
-
-Model-facing output шага в первой версии нормализуется в текст.
-
-Если Core-модуль внутри получил сложную структуру, он может преобразовать её в понятный текстовый результат для следующих шагов. Позже `output` может стать конфигурируемым и включать дополнительные данные — например статус, usage/resources, параметры запроса или структурированный ответ, — но это не нужно фиксировать сейчас.
-
-Контекст нескольких шагов можно подавать модели как последовательность сообщений:
-
 ```text
-STEP 2
-Request: ...
-Response: ...
-
-STEP 3
-Request: ...
-Response: ...
-
-CURRENT STEP 6
-Request: ...
+QUALIFY
+  ├─ SIMPLE  -> WORKER
+  ├─ MULTI   -> PLAN -> nested SEQUENCE
+  └─ PROCESS -> PLAN -> nested SEQUENCE
 ```
 
-То есть `STEP: [2, 3]` означает «дай модели историю выбранных шагов», а не «пусть Planner заранее угадает поля их output».
+- `SIMPLE` — один Worker может владеть задачей как одним semantic outcome, даже если внутри понадобится много Actions.
+- `MULTI` — нужны несколько самостоятельных semantic outcomes.
+- `PROCESS` — пользователь уже задал существенную цепочку/порядок исполнения, который надо представить schema.
 
-`SEQUENCE` после завершения тоже возвращает текстовый summary. Родитель видит итог дочерней цепочки, а не обязан понимать её внутренние шаги. Summary верхней sequence естественно становится основой финального ответа пользователю.
-
-## Успех и failure
-
-Пока не нужен persisted lifecycle state вроде `PENDING/RUNNING/COMPLETED` для каждого шага. Runtime и так знает текущий исполняемый шаг.
-
-Нужен только факт результата выполнения:
+Главная граница:
 
 ```text
-SUCCESS
-FAILURE
+Planner plans semantic tasks
+Worker plans operational Actions
 ```
 
-При `FAILURE` Runtime запускает `PLANNER/REPLAN` с корректным контекстом ошибки.
+Поэтому `PLAN` не должен генерировать `STEP.ACTION`.
 
-Провалившийся шаг считается уже выполненным: его результат/ошибка остаются в истории и не переписываются.
+## transition
 
-## Planner как редактор schema
+После выполнения шага schema может определить обычную JS-функцию:
 
-Начальный process может быть минимальным:
+```js
+transition: (plan, step) => {
+  // plan — только SEQUENCE текущей вложенности
+  // step — one-based номер только что выполненного шага
+}
+```
+
+Функцию пишет автор automation schema, не модель. Модель возвращает только ограниченный структурированный output.
+
+`transition` может изменять только хвост после выполненного шага. Runtime проверяет, что completed prefix не был заменён/удалён.
+
+Пример маршрутизации qualifier:
 
 ```js
 {
-  data: {
-    request: 'Добавить TodoStore.has(id): boolean и покрыть тестами',
-  },
-  schema: {
-    type: PROCESS_NODE_TYPE.SEQUENCE,
-    steps: [
-      {
-        type: PROCESS_NODE_TYPE.PLANNER,
-        input: {
-          PARENT: true,
-        },
-      },
-    ],
+  type: STEP.QUALIFY,
+  transition: (plan, step) => {
+    const type = plan.steps[step - 1].output.value;
+
+    if (type === TASK_TYPE.SIMPLE) {
+      plan.steps.splice(step, plan.steps.length - step, {
+        type: STEP.WORKER,
+        input: { context: { parent: true } },
+      });
+    }
   },
 }
 ```
 
-Синтаксис верхнего `data` здесь только иллюстративный; контракт его структуры ещё не зафиксирован.
+Для `MULTI/PROCESS` qualifier добавляет `STEP.PLAN`. После PLAN его transition помещает результат в новую nested `SEQUENCE`, чтобы semantic task numbering снова начиналась с `1` и ссылки `steps: [1, 2, 3]` не смешивались с внутренними шагами Planner.
 
-Planner получает задачу, вызывает qualifier и решает, можно ли сформировать исполняемую работу или нужна декомпозиция.
+## Failure и Replan
 
-```ts
-enum PROCESS_TASK_COMPLEXITY {
-  EXECUTABLE = 'EXECUTABLE',
-  DECOMPOSE = 'DECOMPOSE',
-}
-```
+Failed step считается уже выполненным. Его `output.status = FAILURE` и `reason` остаются рядом с шагом.
 
-Названия временные.
-
-Если qualifier возвращает `DECOMPOSE`, Planner разбивает задачу на самодостаточные шаги. Если подзадача снова сложная, она может стать вложенной sequence и снова пройти через Planner.
-
-Planner изменяет schema, а Runtime продолжает выполнение уже новой версии этой же цепочки.
-
-## End-to-end пример
-
-Исходная задача:
+Schema может заменить оставшийся хвост на `REPLAN`:
 
 ```text
-Добавить TodoStore.has(id): boolean и покрыть тестами.
+STEP 1  WORKER    ✓
+STEP 2  VALIDATE  ✗
+STEP 3  REPLAN    ✓
+STEP 4  SEQUENCE
+        ├─ STEP 1 repair
+        └─ STEP 2 validate
 ```
 
-### Revision 0 — default schema
+`REPLAN` получает `parent` текущей sequence и failed `previous`. Replan возвращает новый semantic tail, который transition помещает в nested local sequence.
 
-```text
-STEP 1  PLANNER
-```
+Упрощённая политика v0:
 
-Qualifier возвращает `DECOMPOSE`. Planner расширяет хвост:
+1. выполненный prefix неизменяем;
+2. failed step остаётся частью истории;
+3. Replan всегда переписывает только невыполненный хвост;
+4. никаких model-generated global ids;
+5. новая repair sequence снова использует локальные номера с `1`.
 
-### Revision 1
+## ACTION.ASK_USER
 
-```text
-STEP 1  PLANNER       ✓
-STEP 2  WORKER        implement TodoStore.has
-STEP 3  WORKER        add tests
-STEP 4  VALIDATE      run relevant validation
-```
-
-Условные inputs:
+Пользовательский ввод не требует отдельного `STEP.USER`. Это обычный Action:
 
 ```js
-// STEP 2
-input: {
-  PARENT: true,
-}
-
-// STEP 3
-input: {
-  PARENT: true,
-  PREVIOUS: true,
-}
-
-// STEP 4
-input: {
-  PARENT: true,
-  PREVIOUS: true,
-  STEP: [2],
+{
+  type: STEP.ACTION,
+  action: ACTION.ASK_USER,
+  input: {
+    context: {
+      parent: true,
+      previous: true,
+    },
+  },
 }
 ```
 
-`STEP 4` падает. Его failure остаётся частью исполненной истории:
+Существующая идея Human boundary при ошибках/неоднозначности может быть реализована этим механизмом. Реальный adapter взаимодействия с пользователем пока не входит в prototype.
+
+## Тестовая стратегия
+
+Основной способ тестирования runtime — подавать готовую schema, а не начинать с free-form user task и надеяться, что Planner одновременно правильно классифицировал, спланировал и исполнил её.
+
+Уровни проверяются отдельно:
 
 ```text
-STEP 1  PLANNER       ✓
-STEP 2  WORKER        ✓
-STEP 3  WORKER        ✓
-STEP 4  VALIDATE      ✗
+schema -> Runtime -> STEP 1 -> assert output/context -> STEP 2 -> ...
 ```
 
-Runtime запускает `REPLAN`. Replan получает самодостаточный контекст: вход текущей sequence, результат провалившегося шага и при необходимости выбранные предыдущие шаги.
-
-В первой версии правило простое: **Replan всегда переписывает только невыполненный хвост**. Уже выполненные шаги, включая failed step, неизменяемы.
-
-После Replan активная цепочка может стать:
+Отдельно тестируется Planner schema:
 
 ```text
-STEP 1  PLANNER       ✓
-STEP 2  WORKER        ✓
-STEP 3  WORKER        ✓
-STEP 4  VALIDATE      ✗
-STEP 5  REPLAN        ✓
-STEP 6  WORKER        repair based on validation failure
-STEP 7  VALIDATE      validate repair
+root task
+-> QUALIFY
+-> SIMPLE: WORKER
+или
+-> MULTI/PROCESS: PLAN -> nested SEQUENCE
 ```
 
-Если `STEP 7` снова падает, появляется следующий Replan и новая версия хвоста. Неудачные попытки не требуют глобальных имён: их порядок уже задан локальной последовательностью выполнения и revisions процесса.
-
-После успешного завершения sequence формирует текстовый summary, например:
+Абстрактный benchmark для MULTI:
 
 ```text
-TodoStore.has(id) добавлен. Добавлены тесты существующего и отсутствующего id. Финальная validation прошла успешно.
+Исследовать JSON, YAML и JavaScript как форматы конфигурации,
+сравнить их и выбрать один вариант.
 ```
 
-## Replan и история
+Ожидаемая semantic sequence после PLAN:
 
-Текущая упрощённая политика:
+```text
+STEP 1 — исследовать JSON
+STEP 2 — исследовать YAML
+STEP 3 — исследовать JavaScript
+STEP 4 — сравнить и выбрать
+         context.steps = [1, 2, 3]
+```
 
-1. выполненная часть цепочки immutable;
-2. failed step считается выполненным;
-3. Replan переписывает только хвост после выполненной части;
-4. старая версия schema и результаты шагов могут сохраняться как execution history/revisions;
-5. модель не адресует узлы через глобальные id.
+Такой кейс не зависит от Todo test project и непосредственно проверяет local context/numbering.
 
-Это должно уменьшить галлюцинации при динамическом расширении процесса: модель работает с локальными номерами и только реально доступным контекстом.
+## Реализовано в prototype
 
-## Resume
+- enum `STEP`, `ACTION`, `TASK_TYPE` в Core contract;
+- schema без обязательных model-facing `id`;
+- `input.context.parent/previous/steps`;
+- строгая локальная нумерация и runtime validation ссылок;
+- nested parent isolation;
+- output рядом со step без отдельного lifecycle state;
+- `transition(plan, step)` с local sequence;
+- tail rewrite после completed step;
+- `QUALIFY`, `PLAN`, `REPLAN` как отдельные runtime steps;
+- Planner как automation schema;
+- запрет `ACTION` внутри model-generated PLAN;
+- отдельные qualifier/plan prompts и response contracts;
+- abstract automation prototype для SIMPLE/MULTI/PROCESS.
 
-Текущую точку выполнения лучше хранить отдельно от model-facing schema. Пока не нужно встраивать status каждого шага в документ.
+## TODO / следующие проверки
 
-Позже можно добавить автоматическое определение точки продолжения при загрузке сохранённой schema/process history.
-
-## TODO / открытые направления
-
-- Проверить этот контракт на реальном task benchmark и сравнить с первым `ProcessRuntime` prototype.
-- Определить конкретный TypeScript contract для `input/output` без усложнения model-facing schema.
-- Сделать Runtime-generated допустимый набор `STEP` для Planner/Replan, чтобы модель не могла ссылаться на несуществующий шаг.
-- Определить нормализацию сложного module result в текстовый model-facing `output`.
-- Определить storage/versioning process revisions и failure history без model-facing id.
-- Реализовать tail rewrite для Replan: выполненные шаги immutable, заменяется только невыполненный хвост.
-- Проверить recursive decomposition: Planner внутри вложенной sequence получает только непосредственного родителя.
-- Добавить возможность **допланирования** как опцию: после некоторых успешных шагов осознанно остановиться, посмотреть результаты и только тогда сформировать продолжение цепочки. Не включать её в v0 runtime до появления реального кейса.
-- Позже определить auto-resume / auto-detection текущего шага при загрузке process document.
+- Подключить реальные model-backed реализации `QUALIFY` и `PLAN` вместо prototype planner.
+- Проверить устойчивость qualifier на реальных задачах и подобрать критерии `SIMPLE/MULTI/PROCESS`.
+- Реализовать `ACTION.ASK_USER` через существующую Human interaction boundary.
+- Добавить **допланирование**: успешная sequence может осознанно остановиться, посмотреть результаты и вызвать PLAN для продолжения.
+- Определить configurable output presentation: text, structured data, usage/resources, request metadata.
+- Определить storage/versioning revisions и цепочки неудачных попыток.
+- Добавить resume с отдельной текущей точкой выполнения и позже auto-detection шага при загрузке process document.
+- Решить, какие orchestration Actions (если вообще какие-то) Planner сможет генерировать в будущем; operational Actions Worker по-прежнему не должны утекать в semantic plan.
