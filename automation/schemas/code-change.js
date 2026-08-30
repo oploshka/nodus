@@ -1,37 +1,50 @@
+import { STEP } from '../process.js';
+
+function replaceTail(plan, step, ...nextSteps) {
+  plan.steps.splice(step, plan.steps.length - step, ...nextSteps);
+}
+
+function appendReplannedSteps(plan, step) {
+  const planned = plan.steps[step - 1]?.output?.value;
+  if (!Array.isArray(planned)) throw new Error('REPLAN output must contain an array of steps.');
+  replaceTail(plan, step, ...planned);
+}
+
 export default {
-  kind: 'sequence',
-  id: 'code-change',
-  variables: ['task', 'implementation', 'validation', 'replan'],
+  type: STEP.SEQUENCE,
   steps: [
     {
-      kind: 'action',
-      id: 'implement',
-      use: 'worker',
+      type: STEP.WORKER,
       preset: 'code',
-      input: { task: 'task' },
-      saveAs: 'implementation',
+      input: {
+        context: {
+          parent: true,
+        },
+      },
     },
     {
-      kind: 'action',
-      id: 'validate',
-      use: 'validate',
+      type: STEP.VALIDATE,
       input: {
-        task: 'task',
-        changes: 'implementation.value',
-      },
-      saveAs: 'validation',
-      onFailure: [
-        {
-          kind: 'action',
-          id: 'replan',
-          use: 'replan',
-          input: {
-            task: 'task',
-            failure: 'validation',
-          },
-          saveAs: 'replan',
+        context: {
+          parent: true,
+          previous: true,
         },
-      ],
+      },
+      transition: (plan, step) => {
+        const result = plan.steps[step - 1]?.output;
+        if (result?.status !== 'FAILURE') return;
+
+        replaceTail(plan, step, {
+          type: STEP.REPLAN,
+          input: {
+            context: {
+              parent: true,
+              previous: true,
+            },
+          },
+          transition: appendReplannedSteps,
+        });
+      },
     },
   ],
 };
