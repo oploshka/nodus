@@ -6,28 +6,32 @@ This file fixes the source-layout conventions used by Nodus engine code.
 
 A directory that represents an engine domain owns its files. Do not place files for that entity next to its directory at the parent level.
 
+The schema-driven Process path groups semantic executable roles under `Step/`:
+
 ```text
 src/engine/Process/
   Process/
-  Worker/
-  Planner/
-  Action/
+  Step/
+    Contract/
+    Worker/
+    Planner/
+    Action/
 ```
 
-For example, `ProcessRuntime.ts` belongs in `Process/Process/`, not next to the `Worker/` and `Planner/` directories.
+Existing top-level `Worker/`, `Planner/` and other Process directories may remain during migration. New Step architecture is developed under `Step/` instead of reshaping those directories in place.
+
+For example, `ProcessRuntime.ts` belongs in `Process/Process/`; shared Step execution belongs in `Process/Step/`; WORKER-specific Step contracts belong in `Process/Step/Worker/`.
 
 ## File names
 
 Files owned by an entity start with that entity name.
 
 ```text
-WorkerRunner.ts
-WorkerResolver.ts
+StepRunner.ts
+StepResolver.ts
 WorkerSchema.ts
-PlannerRunner.ts
-PlannerResolver.ts
 PlannerMethod.ts
-ActionReadFile.ts
+ActionRunner.ts
 ProcessRuntime.ts
 ```
 
@@ -42,30 +46,36 @@ When supporting TypeScript contracts would clutter an implementation file, place
 When an entity exposes a small family of automation-facing contracts, keep that family in the entity-local `Contract/` directory.
 
 ```text
-Worker/
+Step/
   Contract/
-    WorkerSchema.ts
-    WorkerMethod.ts
-    WorkerTsType.ts
-  WorkerRunner.ts
-  WorkerResolver.ts
+    StepSchema.ts
+    StepMethod.ts
+    StepTsType.ts
+  StepRunner.ts
+  StepResolver.ts
 
-Planner/
-  Contract/
-    PlannerSchema.ts
-    PlannerMethod.ts
-    PlannerTsType.ts
-  PlannerRunner.ts
-  PlannerResolver.ts
+  Worker/
+    Contract/
+      WorkerSchema.ts
+      WorkerMethod.ts
+      WorkerTsType.ts
+    WorkerRunner.ts
+
+  Planner/
+    Contract/
+      PlannerSchema.ts
+      PlannerMethod.ts
+      PlannerTsType.ts
+    PlannerRunner.ts
 ```
 
-`Contract/` is not a generic dumping ground for interfaces. It is used when the files together define the external implementation boundary of the entity. Runtime execution mechanics remain at the entity root.
+`Contract/` is not a generic dumping ground for interfaces. Shared execution mechanics belong to `Step/Contract`; role-specific contracts extend them under the semantic Step role so input, result and authority can diverge without duplicating execution mechanics.
 
 ## Deprecated directories
 
 During an architectural migration, incompatible legacy implementations may be quarantined under the owning entity's `Deprecated/` directory instead of distorting the new contract.
 
-New Process code must not import `Deprecated/`. The directory is a temporary compatibility/history boundary, not a supported extension surface. When the old production path is removed, its deprecated files should be deleted rather than promoted back into the current entity root.
+New Step code must not import `Deprecated/`. Existing legacy paths may continue to do so until their behavior is either moved into automation/current Step roles or deleted.
 
 ## Entity-local helpers
 

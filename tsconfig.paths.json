@@ -8,6 +8,9 @@
       "@engine/Process/*": [
         "src/engine/Process/Process/*"
       ],
+      "@engine/Step/*": [
+        "src/engine/Process/Step/*"
+      ],
       "@engine/Planner/*": [
         "src/engine/Process/Planner/*"
       ],
@@ -15,10 +18,10 @@
         "src/engine/Process/Determine/*"
       ],
       "@engine/Action/*": [
-        "src/engine/Process/Action/*"
+        "src/engine/Process/Step/Action/*"
       ],
       "@engine/Worker/Action/*": [
-        "src/engine/Process/Action/*"
+        "src/engine/Process/Step/Action/*"
       ],
       "@engine/Worker/*": [
         "src/engine/Process/Worker/*"
