@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { ProcessRuntime } from '@engine/Automation/ProcessRuntime.js';
 import {
+  MODULE_RESULT,
   STEP,
-  TASK_TYPE,
   type iProcessModule,
   type sProcessExecutionContext,
   type sProcessOutput,
   type sProcessSchema,
   type tProcessExecutableStep,
+  type tProcessModuleResult,
 } from '@engine/Automation/ProcessSchema.js';
 
 class TestModule implements iProcessModule {
@@ -18,15 +19,17 @@ class TestModule implements iProcessModule {
     private readonly handler: (
       step: tProcessExecutableStep,
       context: sProcessExecutionContext,
-    ) => Promise<sProcessOutput> | sProcessOutput,
+    ) => Promise<sProcessOutput | tProcessModuleResult> | sProcessOutput | tProcessModuleResult,
   ) {}
 
   public async execute(
     step: tProcessExecutableStep,
     context: sProcessExecutionContext,
-  ): Promise<sProcessOutput> {
+  ): Promise<tProcessModuleResult> {
     this.calls.push({ step, context });
-    return this.handler(step, context);
+    const result = await this.handler(step, context);
+    if ('type' in result) return result;
+    return { type: MODULE_RESULT.OUTPUT, output: result };
   }
 }
 
@@ -40,18 +43,9 @@ describe('ProcessRuntime v2', () => {
     const schema: sProcessSchema = {
       type: STEP.SEQUENCE,
       steps: [
-        {
-          type: STEP.WORKER,
-          input: { context: { parent: true } },
-        },
-        {
-          type: STEP.WORKER,
-          input: { context: { parent: true, previous: true } },
-        },
-        {
-          type: STEP.WORKER,
-          input: { context: { parent: true, previous: true, steps: [1] } },
-        },
+        { type: STEP.WORKER, input: { context: { parent: true } } },
+        { type: STEP.WORKER, input: { context: { parent: true, previous: true } } },
+        { type: STEP.WORKER, input: { context: { parent: true, previous: true, steps: [1] } } },
       ],
     };
 
@@ -61,38 +55,25 @@ describe('ProcessRuntime v2', () => {
     expect(worker.calls[2]?.context).toEqual({
       parent: 'root task',
       previous: { status: 'SUCCESS', value: 'worker-2' },
-      steps: {
-        1: { status: 'SUCCESS', value: 'worker-1' },
-      },
+      steps: { 1: { status: 'SUCCESS', value: 'worker-1' } },
       step: 3,
       path: [3],
     });
   });
 
   it('keeps parent knowledge local when entering a nested sequence', async () => {
-    const worker = new TestModule(STEP.WORKER, (_step, context) => ({
-      status: 'SUCCESS',
-      value: context.parent,
-    }));
+    const worker = new TestModule(STEP.WORKER, (_step, context) => ({ status: 'SUCCESS', value: context.parent }));
     const runtime = new ProcessRuntime([worker]);
     const schema: sProcessSchema = {
       type: STEP.SEQUENCE,
-      steps: [
-        {
-          type: STEP.SEQUENCE,
-          task: 'self-contained child task',
-          steps: [
-            {
-              type: STEP.WORKER,
-              input: { context: { parent: true } },
-            },
-            {
-              type: STEP.WORKER,
-              input: { context: { parent: true, previous: true } },
-            },
-          ],
-        },
-      ],
+      steps: [{
+        type: STEP.SEQUENCE,
+        task: 'self-contained child task',
+        steps: [
+          { type: STEP.WORKER, input: { context: { parent: true } } },
+          { type: STEP.WORKER, input: { context: { parent: true, previous: true } } },
+        ],
+      }],
     };
 
     await runtime.run(schema, 'root task that child must not see');
@@ -104,14 +85,8 @@ describe('ProcessRuntime v2', () => {
   });
 
   it('lets transition rewrite only the tail of the current local plan', async () => {
-    const qualify = new TestModule(STEP.QUALIFY, () => ({
-      status: 'SUCCESS',
-      value: TASK_TYPE.SIMPLE,
-    }));
-    const worker = new TestModule(STEP.WORKER, (step) => ({
-      status: 'SUCCESS',
-      value: step.task,
-    }));
+    const qualify = new TestModule(STEP.QUALIFY, () => ({ status: 'SUCCESS', value: 'SIMPLE' }));
+    const worker = new TestModule(STEP.WORKER, (step) => ({ status: 'SUCCESS', value: step.task }));
     const runtime = new ProcessRuntime([qualify, worker]);
     let transitionPlan: sProcessSchema | undefined;
     let transitionStep: number | undefined;
@@ -124,16 +99,10 @@ describe('ProcessRuntime v2', () => {
           transition: (plan, step) => {
             transitionPlan = plan;
             transitionStep = step;
-            plan.steps.splice(step, plan.steps.length - step, {
-              type: STEP.WORKER,
-              task: 'simple task',
-            });
+            plan.steps.splice(step, plan.steps.length - step, { type: STEP.WORKER, task: 'simple task' });
           },
         },
-        {
-          type: STEP.WORKER,
-          task: 'old tail',
-        },
+        { type: STEP.WORKER, task: 'old tail' },
       ],
     };
 
@@ -147,57 +116,58 @@ describe('ProcessRuntime v2', () => {
     expect(worker.calls[0]?.step.task).toBe('simple task');
   });
 
-  it('keeps a failed step as history and can recover by replacing its tail with REPLAN', async () => {
-    const validate = new TestModule(STEP.VALIDATE, () => ({
-      status: 'FAILURE',
-      reason: 'validation failed',
-    }));
-    const replan = new TestModule(STEP.REPLAN, () => ({
-      status: 'SUCCESS',
-      value: {
-        task: 'original task',
-        steps: [
-          {
-            type: STEP.WORKER,
-            task: 'repair validation failure',
-          },
-        ],
+  it('executes a schema returned by a module and stores it on that step', async () => {
+    const planner = new TestModule(STEP.PLAN, () => ({
+      type: MODULE_RESULT.SCHEMA,
+      schema: {
+        type: STEP.SEQUENCE,
+        task: 'planned task',
+        steps: [{ type: STEP.WORKER, task: 'semantic child', input: { context: { parent: true } } }],
       },
     }));
-    const worker = new TestModule(STEP.WORKER, (step) => ({
+    const worker = new TestModule(STEP.WORKER, (step, context) => ({
       status: 'SUCCESS',
-      value: step.task,
+      value: `${String(step.task)}:${String(context.parent)}`,
     }));
+    const runtime = new ProcessRuntime([planner, worker]);
+    const schema: sProcessSchema = { type: STEP.SEQUENCE, steps: [{ type: STEP.PLAN }] };
+
+    const result = await runtime.run(schema, 'root task');
+    const planStep = schema.steps[0];
+
+    expect(result.output?.value).toBe('semantic child:planned task');
+    expect(planStep?.type).toBe(STEP.PLAN);
+    if (planStep?.type !== STEP.PLAN) throw new Error('Expected PLAN step.');
+    expect(planStep.schema?.task).toBe('planned task');
+    expect(planStep.schema?.steps[0]?.output?.value).toBe('semantic child:planned task');
+    expect(worker.calls[0]?.context.path).toEqual([1, 1]);
+  });
+
+  it('keeps a failed step as history and can recover through REPLAN schema', async () => {
+    const validate = new TestModule(STEP.VALIDATE, () => ({ status: 'FAILURE', reason: 'validation failed' }));
+    const replan = new TestModule(STEP.REPLAN, () => ({
+      type: MODULE_RESULT.SCHEMA,
+      schema: {
+        type: STEP.SEQUENCE,
+        task: 'original task',
+        steps: [{ type: STEP.WORKER, task: 'repair validation failure' }],
+      },
+    }));
+    const worker = new TestModule(STEP.WORKER, (step) => ({ status: 'SUCCESS', value: step.task }));
     const runtime = new ProcessRuntime([validate, replan, worker]);
 
     const schema: sProcessSchema = {
       type: STEP.SEQUENCE,
-      steps: [
-        {
-          type: STEP.VALIDATE,
-          transition: (plan, step) => {
-            if (plan.steps[step - 1]?.output?.status !== 'FAILURE') return;
-            plan.steps.splice(step, plan.steps.length - step, {
-              type: STEP.REPLAN,
-              input: { context: { parent: true, previous: true } },
-              transition: (localPlan, replanStep) => {
-                const next = localPlan.steps[replanStep - 1]?.output?.value as {
-                  task?: unknown;
-                  steps?: unknown;
-                } | undefined;
-                if (!next || typeof next.task !== 'string' || !Array.isArray(next.steps)) {
-                  throw new Error('Expected replanned sequence.');
-                }
-                localPlan.steps.splice(replanStep, localPlan.steps.length - replanStep, {
-                  type: STEP.SEQUENCE,
-                  task: next.task,
-                  steps: next.steps,
-                });
-              },
-            });
-          },
+      steps: [{
+        type: STEP.VALIDATE,
+        transition: (plan, step) => {
+          if (plan.steps[step - 1]?.output?.status !== 'FAILURE') return;
+          plan.steps.splice(step, plan.steps.length - step, {
+            type: STEP.REPLAN,
+            input: { context: { parent: true, previous: true } },
+          });
         },
-      ],
+      }],
     };
 
     const result = await runtime.run(schema, 'original task');
@@ -205,9 +175,13 @@ describe('ProcessRuntime v2', () => {
     expect(result.status).toBe('SUCCESS');
     expect(schema.steps[0]?.output).toEqual({ status: 'FAILURE', reason: 'validation failed' });
     expect(replan.calls[0]?.context.previous).toEqual({ status: 'FAILURE', reason: 'validation failed' });
-    expect(schema.steps.map((step) => step.type)).toEqual([STEP.VALIDATE, STEP.REPLAN, STEP.SEQUENCE]);
-    expect(worker.calls[0]?.step.task).toBe('repair validation failure');
-    expect(worker.calls[0]?.context.path).toEqual([3, 1]);
+    expect(schema.steps.map((step) => step.type)).toEqual([STEP.VALIDATE, STEP.REPLAN]);
+
+    const replanStep = schema.steps[1];
+    expect(replanStep?.type).toBe(STEP.REPLAN);
+    if (replanStep?.type !== STEP.REPLAN) throw new Error('Expected REPLAN step.');
+    expect(replanStep.schema?.steps[0]?.task).toBe('repair validation failure');
+    expect(worker.calls[0]?.context.path).toEqual([2, 1]);
   });
 
   it('rejects references to future or nonexistent local steps', async () => {
@@ -215,12 +189,7 @@ describe('ProcessRuntime v2', () => {
     const runtime = new ProcessRuntime([worker]);
     const schema: sProcessSchema = {
       type: STEP.SEQUENCE,
-      steps: [
-        {
-          type: STEP.WORKER,
-          input: { context: { steps: [2] } },
-        },
-      ],
+      steps: [{ type: STEP.WORKER, input: { context: { steps: [2] } } }],
     };
 
     await expect(runtime.run(schema)).rejects.toThrow('cannot read unavailable local step 2');

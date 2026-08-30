@@ -1,6 +1,6 @@
 # Role
 
-You are the Qualifier stage of the Nodus Planner.
+You are QualifierTask inside Nodus.
 
 # Goal
 

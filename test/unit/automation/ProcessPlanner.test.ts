@@ -8,19 +8,26 @@ import {
   type sProcessReplanningRequest,
 } from '@engine/Automation/ProcessPlanner.js';
 import {
-  ACTION,
+  MODULE_RESULT,
   STEP,
-  TASK_TYPE,
   type sProcessExecutionContext,
 } from '@engine/Automation/ProcessSchema.js';
+
+const TASK_TYPE = {
+  SIMPLE: 'SIMPLE',
+  MULTI: 'MULTI',
+  PROCESS: 'PROCESS',
+} as const;
+
+type tTaskType = typeof TASK_TYPE[keyof typeof TASK_TYPE];
 
 class CapturingPlanner implements iProcessPlanner {
   public readonly planRequests: sProcessPlanningRequest[] = [];
   public readonly replanRequests: sProcessReplanningRequest[] = [];
 
-  public constructor(private readonly type: TASK_TYPE = TASK_TYPE.SIMPLE) {}
+  public constructor(private readonly type: tTaskType = TASK_TYPE.SIMPLE) {}
 
-  public async qualify(_task: string, _context: sProcessExecutionContext): Promise<TASK_TYPE> {
+  public async qualify(_task: string, _context: sProcessExecutionContext): Promise<string> {
     return this.type;
   }
 
@@ -54,7 +61,7 @@ const rootContext = (overrides: Partial<sProcessExecutionContext> = {}): sProces
 });
 
 describe('process planner modules v2', () => {
-  it('QUALIFY classifies the self-contained parent task', async () => {
+  it('QUALIFY returns classifier output without owning classifier vocabulary', async () => {
     const planner = new CapturingPlanner(TASK_TYPE.MULTI);
     const module = new QualifyProcessModule(planner);
 
@@ -63,10 +70,13 @@ describe('process planner modules v2', () => {
       rootContext(),
     );
 
-    expect(result).toEqual({ status: 'SUCCESS', value: TASK_TYPE.MULTI });
+    expect(result).toEqual({
+      type: MODULE_RESULT.OUTPUT,
+      output: { status: 'SUCCESS', value: TASK_TYPE.MULTI },
+    });
   });
 
-  it('PLAN uses the previous QUALIFY result and returns semantic steps', async () => {
+  it('PLAN uses the previous qualification and returns an executable schema', async () => {
     const planner = new CapturingPlanner();
     const module = new PlanProcessModule(planner);
     const context = rootContext({
@@ -78,14 +88,18 @@ describe('process planner modules v2', () => {
     const result = await module.execute({ type: STEP.PLAN }, context);
 
     expect(planner.planRequests[0]?.task).toBe('Original task');
-    expect(planner.planRequests[0]?.type).toBe(TASK_TYPE.PROCESS);
-    expect(result.value).toEqual({
-      task: 'Original task',
-      steps: [{ type: STEP.WORKER, task: 'planned semantic task' }],
+    expect(planner.planRequests[0]?.qualification).toBe(TASK_TYPE.PROCESS);
+    expect(result).toEqual({
+      type: MODULE_RESULT.SCHEMA,
+      schema: {
+        type: STEP.SEQUENCE,
+        task: 'Original task',
+        steps: [{ type: STEP.WORKER, task: 'planned semantic task' }],
+      },
     });
   });
 
-  it('REPLAN receives the failed previous step and returns a replacement tail', async () => {
+  it('REPLAN receives the failed previous step and returns an executable schema', async () => {
     const planner = new CapturingPlanner();
     const module = new ReplanProcessModule(planner);
     const failure = { status: 'FAILURE' as const, reason: 'typecheck failed' };
@@ -98,9 +112,13 @@ describe('process planner modules v2', () => {
     const result = await module.execute({ type: STEP.REPLAN }, context);
 
     expect(planner.replanRequests[0]?.failure).toEqual(failure);
-    expect(result.value).toEqual({
-      task: 'Original task',
-      steps: [{ type: STEP.WORKER, task: 'repair task' }],
+    expect(result).toEqual({
+      type: MODULE_RESULT.SCHEMA,
+      schema: {
+        type: STEP.SEQUENCE,
+        task: 'Original task',
+        steps: [{ type: STEP.WORKER, task: 'repair task' }],
+      },
     });
   });
 
@@ -110,7 +128,7 @@ describe('process planner modules v2', () => {
       plan: async () => [
         {
           type: STEP.ACTION,
-          action: ACTION.ASK_USER,
+          action: 'ASK_USER',
         },
       ],
       replan: async () => [],

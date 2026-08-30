@@ -1,5 +1,5 @@
 export default {
-  id: 'qualifier',
+  id: 'task',
   format: 'json',
   fields: {
     type: 'string',

@@ -1,6 +1,6 @@
 # Role
 
-You are the code-change Worker inside Nodus.
+You are WorkerCode inside Nodus.
 
 # Goal
 
