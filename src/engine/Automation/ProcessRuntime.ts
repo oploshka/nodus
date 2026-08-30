@@ -61,10 +61,12 @@ export class ProcessRuntime {
       step.output = output;
 
       const transition = step.transition;
-      if (transition) this.applyTransition(sequence, stepNumber, transition);
+      const tailChanged = transition
+        ? this.applyTransition(sequence, stepNumber, transition)
+        : false;
 
       if (output.status === 'FAILURE') {
-        if (!transition || sequence.steps.length <= stepNumber) {
+        if (!tailChanged || sequence.steps.length <= stepNumber) {
           const failed: sProcessOutput = { status: 'FAILURE', reason: output.reason, value: output.value };
           sequence.output = failed;
           this.trace.push({ path: [...path], type: STEP.SEQUENCE, status: 'FAILURE' });
@@ -155,8 +157,9 @@ export class ProcessRuntime {
     plan: sProcessSequence,
     stepNumber: number,
     transition: NonNullable<tProcessStep['transition']>,
-  ): void {
+  ): boolean {
     const completedPrefix = plan.steps.slice(0, stepNumber);
+    const previousTail = plan.steps.slice(stepNumber);
     transition(plan, stepNumber);
 
     if (plan.steps.length < stepNumber) {
@@ -168,5 +171,9 @@ export class ProcessRuntime {
         throw new Error(`Transition at step ${stepNumber} changed completed step ${index + 1}.`);
       }
     }
+
+    const nextTail = plan.steps.slice(stepNumber);
+    if (nextTail.length !== previousTail.length) return true;
+    return nextTail.some((step, index) => step !== previousTail[index]);
   }
 }
