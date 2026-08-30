@@ -1,26 +1,26 @@
 import { resolve } from 'node:path';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
-import { PlannerResolver } from '@engine/Automation/PlannerResolver.js';
+import { PlannerResolver } from '@engine/Planner/PlannerResolver.js';
 import {
   PlanProcessModule,
   QualifyProcessModule,
   ReplanProcessModule,
-  type iProcessPlanner,
-  type sProcessPlanningRequest,
-  type sProcessReplanningRequest,
-} from '@engine/Automation/ProcessPlanner.js';
-import { ProcessRuntime } from '@engine/Automation/ProcessRuntime.js';
-import {
-  MODULE_RESULT,
-  STEP,
-  type iProcessModule,
-  type sProcessExecutionContext,
-  type sProcessOutput,
-  type sProcessSchema,
-  type tProcessExecutableStep,
-  type tProcessModuleResult,
-  type tProcessStep,
-} from '@engine/Automation/ProcessSchema.js';
+} from '@engine/Planner/PlannerModule.js';
+import type {
+  iProcessPlanner,
+  sProcessPlanningRequest,
+  sProcessReplanningRequest,
+} from '@engine/Planner/PlannerTsType.js';
+import { ProcessRuntime } from '@engine/Process/ProcessRuntime.js';
+import { MODULE_RESULT, STEP } from '@engine/Process/ProcessSchema.js';
+import type {
+  sProcessOutput,
+  sProcessSchema,
+  tProcessStep,
+} from '@engine/Process/ProcessTsType.js';
+import { WorkerRunner } from '@engine/Worker/WorkerRunner.js';
+import { WorkerSchema } from '@engine/Worker/WorkerSchema.js';
+import type { sWorkerRequest, sWorkerSchema, tWorkerResult } from '@engine/Worker/WorkerTsType.js';
 
 const TASK_TYPE = {
   SIMPLE: 'SIMPLE',
@@ -89,23 +89,15 @@ class PrototypePlanner implements iProcessPlanner {
   }
 }
 
-class PrototypeWorker implements iProcessModule {
-  public readonly type = STEP.WORKER;
-
-  public async execute(
-    step: tProcessExecutableStep,
-    context: sProcessExecutionContext,
-  ): Promise<tProcessModuleResult> {
-    const selected = Object.entries(context.steps)
-      .map(([number, output]) => `STEP ${number}: ${String(output.value)}`)
+class PrototypeWorker extends WorkerRunner {
+  public async run(request: sWorkerRequest): Promise<tWorkerResult> {
+    const selected = request.context.steps
+      .map((ref) => `STEP ${ref.number}: ${String(ref.output.value)}`)
       .join('\n');
 
     const output: sProcessOutput = {
       status: 'SUCCESS',
-      value: [
-        step.task ?? String(context.parent ?? ''),
-        selected,
-      ].filter(Boolean).join('\n'),
+      value: [request.task, selected].filter(Boolean).join('\n'),
     };
 
     return { type: MODULE_RESULT.OUTPUT, output };
@@ -129,13 +121,14 @@ if (!schema || typeof schema !== 'object' || (schema as { type?: unknown }).type
   throw new Error('automation PlannerTask schema is not registered');
 }
 
+const workerDefinition = automation.workers.code as sWorkerSchema;
 const resolver = new PlannerResolver();
 const planner = resolver.resolve(task, [new PrototypePlanner(type)]);
 const runtime = new ProcessRuntime([
   new QualifyProcessModule(planner),
   new PlanProcessModule(planner),
   new ReplanProcessModule(planner),
-  new PrototypeWorker(),
+  new PrototypeWorker(new WorkerSchema(workerDefinition)),
 ]);
 
 const result = await runtime.run(schema as sProcessSchema, task);

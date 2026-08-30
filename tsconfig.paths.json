@@ -11,6 +11,12 @@
       "@engine/Determine/*": [
         "src/engine/Process/Determine/*"
       ],
+      "@engine/Action/*": [
+        "src/engine/Process/Action/*"
+      ],
+      "@engine/Worker/Action/*": [
+        "src/engine/Process/Action/*"
+      ],
       "@engine/Worker/*": [
         "src/engine/Process/Worker/*"
       ],

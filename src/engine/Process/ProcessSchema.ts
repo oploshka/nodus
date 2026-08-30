@@ -1,0 +1,14 @@
+export enum STEP {
+  SEQUENCE = 'SEQUENCE',
+  QUALIFY = 'QUALIFY',
+  PLAN = 'PLAN',
+  WORKER = 'WORKER',
+  ACTION = 'ACTION',
+  VALIDATE = 'VALIDATE',
+  REPLAN = 'REPLAN',
+}
+
+export enum MODULE_RESULT {
+  OUTPUT = 'OUTPUT',
+  SCHEMA = 'SCHEMA',
+}

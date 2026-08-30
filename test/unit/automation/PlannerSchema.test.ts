@@ -5,23 +5,22 @@ import {
   PlanProcessModule,
   QualifyProcessModule,
   ReplanProcessModule,
-  type iProcessPlanner,
-  type sProcessPlanningRequest,
-  type sProcessReplanningRequest,
-} from '@engine/Automation/ProcessPlanner.js';
-import { ProcessRuntime } from '@engine/Automation/ProcessRuntime.js';
-import {
-  MODULE_RESULT,
-  STEP,
-  type iProcessModule,
-  type sProcessExecutionContext,
-  type sProcessInput,
-  type sProcessOutput,
-  type sProcessSchema,
-  type tProcessExecutableStep,
-  type tProcessModuleResult,
-  type tProcessStep,
-} from '@engine/Automation/ProcessSchema.js';
+} from '@engine/Planner/PlannerModule.js';
+import type {
+  iProcessPlanner,
+  sProcessPlanningRequest,
+  sProcessReplanningRequest,
+} from '@engine/Planner/PlannerTsType.js';
+import { ProcessRuntime } from '@engine/Process/ProcessRuntime.js';
+import { MODULE_RESULT, STEP } from '@engine/Process/ProcessSchema.js';
+import type {
+  sProcessInput,
+  sProcessSchema,
+  tProcessStep,
+} from '@engine/Process/ProcessTsType.js';
+import { WorkerRunner } from '@engine/Worker/WorkerRunner.js';
+import { WorkerSchema } from '@engine/Worker/WorkerSchema.js';
+import type { sWorkerRequest, tWorkerResult } from '@engine/Worker/WorkerTsType.js';
 
 const TASK_TYPE = { SIMPLE: 'SIMPLE', MULTI: 'MULTI', PROCESS: 'PROCESS' } as const;
 type tTaskType = typeof TASK_TYPE[keyof typeof TASK_TYPE];
@@ -42,13 +41,19 @@ class SchemaPlanner implements iProcessPlanner {
   public async replan(_request: sProcessReplanningRequest): Promise<tProcessStep[]> { return []; }
 }
 
-class SchemaWorker implements iProcessModule {
-  public readonly type = STEP.WORKER;
-  public readonly calls: Array<{ step: tProcessExecutableStep; context: sProcessExecutionContext }> = [];
-  public async execute(step: tProcessExecutableStep, context: sProcessExecutionContext): Promise<tProcessModuleResult> {
-    this.calls.push({ step, context });
-    const output: sProcessOutput = { status: 'SUCCESS', value: step.task ?? context.parent };
-    return { type: MODULE_RESULT.OUTPUT, output };
+class SchemaWorker extends WorkerRunner {
+  public readonly calls: sWorkerRequest[] = [];
+
+  public constructor() {
+    super(new WorkerSchema({ id: 'schema-test' }));
+  }
+
+  public async run(request: sWorkerRequest): Promise<tWorkerResult> {
+    this.calls.push(request);
+    return {
+      type: MODULE_RESULT.OUTPUT,
+      output: { status: 'SUCCESS', value: request.task },
+    };
   }
 }
 
@@ -65,6 +70,7 @@ describe('automation PlannerTask schema', () => {
     expect(planner.planCalls).toBe(0);
     expect(schema.steps.map((step) => step.type)).toEqual([STEP.QUALIFY, STEP.WORKER]);
     expect(worker.calls[0]?.context.parent).toBe('One self-contained task');
+    expect(worker.calls[0]?.task).toBe('One self-contained task');
   });
 
   it('routes MULTI through PLAN and executes its returned local schema', async () => {
@@ -89,13 +95,16 @@ describe('automation PlannerTask schema', () => {
     const summaryCall = worker.calls[3];
     expect(summaryCall?.context.path).toEqual([2, 4]);
     expect(summaryCall?.context.parent).toBe('Compare configuration formats');
-    expect(Object.keys(summaryCall?.context.steps ?? {})).toEqual(['1', '2', '3']);
-    expect(planStep.output?.value).toContain('STEP 1: Research JSON');
-    expect(result.output?.value).toBe(planStep.output?.value);
+    expect(summaryCall?.context.steps.map((ref) => ref.number)).toEqual([1, 2, 3]);
+    expect(summaryCall?.context.steps.map((ref) => ref.output.value)).toEqual([
+      'Research JSON', 'Research YAML', 'Research JavaScript',
+    ]);
+    expect(planStep.output?.value).toBe('Compare and choose');
+    expect(result.output?.value).toBe('Compare and choose');
   });
 });
 
-function createRuntime(planner: iProcessPlanner, worker: iProcessModule): ProcessRuntime {
+function createRuntime(planner: iProcessPlanner, worker: WorkerRunner): ProcessRuntime {
   return new ProcessRuntime([
     new QualifyProcessModule(planner),
     new PlanProcessModule(planner),

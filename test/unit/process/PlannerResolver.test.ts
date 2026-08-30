@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PlannerResolver } from '@engine/Automation/PlannerResolver.js';
-import type { iProcessPlanner } from '@engine/Automation/ProcessPlanner.js';
+import { PlannerResolver } from '@engine/Planner/PlannerResolver.js';
+import type { iProcessPlanner } from '@engine/Planner/PlannerTsType.js';
 
 const planner = (): iProcessPlanner => ({
   qualify: async () => 'SIMPLE',
