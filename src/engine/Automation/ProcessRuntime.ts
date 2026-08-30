@@ -11,6 +11,11 @@ import {
   type tProcessStep,
 } from './ProcessSchema.js';
 
+interface sSequenceSummaryEntry {
+  step: number;
+  value: string;
+}
+
 /**
  * Executes one mutable local sequence at a time.
  *
@@ -77,10 +82,9 @@ export class ProcessRuntime {
       index += 1;
     }
 
-    const last = sequence.steps.at(-1)?.output;
     const completed: sProcessOutput = {
       status: 'SUCCESS',
-      value: last?.value,
+      value: this.buildSequenceSummary(sequence),
     };
     sequence.output = completed;
     this.trace.push({ path: [...path], type: STEP.SEQUENCE, status: 'SUCCESS' });
@@ -151,6 +155,21 @@ export class ProcessRuntime {
       previous: context.previous,
       steps: context.steps,
     };
+  }
+
+  private buildSequenceSummary(sequence: sProcessSequence): string | undefined {
+    const entries: sSequenceSummaryEntry[] = [];
+
+    sequence.steps.forEach((step, index) => {
+      if (step.type === STEP.QUALIFY || step.type === STEP.PLAN || step.type === STEP.REPLAN) return;
+      const value = step.output?.value;
+      if (typeof value !== 'string' || value.trim().length === 0) return;
+      entries.push({ step: index + 1, value });
+    });
+
+    if (entries.length === 0) return undefined;
+    if (entries.length === 1) return entries[0]?.value;
+    return entries.map((entry) => `STEP ${entry.step}: ${entry.value}`).join('\n');
   }
 
   private applyTransition(
