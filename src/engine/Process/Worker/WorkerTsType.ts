@@ -1,4 +1,4 @@
-import type { sProcessExecutionContext, tProcessModuleResult } from '../ProcessTsType.js';
+import type { sProcessExecutionContext, tProcessModuleResult } from '@engine/Process/ProcessTsType.js';
 
 export interface sWorkerSchema {
   id: string;

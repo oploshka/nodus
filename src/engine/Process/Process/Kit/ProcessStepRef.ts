@@ -1,7 +1,7 @@
-import type { sProcessOutput, tProcessStep } from './ProcessTsType.js';
+import type { sProcessOutput, tProcessStep } from '../ProcessTsType.js';
 
 /** Runtime-only stable link from a local model-facing step number to the actual step object. */
-export class StepRef {
+export class ProcessStepRef {
   public constructor(
     public readonly number: number,
     private readonly target: tProcessStep,

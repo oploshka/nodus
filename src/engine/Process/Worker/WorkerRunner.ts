@@ -1,10 +1,10 @@
-import { STEP } from '../ProcessSchema.js';
+import { STEP } from '@engine/Process/ProcessSchema.js';
 import type {
   iProcessModule,
   sProcessExecutionContext,
   tProcessExecutableStep,
   tProcessModuleResult,
-} from '../ProcessTsType.js';
+} from '@engine/Process/ProcessTsType.js';
 import { WorkerSchema } from './WorkerSchema.js';
 import type { sWorkerRequest, tWorkerResult } from './WorkerTsType.js';
 
