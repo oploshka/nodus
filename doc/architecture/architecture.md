@@ -60,7 +60,7 @@ Process Worker выбирает один из двух implementation type:
 
 `WorkerSchema` и `WorkerMethod` задают эти два automation-facing base contract. `WorkerRunner` является adapter `STEP.WORKER -> Worker implementation`, а не base class concrete Worker.
 
-Concrete `WorkerCode`, `WorkerDocumentation` и `WorkerAgent` находятся в `automation/Worker/`. Code/documentation пока используют Core `IterativeWorker` как compatibility execution mechanism; agent loop вынесен в generic `WorkerAgentRunner`.
+Concrete `WorkerCode`, `WorkerDocumentation` и `WorkerAgent` находятся в `automation/Worker/`. Code/documentation пока используют Core `WorkerIterativeRunner` как compatibility execution mechanism; agent loop вынесен в generic `WorkerAgentRunner`.
 
 Actions — локальные capabilities с явными input/output contracts. Новая Action вводится только когда capability действительно повторяется как самостоятельная граница.
 
@@ -87,7 +87,7 @@ Edit принадлежит Engine и живёт в пределах одной 
 
 Research отвечает на bounded project question и владеет persistent cache/hash invalidation. Он не запускается превентивно. Worker запрашивает Research, когда execution требует конкретной недостающей информации.
 
-Research внутри `IterativeWorker` может читать task-local content через Edit. Cache/hash semantics пока остаются привязаны к физическому Project.
+Research внутри `WorkerIterativeRunner` может читать task-local content через Edit. Cache/hash semantics пока остаются привязаны к физическому Project.
 
 ## EngineTest
 
