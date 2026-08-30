@@ -1,8 +1,8 @@
-import { IterativeWorker } from '../../../src/engine/Process/Worker/IterativeWorker.ts';
+import { WorkerIterativeRunner } from '../../../src/engine/Process/Worker/WorkerIterativeRunner.ts';
 import { WorkerPresentation } from '../../../src/engine/Common/Presentation/WorkerPresentation.ts';
 
 /** Versioned Documentation Worker module. Iterative execution remains a Core mechanism for now. */
-export default class WorkerDocumentation extends IterativeWorker {
+export default class WorkerDocumentation extends WorkerIterativeRunner {
   presentation = new WorkerPresentation({ name: { en: 'Documentation', ru: 'Документация' } });
   name = this.presentation.name();
   id = this.getId();
@@ -26,6 +26,6 @@ export default class WorkerDocumentation extends IterativeWorker {
   }
 
   getActions() {
-    return ['find-file', 'read-file', 'research', 'change-documentation'];
+    return ['find-file', 'read-file', 'research', 'change-code'];
   }
 }
