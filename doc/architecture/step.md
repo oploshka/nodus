@@ -39,15 +39,19 @@ src/engine/Step/
   Worker/
   Planner/
   Qualifier/
+  Determine/
+  Research/
   Action/
 ```
 
-Каждая роль может иметь `Schema`, `Method`, typed contract и тонкий Runner. `QUALIFY` теперь имеет такой же явный role boundary, как `WORKER`, `PLAN` и `ACTION`.
+Каждая роль может иметь `Schema`, `Method`, typed contract и тонкий Runner. `DETERMINE` пока считается provisional role: наличие Step boundary позволяет тестировать его в schema-driven Process, не утверждая, что отдельная долгоживущая abstraction точно нужна. `RESEARCH` является явным semantic Step для bounded project-understanding work.
 
 Название каталога `Step/` остаётся рабочим: важно не имя папки, а то, что общий `ProcessStep*` принадлежит Process, а semantic role — отдельной extension surface.
 
-## Action ownership
+## Automation ownership
 
-Core `Step/Action/` содержит только новый Process Action contract и `ActionRunner`. Concrete legacy Actions (`change-code`, `find-file`, `read-file`, `research`) являются executable automation behavior и живут в `automation/Action/`.
+Concrete model behavior не принадлежит Core role contract. Legacy-compatible `PlannerModel`, `DetermineModel` и `ResearchBoundedModelResolver` живут в `automation/` и регистрируются через automation package. Core сохраняет соответствующие contracts/capabilities на время миграции.
+
+Core `Step/Action/` содержит только новый Process Action contract и `ActionRunner`. Concrete Actions (`change-code`, `find-file`, `read-file`, `research`) являются executable automation behavior и живут в `automation/Action/`.
 
 Старый `WorkerAction` contract остаётся только в legacy Worker boundary, потому что текущий production `WorkerIterativeRunner` ещё использует его. Он не является новым Process Action API.

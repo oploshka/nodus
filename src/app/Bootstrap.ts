@@ -1,12 +1,12 @@
 import type { AppConfiguration } from '@app/Config/Configuration.js';
 import { ConsoleLogger } from '@app/Logging/Logger.js';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
-import { ModelDetermine } from '@engine/Determine/ModelDetermine.js';
+import type { Determine } from '@engine/Determine/Determine.js';
 import { Engine } from '@engine/Engine.js';
-import { ModelPlanner } from '@engine/Planner/ModelPlanner.js';
-import { BoundedModelResearchResolver } from '@engine/Research/BoundedModelResearchResolver.js';
+import type { Planner } from '@engine/Planner/Planner.js';
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
+import type { ResearchResolver } from '@engine/Research/ResearchTypes.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
 import { WorkerAgentRunner } from '@engine/Worker/WorkerAgentRunner.js';
@@ -62,6 +62,24 @@ export interface BootstrapOverrides {
 
 type tAutomationWorkerConstructor = new (...args: unknown[]) => Worker;
 type tAutomationConstructor = new (...args: unknown[]) => unknown;
+type tAutomationPlannerConstructor = new (
+  model: ModelRunner,
+  logger: EngineLogger,
+  nodusLanguage?: string,
+  messageTemplate?: string,
+) => Planner;
+type tAutomationDetermineConstructor = new (
+  model: ModelRunner,
+  logger: EngineLogger,
+  nodusLanguage?: string,
+) => Determine;
+type tAutomationResearchConstructor = new (
+  fileSystem: FileSystem,
+  fileIndex: iProjectFileIndex,
+  model: ModelRunner,
+  logger: EngineLogger,
+  nodusLanguage?: string,
+) => ResearchResolver;
 
 /** Composition root for Engine dependencies. */
 export class Bootstrap {
@@ -123,12 +141,19 @@ export class Bootstrap {
     const ReadFileAction = resolveAutomationConstructor(automation.actions['read-file'], 'Action', 'read-file');
     const FindFileAction = resolveAutomationConstructor(automation.actions['find-file'], 'Action', 'find-file');
     const ResearchAction = resolveAutomationConstructor(automation.actions.research, 'Action', 'research');
+    const PlannerModel = resolveAutomationConstructor(automation.planners.model, 'Planner', 'model') as tAutomationPlannerConstructor;
+    const DetermineModel = resolveAutomationConstructor(automation.determine.model, 'Determine', 'model') as tAutomationDetermineConstructor;
+    const ResearchBoundedModelResolver = resolveAutomationConstructor(
+      automation.research['bounded-model'],
+      'Research',
+      'bounded-model',
+    ) as tAutomationResearchConstructor;
 
     const researchStore = new ResearchStore(target.fileSystem, logger, configuration.target.researchCachePath);
     await researchStore.open();
     const research = new Research(
       researchStore,
-      new BoundedModelResearchResolver(target.fileSystem, target.fileIndex, model, logger, language.nodus),
+      new ResearchBoundedModelResolver(target.fileSystem, target.fileIndex, model, logger, language.nodus),
       target.fileSystem,
       logger,
     );
@@ -191,9 +216,9 @@ export class Bootstrap {
 
     return new Engine(
       target.id,
-      new ModelPlanner(model, logger, language.nodus, settings.process.planner.template),
+      new PlannerModel(model, logger, language.nodus, settings.process.planner.template),
       workers,
-      new ModelDetermine(model, logger, language.nodus),
+      new DetermineModel(model, logger, language.nodus),
       createEdit,
       overrides.engineTest ?? createEngineTest(configuration, target.root),
       logger,

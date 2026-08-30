@@ -15,7 +15,8 @@ const researchSchema: ModelResponseSchema = {
   fields: { text: { type: 'string', description: 'Answer the research question with concrete supported implementation facts.' } },
 };
 
-export class BoundedModelResearchResolver implements ResearchResolver {
+/** Bounded model-backed Research strategy owned by automation. */
+export class ResearchBoundedModelResolver implements ResearchResolver {
   public constructor(
     private readonly fileSystem: FileSystem,
     private readonly fileIndex: iProjectFileIndex,

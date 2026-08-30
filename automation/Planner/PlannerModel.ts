@@ -5,8 +5,8 @@ import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { Task } from '@engine/Task/Task.js';
-import type { Plan, PlanStepDecompositionType } from './Plan.js';
-import type { Planner } from './Planner.js';
+import type { Plan, PlanStepDecompositionType } from '@engine/Planner/Plan.js';
+import type { Planner } from '@engine/Planner/Planner.js';
 import { PlannerPresentation } from '@engine/Presentation/PlannerPresentation.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 
@@ -56,8 +56,8 @@ const plannerSchema: ModelResponseSchema = {
   },
 };
 
-/** Legacy model Planner used by the production Engine compatibility path. */
-export class ModelPlanner implements Planner {
+/** Legacy-compatible model Planner behavior owned by automation during the 0.5 migration. */
+export class PlannerModel implements Planner {
   public readonly presentation = new PlannerPresentation();
   public constructor(
     private readonly model: ModelRunner,
