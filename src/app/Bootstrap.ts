@@ -1,5 +1,6 @@
 import type { AppConfiguration } from '@app/Config/Configuration.js';
 import { ConsoleLogger } from '@app/Logging/Logger.js';
+import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
 import { ModelDetermine } from '@engine/Determine/ModelDetermine.js';
 import { Engine } from '@engine/Engine.js';
 import { ModelPlanner } from '@engine/Planner/ModelPlanner.js';
@@ -11,6 +12,7 @@ import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
 import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
 import { ReadFileAction } from '@engine/Worker/Action/ReadFileAction.js';
 import { FindFileAction } from '@engine/Worker/Action/FindFileAction.js';
+import { WorkerAgentRunner } from '@engine/Worker/WorkerAgentRunner.js';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEditStrategy.js';
 import { ReplaceEditStrategy } from '@engine/Edit/Strategy/ReplaceEditStrategy.js';
@@ -25,9 +27,6 @@ import { UnitEngineTest } from '@engine/EngineTest/UnitEngineTest.js';
 import { TypecheckEngineTest } from '@engine/EngineTest/TypecheckEngineTest.js';
 import type { CommandEngineTest } from '@engine/EngineTest/CommandEngineTest.js';
 import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
-import { CodeWorker } from '@engine/Worker/CodeWorker.js';
-import { DocumentationWorker } from '@engine/Worker/DocumentationWorker.js';
-import { AgentWorker } from '@engine/Worker/AgentWorker.js';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import { ProjectFileIndex, type iProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/Index/ProjectFileIndex.js';
@@ -64,6 +63,8 @@ export interface BootstrapOverrides {
   engineTest?: EngineTest;
   settings?: NodusSettings;
 }
+
+type tAutomationWorkerConstructor = new (...args: unknown[]) => Worker;
 
 /** Composition root for Engine dependencies. */
 export class Bootstrap {
@@ -118,6 +119,9 @@ export class Bootstrap {
     const model = new ModelRunner(adapter, configuration.model);
 
     const target = overrides.target ?? await this.createTarget(configuration.target, logger);
+    const automation = await AutomationLoader.load(configuration.automation?.root ?? 'automation');
+    const WorkerCode = resolveAutomationWorker(automation.workers.code, 'code');
+    const WorkerDocumentation = resolveAutomationWorker(automation.workers.documentation, 'documentation');
 
     const researchStore = new ResearchStore(target.fileSystem, logger, configuration.target.researchCachePath);
     await researchStore.open();
@@ -132,7 +136,7 @@ export class Bootstrap {
     const findFileAction = new FindFileAction(target.fileIndex);
     const researchAction = new ResearchAction(research, workerAdaptation.research.guidance);
 
-    const codeWorker = new CodeWorker(
+    const codeWorker = new WorkerCode(
       new ChangeCodeAction(target.fileSystem, target.fileIndex, model, logger, {
         ...workerAdaptation.profiles.code,
         adaptationGuidance: workerAdaptation.change.guidance,
@@ -147,7 +151,7 @@ export class Bootstrap {
       configuration.runtime?.maxResearchRequests,
     );
 
-    const documentationWorker = new DocumentationWorker(
+    const documentationWorker = new WorkerDocumentation(
       new ChangeCodeAction(target.fileSystem, target.fileIndex, model, logger, {
         ...workerAdaptation.profiles.documentation,
         adaptationGuidance: workerAdaptation.change.guidance,
@@ -164,15 +168,16 @@ export class Bootstrap {
 
     const workers: Worker[] = [codeWorker, documentationWorker];
     if (isAgentModelAdapter(adapter)) {
+      const WorkerAgent = resolveAutomationWorker(automation.workers.agent, 'agent');
       const tools = [new FileSystemTool(), new SearchTool(), new TerminalTool(), new GitTool()];
-      workers.push(new AgentWorker(
+      workers.push(new WorkerAgent(new WorkerAgentRunner(
         new AgentRunner(adapter, configuration.model),
         tools,
         { projectRoot: target.root, exclude: configuration.target.exclude ?? [] },
         logger,
         configuration.runtime?.maxAgentRounds,
         language,
-      ));
+      )));
     }
 
     const editValidator = new EditValidator([new JsonEditValidationCheck()]);
@@ -193,6 +198,13 @@ export class Bootstrap {
       logger,
     );
   }
+}
+
+function resolveAutomationWorker(value: unknown, id: string): tAutomationWorkerConstructor {
+  if (typeof value !== 'function') {
+    throw new Error(`Automation Worker '${id}' must export a class.`);
+  }
+  return value as tAutomationWorkerConstructor;
 }
 
 function createEngineTest(configuration: AppConfiguration, root: string): EngineTest {

@@ -6,11 +6,19 @@ import type { ChangeCodeActionData, ChangeCodeActionInput, tChangeCodeActionRequ
 import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.js';
 import type { sReadFileActionInput } from '@engine/Worker/Action/ReadFileAction.js';
 import type { sFindFileActionInput } from '@engine/Worker/Action/FindFileAction.js';
-import { CodeWorker } from '@engine/Worker/CodeWorker.js';
+import { WorkerIterativeRunner } from '@engine/Worker/WorkerIterativeRunner.js';
 import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
+import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import type { sWorkerReadContext, sWorkerSearchContext } from '@engine/Worker/WorkerContext.js';
 import { createWorkerTestContext } from '@mock/WorkerTestContext.js';
+
+class TestWorker extends WorkerIterativeRunner {
+  public readonly presentation = new WorkerPresentation({ name: { en: 'Test Worker' } });
+  public readonly name = this.presentation.name();
+  public readonly id = 'test';
+  public readonly description = 'Iterative Worker test implementation.';
+}
 
 class SequenceChangeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, tChangeCodeActionRequest> {
   public readonly id = 'change-code';
@@ -77,7 +85,7 @@ function answer(question: string): ResearchAnswer {
   return { question, status: 'resolved', answer: `answer:${question}`, sources: [], createdAt: new Date(0).toISOString() };
 }
 
-describe('Iterative Worker action lifecycle', () => {
+describe('WorkerIterativeRunner action lifecycle', () => {
   it('uses cheap FindFile before retrying the primary action', async () => {
     const change = new SequenceChangeAction([
       { status: 'not-completed', reason: 'Need location', canContinue: true, requests: [{ actionId: 'find-file', input: { query: 'TodoStore' } }] },
@@ -86,7 +94,7 @@ describe('Iterative Worker action lifecycle', () => {
     const findFile = new ScriptedFindFileAction();
     const readFile = new ScriptedReadFileAction();
     const research = new ScriptedResearchAction();
-    const subject = new CodeWorker(change, readFile, findFile, research, new NullLogger(), 3, 2);
+    const subject = new TestWorker(change, readFile, findFile, research, new NullLogger(), 3, 2);
     const context = createWorkerTestContext();
 
     const result = await subject.run(context.data, context.instrument);
@@ -103,7 +111,7 @@ describe('Iterative Worker action lifecycle', () => {
       { status: 'completed', data: { summary: 'done' } },
     ]);
     const readFile = new ScriptedReadFileAction();
-    const subject = new CodeWorker(change, readFile, new ScriptedFindFileAction(), new ScriptedResearchAction(), new NullLogger(), 3, 2);
+    const subject = new TestWorker(change, readFile, new ScriptedFindFileAction(), new ScriptedResearchAction(), new NullLogger(), 3, 2);
     const context = createWorkerTestContext({ files: { 'a.ts': 'task-local content' } });
 
     const result = await subject.run(context.data, context.instrument);
@@ -121,7 +129,7 @@ describe('Iterative Worker action lifecycle', () => {
       { status: 'completed', data: { summary: 'done' } },
     ]);
     const findFile = new ScriptedFindFileAction(['src/TodoStore.ts']);
-    const subject = new CodeWorker(change, new ScriptedReadFileAction(), findFile, new ScriptedResearchAction(), new NullLogger(), 4, 2);
+    const subject = new TestWorker(change, new ScriptedReadFileAction(), findFile, new ScriptedResearchAction(), new NullLogger(), 4, 2);
     const context = createWorkerTestContext();
 
     const result = await subject.run(context.data, context.instrument);
@@ -138,7 +146,7 @@ describe('Iterative Worker action lifecycle', () => {
       { status: 'completed', data: { summary: 'done' } },
     ]);
     const readFile = new ScriptedReadFileAction();
-    const subject = new CodeWorker(change, readFile, new ScriptedFindFileAction(), new ScriptedResearchAction(), new NullLogger(), 4, 2);
+    const subject = new TestWorker(change, readFile, new ScriptedFindFileAction(), new ScriptedResearchAction(), new NullLogger(), 4, 2);
     const context = createWorkerTestContext({ files: { 'a.ts': 'task-local content' } });
 
     const result = await subject.run(context.data, context.instrument);
@@ -154,7 +162,7 @@ describe('Iterative Worker action lifecycle', () => {
       { status: 'completed', data: { summary: 'done' } },
     ]);
     const research = new ScriptedResearchAction();
-    const subject = new CodeWorker(change, new ScriptedReadFileAction(), new ScriptedFindFileAction(), research, new NullLogger(), 3, 2);
+    const subject = new TestWorker(change, new ScriptedReadFileAction(), new ScriptedFindFileAction(), research, new NullLogger(), 3, 2);
     const context = createWorkerTestContext();
 
     const result = await subject.run(context.data, context.instrument);
@@ -169,7 +177,7 @@ describe('Iterative Worker action lifecycle', () => {
     const readFile = new ScriptedReadFileAction();
     const findFile = new ScriptedFindFileAction();
     const research = new ScriptedResearchAction();
-    const subject = new CodeWorker(change, readFile, findFile, research, new NullLogger(), 3, 2);
+    const subject = new TestWorker(change, readFile, findFile, research, new NullLogger(), 3, 2);
     const context = createWorkerTestContext();
 
     const result = await subject.run(context.data, context.instrument);
@@ -190,7 +198,7 @@ describe('Iterative Worker action lifecycle', () => {
         { actionId: 'research', input: { question: 'q2' } },
       ],
     }]);
-    const subject = new CodeWorker(change, new ScriptedReadFileAction(), new ScriptedFindFileAction(), new ScriptedResearchAction(), new NullLogger(), 3, 1);
+    const subject = new TestWorker(change, new ScriptedReadFileAction(), new ScriptedFindFileAction(), new ScriptedResearchAction(), new NullLogger(), 3, 1);
     const context = createWorkerTestContext();
 
     const result = await subject.run(context.data, context.instrument);

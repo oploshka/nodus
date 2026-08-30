@@ -1,23 +1,45 @@
 # Worker
 
-Worker исполняет один `PlanStep` через bounded Action loop.
+В Nodus 0.5 Worker разделён на Core-механику и конкретный versioned automation module.
 
-Текущий code/documentation flow использует:
+Core хранит контракт в `src/engine/Process/Worker/`, а конкретные `WorkerCode`, `WorkerDocumentation` и `WorkerAgent` живут в `automation/Worker/`. Это отделяет вопрос «что такое Worker и как Core его исполняет» от пользовательской конфигурации конкретного Worker.
 
-- `ChangeCodeAction` — определяет semantic edit intent (`path + instruction`) и при нехватке данных формулирует Research requests;
-- `ResearchAction` — получает конкретные project facts и возвращает их в Worker session.
+## Process Worker contract
 
-`ChangeCodeAction` не владеет edit serialization. Он не строит diff/range-replace/full-file payload и не пишет Project. При готовности изменения Worker возвращает `ProjectEditRequest`, где `edits[]` описывают требуемый semantic результат, а strategy остаётся execution preference.
+Automation Worker сообщает Core способ исполнения через `getImplementation()`.
+
+Поддерживаются два варианта:
+
+- `SCHEMA` — Worker возвращает локальную Process schema; Core сам исполняет её;
+- `METHOD` — Worker предоставляет custom `run(request)` для поведения, которое пока удобнее выразить кодом.
+
+`WorkerSchema` — abstract base для schema-driven Worker и требует `getId()` + `getSchema()`.
+
+`WorkerMethod` — abstract base для custom Worker и требует `getId()` + `run()`.
+
+`WorkerRunner` не является родителем конкретных Workers. Это adapter `STEP.WORKER -> automation Worker`: он собирает `task/context`, читает implementation type и либо возвращает `MODULE_RESULT.SCHEMA` в `ProcessRuntime`, либо вызывает method.
 
 ```text
-PlanStep
-  -> Worker
-  -> ChangeCodeAction
-       -> ready: ProjectEditRequest
-       -> missing-information: Research requests
-  -> Engine / ProjectEditor
+STEP.WORKER
+  -> WorkerRunner
+  -> Worker.getImplementation()
+       -> SCHEMA -> ProcessRuntime executes schema
+       -> METHOD -> custom run(request)
 ```
 
-Technical EditStrategy и applicators принадлежат Engine Edit layer. Подробности: [`edit.md`](edit.md).
+## Текущий compatibility path
 
-Worker может завершить step как `completed`, `not-completed` или `failed`. Настоящий continuation того же Worker instance пока не реализован.
+Миграция production Engine на новый Process contract ещё не завершена целиком. Существующий code/documentation execution пока использует Core `WorkerIterativeRunner`, но concrete классы уже вынесены в `automation/Worker/`.
+
+Agent-specific bounded loop извлечён из concrete Worker в Core `WorkerAgentRunner`; `automation/WorkerAgent` оставляет только идентичность и подключение этого механизма.
+
+Для code/documentation текущий iterative flow по-прежнему использует:
+
+- `ChangeCodeAction` — semantic edit intent;
+- `FindFileAction` / `ReadFileAction` — дешёвый retrieval;
+- `ResearchAction` — bounded project research;
+- Engine-owned Edit — task-local чтение, накопление и применение изменений.
+
+`WorkerCode` планируется переводить на schema-driven форму отдельно, когда будет зафиксирована полезная Worker schema; сам факт наличия `WorkerSchema` не является причиной преждевременно переписывать iterative lifecycle.
+
+Technical EditStrategy и applicators принадлежат Engine Edit layer. Подробности: [`edit.md`](edit.md).

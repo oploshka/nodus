@@ -16,7 +16,7 @@ interface WorkerSession {
   context: tWorkerContextItem[];
 }
 
-export interface IterativeWorkerModelSettings {
+export interface WorkerIterativeRunnerModelSettings {
   primary?: ModelRunSettings;
   research?: ModelRunSettings;
 }
@@ -25,7 +25,7 @@ export interface IterativeWorkerModelSettings {
  * Shared Worker lifecycle. Direct FindFile/ReadFile retrieval is preferred for cheap project facts.
  * Research remains a separately bounded expensive analysis operation.
  */
-export abstract class IterativeWorker implements Worker {
+export abstract class WorkerIterativeRunner implements Worker {
   public abstract readonly id: string;
   public abstract readonly presentation: WorkerPresentation;
   public abstract readonly name: string;
@@ -44,7 +44,7 @@ export abstract class IterativeWorker implements Worker {
     private readonly maxResearchRequests = 4,
     private readonly maxFindFileRequests = 4,
     private readonly maxReadFileRequests = 6,
-    private readonly modelSettings: IterativeWorkerModelSettings = {},
+    private readonly modelSettings: WorkerIterativeRunnerModelSettings = {},
   ) {
     this.actions = [primaryAction, findFileAction, readFileAction, researchAction];
   }

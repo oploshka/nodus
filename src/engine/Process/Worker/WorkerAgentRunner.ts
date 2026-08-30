@@ -1,20 +1,19 @@
-import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { Worker, WorkerResult, WorkerRunData } from '@engine/Worker/Worker.js';
+import type { WorkerResult, WorkerRunData } from '@engine/Worker/Worker.js';
+import type { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
+import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
 import type { AgentRunner } from '@model/Runner/AgentRunner.js';
 import type { Tool, ToolContext } from '@model/Tool/Tool.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
-import { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
-import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
 
-/** General-purpose bounded agent loop. Specialized workers may outperform it. */
-export class AgentWorker implements Worker {
-  public readonly presentation = new WorkerPresentation({ name: { en: 'General agent', ru: 'Универсальный агент' } });
-  public readonly name = this.presentation.name();
-  public readonly id = 'agent';
-  public readonly description = 'General-purpose autonomous coding agent with project tools. Useful when a specialized worker is not a clear fit.';
+export interface sWorkerAgentOwner {
+  id: string;
+  presentation: WorkerPresentation;
+}
 
+/** Generic bounded agent execution used by automation-defined Agent Workers. */
+export class WorkerAgentRunner {
   public constructor(
     private readonly agent: AgentRunner,
     private readonly tools: ReadonlyArray<Tool>,
@@ -24,11 +23,14 @@ export class AgentWorker implements Worker {
     private readonly language: LanguageConfiguration = { project: 'en', nodus: 'en', response: 'en' },
   ) {}
 
-  public canHandle(_step: PlanStep): boolean { return true; }
-
-  public async run(data: WorkerRunData, instrument: WorkerInstrument): Promise<WorkerResult> {
+  public async run(
+    owner: sWorkerAgentOwner,
+    data: WorkerRunData,
+    instrument: WorkerInstrument,
+  ): Promise<WorkerResult> {
     const { task, step } = data;
     const { edit } = instrument;
+
     try {
       const result = await this.agent.run({
         message: [
@@ -42,8 +44,6 @@ export class AgentWorker implements Worker {
         tools: this.tools,
         context: {
           ...this.context,
-          // Agent sees the same task-local file state as specialized Workers.
-          // Create/delete semantics remain intentionally outside Edit for now.
           fileAccess: {
             read: (path) => edit.read(path),
             write: (path, content) => edit.write(path, content),
@@ -53,8 +53,8 @@ export class AgentWorker implements Worker {
       });
 
       this.logger.info('worker.agent.finish', {
-        workerId: this.id,
-        presentation: this.presentation,
+        workerId: owner.id,
+        presentation: owner.presentation,
         taskId: task.id,
         stepId: step.id,
         status: result.status,
@@ -66,7 +66,13 @@ export class AgentWorker implements Worker {
         : { status: 'not-completed', reason: result.reason, canContinue: true };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      this.logger.warn('worker.agent.interrupted', { workerId: this.id, presentation: this.presentation, taskId: task.id, stepId: step.id, reason });
+      this.logger.warn('worker.agent.interrupted', {
+        workerId: owner.id,
+        presentation: owner.presentation,
+        taskId: task.id,
+        stepId: step.id,
+        reason,
+      });
       return { status: 'not-completed', reason, canContinue: true };
     }
   }

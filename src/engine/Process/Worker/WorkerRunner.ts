@@ -1,19 +1,23 @@
-import { STEP } from '@engine/Process/ProcessSchema.js';
+import { MODULE_RESULT, STEP } from '@engine/Process/ProcessSchema.js';
 import type {
   iProcessModule,
   sProcessExecutionContext,
   tProcessExecutableStep,
   tProcessModuleResult,
 } from '@engine/Process/ProcessTsType.js';
-import { WorkerSchema } from './WorkerSchema.js';
-import type { sWorkerRequest, tWorkerResult } from './WorkerTsType.js';
+import {
+  WORKER_IMPLEMENTATION,
+  type iWorkerModule,
+  type sWorkerRequest,
+} from './WorkerTsType.js';
 
-export abstract class WorkerRunner implements iProcessModule {
+/** Process adapter for one automation Worker. Core decides whether to execute its schema or method. */
+export class WorkerRunner implements iProcessModule {
   public readonly type = STEP.WORKER;
 
-  public constructor(public readonly schema: WorkerSchema) {}
+  public constructor(public readonly worker: iWorkerModule) {}
 
-  public execute(
+  public async execute(
     step: tProcessExecutableStep,
     context: sProcessExecutionContext,
   ): Promise<tProcessModuleResult> {
@@ -22,8 +26,18 @@ export abstract class WorkerRunner implements iProcessModule {
       throw new Error('WORKER requires a non-empty self-contained task.');
     }
 
-    return this.run({ task, context });
-  }
+    const request: sWorkerRequest = { task, context };
+    const implementation = this.worker.getImplementation();
 
-  public abstract run(request: sWorkerRequest): Promise<tWorkerResult>;
+    switch (implementation.type) {
+      case WORKER_IMPLEMENTATION.SCHEMA:
+        return {
+          type: MODULE_RESULT.SCHEMA,
+          schema: implementation.schema,
+        };
+
+      case WORKER_IMPLEMENTATION.METHOD:
+        return implementation.method(request);
+    }
+  }
 }

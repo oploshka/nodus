@@ -86,6 +86,18 @@ Validation появился сначала как lifecycle boundary с `PassVal
 
 Поэтому 0.4 следует понимать как новую фазу исследования и осознания проекта, а не как заявление о production maturity.
 
+## Переход 0.4 -> 0.5
+
+Переход к 0.5 связан уже не только с новым пониманием границ, а с изменением самого языка исполнения Nodus.
+
+Вместо того чтобы считать фиксированный `Planner -> Worker -> ...` loop единственной формой runtime, проект вводит `ProcessRuntime` и явные schemas из фиксированных `STEP`. `SEQUENCE` становится локальной структурой исполнения с explicit data flow, Worker и Planner могут вернуть вложенную schema, а Core остаётся единственным её исполнителем и контролирует изменение ещё не выполненного хвоста.
+
+Параллельно отделяется versioned `automation/` как подключаемый behavior layer. Core определяет Process/Worker contracts и shared mechanics, а concrete Planner/Qualifier/Worker modules становятся пользовательской конфигурацией, выраженной исполняемыми классами и schemas.
+
+Worker boundary в 0.5 также перестаёт предполагать один способ реализации: Worker может предоставить `SCHEMA` либо custom `METHOD`. Это позволяет постепенно переводить устойчивые execution paths на schema, не заставляя все специализированные или экспериментальные Workers немедленно отказаться от кода.
+
+0.5 поэтому фиксирует schema-driven Process как текущий архитектурный этап. Полная миграция production Engine на этот runtime остаётся отдельной работой и не считается уже завершённой только из-за появления Process contract.
+
 ## Presentation migration
 
 В одном из промежуточных этапов Presentation была расширена на Planner, Determine, Research, Edit и Model. Каждая роль получила собственный concrete Presentation; общий `Presentation<TEvent>` остался renderer contract без общего semantic formatter DSL. Этот факт ранее оставался в корневом `README.txt`; при реорганизации документации артефакт удалён.
