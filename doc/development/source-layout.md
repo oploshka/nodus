@@ -2,58 +2,43 @@
 
 This file fixes the source-layout conventions used by Nodus engine code.
 
+## Core
+
+The current Engine orchestration kernel is intentionally compact:
+
+```text
+src/engine/
+  Engine.ts
+  Core/
+    CoreRuntime.ts
+    CoreSchema.ts
+    CoreTsType.ts
+
+  Deprecated/
+    EngineOld.ts
+```
+
+`Engine.ts` is the public facade. `Core/` owns only generic orchestration mechanics: module registration, group policy, `SEQUENCE`, explicit context projection, transitions and `OUTPUT | SCHEMA` execution.
+
+Semantic groups such as Planner, Worker, Research, Action or Test are not directories required by Core and are not a fixed Core enum. Their names and authority come from initialization config.
+
+Existing `src/engine/Process/` and `src/engine/Step/` directories remain migration surfaces while automation is moved onto the new Core contract. Do not delete them merely because the first new Engine path does not use them.
+
 ## Entity directories
 
-A directory that represents an engine domain owns its files. Do not place files for that entity next to its directory at the parent level.
+A directory that represents an engine domain owns its files. Avoid spreading one mechanism across unrelated parent directories.
 
-Process owns the generic execution primitive for one semantic step:
-
-```text
-src/engine/Process/
-  Process/
-    ProcessRuntime.ts
-    ProcessStepSchema.ts
-    ProcessStepMethod.ts
-    ProcessStepTsType.ts
-    ProcessStepRunner.ts
-    ProcessStepResolver.ts
-```
-
-Role-specific Process Step contracts live separately:
+Files owned by an entity start with the entity name when that prefix adds useful ownership information:
 
 ```text
-src/engine/Step/
-  Worker/
-  Planner/
-  Qualifier/
-  Action/
-```
-
-`Step/` is a semantic-role grouping, not the owner of shared execution mechanics. The folder name may evolve; the stable boundary is `ProcessStep*` in Process versus role-specific extension surfaces.
-
-## File names
-
-Files owned by an entity start with that entity name.
-
-```text
-ProcessStepRunner.ts
-ProcessStepResolver.ts
+CoreRuntime.ts
+CoreSchema.ts
+CoreTsType.ts
 WorkerSchema.ts
 PlannerMethod.ts
-QualifierRunner.ts
-ActionRunner.ts
-ProcessRuntime.ts
 ```
 
-Avoid reversed names such as `CodeWorker.ts`, `ModelPlanner.ts`, or `ReadFileAction.ts` in new Core code. Existing legacy/automation files may keep historical names during migration.
-
-The existing lowercase type prefixes remain unchanged inside TypeScript: `s` for structural interfaces, `i` for behavioral interfaces, `t` for derived types, and `p` for primitive aliases.
-
-When supporting TypeScript contracts would clutter an implementation file, place them in `<Entity>TsType.ts`.
-
-## Contract directories
-
-Role-specific automation-facing contract families stay in the role-local `Contract/` directory:
+Role-specific automation-facing contracts may still use role-local `Contract/` directories while they remain part of the migration:
 
 ```text
 Step/
@@ -62,43 +47,20 @@ Step/
       WorkerSchema.ts
       WorkerMethod.ts
       WorkerTsType.ts
-    WorkerRunner.ts
-
-  Planner/
-    Contract/
-      PlannerSchema.ts
-      PlannerMethod.ts
-      PlannerTsType.ts
-    PlannerRunner.ts
-
-  Qualifier/
-    Contract/
-      QualifierSchema.ts
-      QualifierMethod.ts
-      QualifierTsType.ts
-    QualifierRunner.ts
 ```
 
-Generic Process Step mechanics do not need a separate `Contract/` directory: the `ProcessStep*` prefix makes their ownership explicit inside the Process entity.
+The lowercase type prefixes remain unchanged inside TypeScript: `s` for structural interfaces, `i` for behavioral interfaces, `t` for derived types, and `p` for primitive aliases.
 
 ## Automation ownership
 
-Concrete executable behavior belongs in `automation/` when it is a replaceable user/versioned implementation of a Core contract. For example, Core owns the Action role contract while concrete Actions live under `automation/Action/`.
+Concrete executable behavior belongs in `automation/` when it is replaceable user/versioned behavior. Core must not gain special execution logic for a new semantic group merely because the default automation contains one.
+
+A module may inherit convenience behavior from Nodus-owned role classes, but Core accepts it structurally. User modules do not need to inherit a Nodus interface or base class if their executable shape matches the Core contract.
 
 ## Deprecated directories
 
-During an architectural migration, incompatible legacy implementations may be quarantined under the owning entity's `Deprecated/` directory instead of distorting the new contract.
+During architectural migration, incompatible legacy implementations are quarantined under `Deprecated/` instead of distorting the new contract.
 
-New Process Step code must not import `Deprecated/`. Existing legacy paths may continue to do so until their behavior is either moved into automation/current Step roles or deleted.
+The previous production coordinator is `src/engine/Deprecated/EngineOld.ts`. Other old-only mechanics should be moved into Deprecated when the new execution path proves they belong only to the previous lifecycle. Preserve them instead of deleting them while the migration is still discovering lost responsibilities.
 
-## Entity-local helpers
-
-Helpers that are implementation details of one entity live under that entity's `Kit/` directory and keep the entity prefix.
-
-```text
-Process/
-  Kit/
-    ProcessStepRef.ts
-```
-
-Do not promote entity-local helpers to the aggregate `Process/` root.
+New Core code must not depend on Deprecated code. Existing application composition may continue to use Deprecated paths until its automation is migrated.
