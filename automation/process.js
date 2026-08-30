@@ -17,3 +17,29 @@ export const TASK_TYPE = Object.freeze({
   MULTI: 'MULTI',
   PROCESS: 'PROCESS',
 });
+
+export function cloneProcessSteps(steps) {
+  return steps.map(cloneProcessStep);
+}
+
+function cloneProcessStep(step) {
+  const copy = {
+    ...step,
+    output: undefined,
+  };
+
+  if (step.input) {
+    copy.input = {
+      ...step.input,
+      context: step.input.context
+        ? {
+            ...step.input.context,
+            steps: step.input.context.steps ? [...step.input.context.steps] : undefined,
+          }
+        : undefined,
+    };
+  }
+
+  if (Array.isArray(step.steps)) copy.steps = cloneProcessSteps(step.steps);
+  return copy;
+}
