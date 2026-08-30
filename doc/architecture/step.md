@@ -1,40 +1,68 @@
 # Process Step
 
-В Nodus 0.5 Process владеет общей механикой исполнения semantic steps, а `src/engine/Step/` хранит role-specific contracts.
+The first Nodus 0.5 schema prototype modeled semantic roles through a fixed `STEP` enum and role-specific runners under `src/engine/Step/`. That implementation remains in the repository as a migration surface, but it is no longer the intended configuration boundary of the new Engine Core.
 
-## Process-owned primitive
+## Current direction
 
-Общий execution primitive живёт рядом с `ProcessRuntime`:
+The new Core owns only structural orchestration. `SEQUENCE` remains a reserved Core primitive, while semantic execution groups are declared by Engine initialization config.
+
+```text
+Core
+  SEQUENCE
+  module registry
+  group policy
+  explicit context
+  transitions
+  OUTPUT | SCHEMA
+
+configuration / automation
+  planner
+  worker
+  research
+  action
+  test
+  custom user groups
+```
+
+A schema step names a registered module rather than selecting from a fixed semantic enum:
+
+```ts
+{
+  module: 'WorkerCode',
+  task: 'Implement the requested change',
+}
+```
+
+The module itself declares its group. Nodus-owned modules may inherit that group from a role-specific base class; user modules only need to match the structural Core module contract.
+
+Group authority is defined separately from module implementations:
+
+```ts
+groups: {
+  planner: {
+    schema: {
+      allowedGroups: ['worker', 'research'],
+    },
+  },
+  worker: {
+    schema: {
+      allowedGroups: ['action', 'research'],
+    },
+  },
+  action: {
+    schema: false,
+  },
+}
+```
+
+Core validates returned and transition-mutated schemas against these policies recursively.
+
+## Existing Step code
+
+The current directories remain available while automation is migrated:
 
 ```text
 src/engine/Process/Process/
-  ProcessRuntime.ts
-  ProcessSchema.ts
-  ProcessTsType.ts
-  ProcessStepSchema.ts
-  ProcessStepMethod.ts
-  ProcessStepTsType.ts
-  ProcessStepRunner.ts
-  ProcessStepResolver.ts
-```
-
-`ProcessStepSchema` и `ProcessStepMethod` задают два способа реализации: декларативная локальная schema или imperative method. `ProcessStepRunner` адаптирует конкретный `STEP` к `iProcessModule`, а `ProcessStepResolver` выполняет только deterministic lookup implementation id.
-
-```text
-semantic STEP
-  -> role Runner
-  -> ProcessStepRunner
-  -> ProcessStepResolver
-  -> implementation
-       -> SCHEMA -> ProcessRuntime
-       -> METHOD -> run(request)
-```
-
-## Semantic roles
-
-`src/engine/Step/` не владеет общей Process mechanics. Здесь остаются различия ролей: input/result contract, capabilities и допустимая delegation.
-
-```text
 src/engine/Step/
   Worker/
   Planner/
@@ -44,14 +72,6 @@ src/engine/Step/
   Action/
 ```
 
-Каждая роль может иметь `Schema`, `Method`, typed contract и тонкий Runner. `DETERMINE` пока считается provisional role: наличие Step boundary позволяет тестировать его в schema-driven Process, не утверждая, что отдельная долгоживущая abstraction точно нужна. `RESEARCH` является явным semantic Step для bounded project-understanding work.
+They contain useful contracts and behavior from the earlier schema-driven prototype. They should be moved to Deprecated or adapted only after the new Engine path makes their remaining responsibilities clear; they are not being deleted during this migration.
 
-Название каталога `Step/` остаётся рабочим: важно не имя папки, а то, что общий `ProcessStep*` принадлежит Process, а semantic role — отдельной extension surface.
-
-## Automation ownership
-
-Concrete model behavior не принадлежит Core role contract. Legacy-compatible `PlannerModel`, `DetermineModel` и `ResearchBoundedModelResolver` живут в `automation/` и регистрируются через automation package. Core сохраняет соответствующие contracts/capabilities на время миграции.
-
-Core `Step/Action/` содержит только новый Process Action contract и `ActionRunner`. Concrete Actions (`change-code`, `find-file`, `read-file`, `research`) являются executable automation behavior и живут в `automation/Action/`.
-
-Старый `WorkerAction` contract остаётся только в legacy Worker boundary, потому что текущий production `WorkerIterativeRunner` ещё использует его. Он не является новым Process Action API.
+See `doc/architecture/core.md` for the current Engine/Core boundary.

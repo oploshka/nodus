@@ -2,7 +2,7 @@ import type { AppConfiguration } from '@app/Config/Configuration.js';
 import { ConsoleLogger } from '@app/Logging/Logger.js';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
 import type { Determine } from '@engine/Determine/Determine.js';
-import { Engine } from '@engine/Engine.js';
+import { EngineOld as Engine } from '@engine/Deprecated/EngineOld.js';
 import type { Planner } from '@engine/Planner/Planner.js';
 import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
