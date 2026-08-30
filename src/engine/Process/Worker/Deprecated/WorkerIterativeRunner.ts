@@ -6,11 +6,11 @@ import type { ResearchActionInput } from '@engine/Worker/Action/ResearchAction.j
 import type { sReadFileActionInput } from '@engine/Worker/Action/ReadFileAction.js';
 import type { sFindFileActionInput } from '@engine/Worker/Action/FindFileAction.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
-import type { Worker, WorkerResult, WorkerRunData } from '@engine/Worker/Worker.js';
+import type { Worker, WorkerResult, WorkerRunData } from '@engine/Worker/Deprecated/Worker.js';
 import type { WorkerPresentation } from '@engine/Presentation/WorkerPresentation.js';
 import type { ModelRunSettings } from '@model/Request/ModelRun.js';
 import type { WorkerInstrument } from '@engine/Common/Instrument/ProcessInstrument.js';
-import type { sWorkerReadContext, sWorkerSearchContext, tWorkerContextItem } from '@engine/Worker/WorkerContext.js';
+import type { sWorkerReadContext, sWorkerSearchContext, tWorkerContextItem } from '@engine/Worker/Deprecated/WorkerContext.js';
 
 interface WorkerSession {
   context: tWorkerContextItem[];
@@ -22,7 +22,8 @@ export interface WorkerIterativeRunnerModelSettings {
 }
 
 /**
- * Shared Worker lifecycle. Direct FindFile/ReadFile retrieval is preferred for cheap project facts.
+ * Legacy production Worker lifecycle. New Process Worker code must not depend on Deprecated.
+ * Direct FindFile/ReadFile retrieval is preferred for cheap project facts.
  * Research remains a separately bounded expensive analysis operation.
  */
 export abstract class WorkerIterativeRunner implements Worker {

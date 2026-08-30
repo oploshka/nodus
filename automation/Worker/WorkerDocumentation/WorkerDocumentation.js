@@ -1,7 +1,7 @@
-import { WorkerIterativeRunner } from '../../../src/engine/Process/Worker/WorkerIterativeRunner.ts';
+import { WorkerIterativeRunner } from '../../../src/engine/Process/Worker/Deprecated/WorkerIterativeRunner.ts';
 import { WorkerPresentation } from '../../../src/engine/Common/Presentation/WorkerPresentation.ts';
 
-/** Versioned Documentation Worker module. Iterative execution remains a Core mechanism for now. */
+/** Legacy production Documentation Worker. New Process Worker implementations use Worker/Contract. */
 export default class WorkerDocumentation extends WorkerIterativeRunner {
   presentation = new WorkerPresentation({ name: { en: 'Documentation', ru: 'Документация' } });
   name = this.presentation.name();
