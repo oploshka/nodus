@@ -1,98 +1,125 @@
 import { resolve } from 'node:path';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
+import {
+  PlanProcessModule,
+  QualifyProcessModule,
+  ReplanProcessModule,
+  type iProcessPlanner,
+  type sProcessPlanningRequest,
+  type sProcessReplanningRequest,
+} from '@engine/Automation/ProcessPlanner.js';
 import { ProcessRuntime } from '@engine/Automation/ProcessRuntime.js';
-import type {
-  iProcessModule,
-  sProcessExecutionContext,
-  sProcessModuleResult,
+import {
+  STEP,
+  TASK_TYPE,
+  type iProcessModule,
+  type sProcessExecutionContext,
+  type sProcessOutput,
+  type tProcessExecutableStep,
+  type tProcessStep,
 } from '@engine/Automation/ProcessSchema.js';
 
+class PrototypePlanner implements iProcessPlanner {
+  public constructor(private readonly type: TASK_TYPE) {}
+
+  public async qualify(_task: string): Promise<TASK_TYPE> {
+    return this.type;
+  }
+
+  public async plan(request: sProcessPlanningRequest): Promise<tProcessStep[]> {
+    if (request.type === TASK_TYPE.SIMPLE) {
+      return [
+        {
+          type: STEP.WORKER,
+          task: request.task,
+        },
+      ];
+    }
+
+    return [
+      {
+        type: STEP.WORKER,
+        task: 'Исследовать JSON как формат конфигурации: преимущества и недостатки.',
+      },
+      {
+        type: STEP.WORKER,
+        task: 'Исследовать YAML как формат конфигурации: преимущества и недостатки.',
+      },
+      {
+        type: STEP.WORKER,
+        task: 'Исследовать JavaScript как формат конфигурации: преимущества и недостатки.',
+      },
+      {
+        type: STEP.WORKER,
+        task: 'Сравнить варианты и выбрать один итоговый формат.',
+        input: {
+          context: {
+            parent: true,
+            steps: [1, 2, 3],
+          },
+        },
+      },
+    ];
+  }
+
+  public async replan(request: sProcessReplanningRequest): Promise<tProcessStep[]> {
+    return [
+      {
+        type: STEP.WORKER,
+        task: `Исправить проблему: ${request.failure.reason ?? 'неизвестная ошибка'}`,
+        input: {
+          context: {
+            parent: true,
+            previous: true,
+          },
+        },
+      },
+    ];
+  }
+}
+
 class PrototypeWorker implements iProcessModule {
-  public readonly id = 'worker';
+  public readonly type = STEP.WORKER;
 
   public async execute(
-    input: Readonly<Record<string, unknown>>,
+    step: tProcessExecutableStep,
     context: sProcessExecutionContext,
-  ): Promise<sProcessModuleResult> {
+  ): Promise<sProcessOutput> {
+    const selected = Object.entries(context.steps)
+      .map(([number, output]) => `STEP ${number}: ${String(output.value)}`)
+      .join('\n');
+
     return {
-      status: 'completed',
-      value: {
-        task: input.task,
-        preset: context.preset,
-        changedPaths: context.preset === 'repair' ? ['src/repaired.ts'] : ['src/changed.ts'],
-      },
+      status: 'SUCCESS',
+      value: [
+        step.task ?? String(context.parent ?? ''),
+        selected,
+      ].filter(Boolean).join('\n'),
     };
   }
 }
 
-class PrototypeValidate implements iProcessModule {
-  public readonly id = 'validate';
-  private attempts = 0;
+const type = process.argv.includes('--multi')
+  ? TASK_TYPE.MULTI
+  : process.argv.includes('--process')
+    ? TASK_TYPE.PROCESS
+    : TASK_TYPE.SIMPLE;
+const task = process.argv
+  .filter((argument) => argument !== '--multi' && argument !== '--process')
+  .slice(2)
+  .join(' ') || 'Выбрать подходящий формат конфигурации приложения.';
 
-  public constructor(private readonly failOnce: boolean) {}
-
-  public async execute(input: Readonly<Record<string, unknown>>): Promise<sProcessModuleResult> {
-    this.attempts += 1;
-    if (this.failOnce && this.attempts === 1) {
-      return {
-        status: 'failed',
-        reason: 'Prototype validation failure',
-        value: { checked: input.changes },
-      };
-    }
-    return {
-      status: 'completed',
-      value: { checked: input.changes, attempt: this.attempts },
-    };
-  }
-}
-
-class PrototypeReplan implements iProcessModule {
-  public readonly id = 'replan';
-
-  public async execute(input: Readonly<Record<string, unknown>>): Promise<sProcessModuleResult> {
-    return {
-      status: 'completed',
-      value: { failure: input.failure },
-      process: {
-        kind: 'sequence',
-        id: 'repair-process',
-        variables: ['task', 'repair', 'validation'],
-        input: { task: 'task' },
-        output: { validation: 'validation' },
-        steps: [
-          {
-            kind: 'action',
-            id: 'repair',
-            use: 'worker',
-            preset: 'repair',
-            input: { task: 'task' },
-            saveAs: 'repair',
-          },
-          {
-            kind: 'action',
-            id: 'validate-repair',
-            use: 'validate',
-            input: { changes: 'repair.value' },
-            saveAs: 'validation',
-          },
-        ],
-      },
-    };
-  }
-}
-
-const failOnce = process.argv.includes('--fail-once');
-const task = process.argv.filter((argument) => argument !== '--fail-once').slice(2).join(' ') || 'Prototype code change';
 const automation = await AutomationLoader.load(resolve('automation'));
-const schema = automation.schemas['code-change'];
-if (!schema) throw new Error('automation schema code-change is not registered');
+const schema = automation.schemas.planner;
+if (!schema) throw new Error('automation schema planner is not registered');
 
+const planner = new PrototypePlanner(type);
 const runtime = new ProcessRuntime([
+  new QualifyProcessModule(planner),
+  new PlanProcessModule(planner),
+  new ReplanProcessModule(planner),
   new PrototypeWorker(),
-  new PrototypeValidate(failOnce),
-  new PrototypeReplan(),
 ]);
 
-const result = await runtime.run(schema, { task });
+const result = await runtime.run(schema, task);
 console.log(JSON.stringify(result, null, 2));

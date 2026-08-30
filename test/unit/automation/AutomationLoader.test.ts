@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
+import { STEP } from '@engine/Automation/ProcessSchema.js';
 
 const temporaryRoots: string[] = [];
 
@@ -22,9 +23,7 @@ describe('AutomationLoader', () => {
         prompts: { planner: 'prompts/planner.md' },
         schemas: {
           simple: {
-            kind: 'sequence',
-            id: 'simple',
-            variables: ['task'],
+            type: 'SEQUENCE',
             steps: []
           }
         },
@@ -35,7 +34,7 @@ describe('AutomationLoader', () => {
     const automation = await AutomationLoader.load(root);
 
     expect(automation.prompts.planner).toBe('# Planner\n\nPlan the task.\n');
-    expect(automation.schemas.simple.id).toBe('simple');
+    expect(automation.schemas.simple.type).toBe(STEP.SEQUENCE);
     expect(automation.workers.code).toEqual({ id: 'code', prompt: 'worker-code' });
   });
 });

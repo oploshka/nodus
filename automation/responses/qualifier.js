@@ -1,7 +1,7 @@
 export default {
-  id: 'planner',
+  id: 'qualifier',
   format: 'json',
   fields: {
-    steps: 'array',
+    type: 'string',
   },
 };
