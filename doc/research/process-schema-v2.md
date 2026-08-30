@@ -181,7 +181,7 @@ STEP.WORKER
 
 Core остаётся единственным исполнителем schema. Worker, который выбрал `SCHEMA`, не запускает её самостоятельно.
 
-Production compatibility path пока отдельно использует Core `IterativeWorker` для code/documentation execution. Concrete `WorkerCode` и `WorkerDocumentation` уже вынесены в `automation/`, но `WorkerCode` будет переведён на schema-driven форму только после фиксации реальной полезной Worker schema. Agent loop вынесен в generic Core `WorkerAgentRunner`, а concrete `WorkerAgent` живёт в automation.
+Production compatibility path пока отдельно использует Core `WorkerIterativeRunner` для code/documentation execution. Concrete `WorkerCode` и `WorkerDocumentation` уже вынесены в `automation/`, но `WorkerCode` будет переведён на schema-driven форму только после фиксации реальной полезной Worker schema. Agent loop вынесен в generic Core `WorkerAgentRunner`, а concrete `WorkerAgent` живёт в automation.
 
 Жёсткий security sandbox по списку Actions пока не вводится.
 
@@ -215,7 +215,7 @@ src/engine/
       WorkerRunner.ts
       WorkerAgentRunner.ts
       WorkerTsType.ts
-      IterativeWorker.ts
+      WorkerIterativeRunner.ts
 
     Planner/
       PlannerResolver.ts
