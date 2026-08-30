@@ -18,9 +18,9 @@ import type {
   sProcessSchema,
   tProcessStep,
 } from '@engine/Process/ProcessTsType.js';
-import { WorkerMethod } from '@engine/Worker/WorkerMethod.js';
-import { WorkerRunner } from '@engine/Worker/WorkerRunner.js';
-import type { sWorkerRequest, tWorkerResult } from '@engine/Worker/WorkerTsType.js';
+import { WorkerMethod } from '@engine/Step/Worker/Contract/WorkerMethod.js';
+import { WorkerRunner } from '@engine/Step/Worker/WorkerRunner.js';
+import type { sWorkerRequest, tWorkerResult } from '@engine/Step/Worker/Contract/WorkerTsType.js';
 
 const TASK_TYPE = {
   SIMPLE: 'SIMPLE',
@@ -134,7 +134,7 @@ const runtime = new ProcessRuntime([
   new QualifyProcessModule(planner),
   new PlanProcessModule(planner),
   new ReplanProcessModule(planner),
-  new WorkerRunner(new PrototypeWorker()),
+  new WorkerRunner([new PrototypeWorker()]),
 ]);
 
 const result = await runtime.run(schema as sProcessSchema, task);
