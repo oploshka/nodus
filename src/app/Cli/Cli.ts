@@ -1,7 +1,7 @@
 import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import type { Engine } from '@engine/Engine.js';
+import type { EngineOld as Engine } from '@engine/Deprecated/EngineOld.js';
 
 export interface CliRuntime {
   engine: Engine;
