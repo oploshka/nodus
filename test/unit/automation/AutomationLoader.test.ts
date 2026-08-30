@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 describe('AutomationLoader', () => {
-  it('loads colocated module definitions and hydrates prompt file URLs', async () => {
+  it('hydrates data definitions while preserving executable Worker classes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nodus-automation-'));
     temporaryRoots.push(root);
     await mkdir(join(root, 'Planner', 'PlannerTask'), { recursive: true });
@@ -22,6 +22,10 @@ describe('AutomationLoader', () => {
       'utf8',
     );
     await writeFile(join(root, 'index.js'), `
+      class WorkerCode {
+        getId() { return 'code'; }
+      }
+
       export default {
         planners: {
           task: {
@@ -36,7 +40,7 @@ describe('AutomationLoader', () => {
           task: { id: 'task', options: ['SIMPLE', 'MULTI', 'PROCESS'] }
         },
         workers: {
-          code: { id: 'code', actions: ['read-file'] }
+          code: WorkerCode
         }
       };
     `, 'utf8');
@@ -52,6 +56,9 @@ describe('AutomationLoader', () => {
       id: 'task',
       options: ['SIMPLE', 'MULTI', 'PROCESS'],
     });
-    expect(automation.workers.code).toEqual({ id: 'code', actions: ['read-file'] });
+
+    const WorkerCode = automation.workers.code as new () => { getId(): string };
+    expect(typeof WorkerCode).toBe('function');
+    expect(new WorkerCode().getId()).toBe('code');
   });
 });
