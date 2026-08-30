@@ -22,12 +22,11 @@ describe('AutomationLoader', () => {
       'utf8',
     );
     await writeFile(join(root, 'index.js'), `
-      class WorkerCode {
-        getId() { return 'code'; }
-      }
-      class ReadAction {
-        getId() { return 'read'; }
-      }
+      class WorkerCode { getId() { return 'code'; } }
+      class ReadAction { getId() { return 'read'; } }
+      class PlannerModel {}
+      class DetermineModel {}
+      class ResearchModel {}
 
       export default {
         planners: {
@@ -37,10 +36,17 @@ describe('AutomationLoader', () => {
               prompt: new URL('./Planner/PlannerTask/PlannerTaskPrompt.md', import.meta.url),
               response: { id: 'task', format: 'json' }
             }
-          }
+          },
+          model: PlannerModel
         },
         qualifiers: {
           task: { id: 'task', options: ['SIMPLE', 'MULTI', 'PROCESS'] }
+        },
+        determine: {
+          model: DetermineModel
+        },
+        research: {
+          'bounded-model': ResearchModel
         },
         workers: {
           code: WorkerCode
@@ -62,6 +68,10 @@ describe('AutomationLoader', () => {
       id: 'task',
       options: ['SIMPLE', 'MULTI', 'PROCESS'],
     });
+
+    expect(typeof automation.planners.model).toBe('function');
+    expect(typeof automation.determine.model).toBe('function');
+    expect(typeof automation.research['bounded-model']).toBe('function');
 
     const WorkerCode = automation.workers.code as new () => { getId(): string };
     expect(typeof WorkerCode).toBe('function');

@@ -12,7 +12,8 @@ interface DetermineModelResponse {
   optionId: string;
 }
 
-export class ModelDetermine implements Determine {
+/** Legacy-compatible bounded model selection behavior owned by automation while DETERMINE remains provisional. */
+export class DetermineModel implements Determine {
   public readonly presentation = new DeterminePresentation();
   public constructor(
     private readonly model: ModelRunner,

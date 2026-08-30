@@ -44,7 +44,14 @@ export interface sProcessAction extends sProcessExecutableStepBase {
 }
 
 export interface sProcessModuleStep extends sProcessExecutableStepBase {
-  type: STEP.QUALIFY | STEP.PLAN | STEP.WORKER | STEP.VALIDATE | STEP.REPLAN;
+  type:
+    | STEP.QUALIFY
+    | STEP.PLAN
+    | STEP.DETERMINE
+    | STEP.RESEARCH
+    | STEP.WORKER
+    | STEP.VALIDATE
+    | STEP.REPLAN;
 }
 
 export type tProcessExecutableStep = sProcessAction | sProcessModuleStep;

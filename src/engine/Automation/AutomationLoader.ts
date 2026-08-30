@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url';
 export interface sAutomationPackageSource {
   planners?: Record<string, unknown>;
   qualifiers?: Record<string, unknown>;
+  determine?: Record<string, unknown>;
+  research?: Record<string, unknown>;
   workers?: Record<string, unknown>;
   actions?: Record<string, unknown>;
   policies?: Record<string, unknown>;
@@ -15,6 +17,8 @@ export interface sAutomationPackage {
   root: string;
   planners: Readonly<Record<string, unknown>>;
   qualifiers: Readonly<Record<string, unknown>>;
+  determine: Readonly<Record<string, unknown>>;
+  research: Readonly<Record<string, unknown>>;
   workers: Readonly<Record<string, unknown>>;
   actions: Readonly<Record<string, unknown>>;
   policies: Readonly<Record<string, unknown>>;
@@ -29,9 +33,11 @@ export class AutomationLoader {
     const module = await import(pathToFileURL(indexPath).href) as { default?: unknown };
     const source = this.asPackageSource(module.default);
 
-    const [planners, qualifiers, workers, actions, policies, context] = await Promise.all([
+    const [planners, qualifiers, determine, research, workers, actions, policies, context] = await Promise.all([
       this.hydrateDefinitions(source.planners ?? {}),
       this.hydrateDefinitions(source.qualifiers ?? {}),
+      this.hydrateDefinitions(source.determine ?? {}),
+      this.hydrateDefinitions(source.research ?? {}),
       this.hydrateDefinitions(source.workers ?? {}),
       this.hydrateDefinitions(source.actions ?? {}),
       this.hydrateDefinitions(source.policies ?? {}),
@@ -42,6 +48,8 @@ export class AutomationLoader {
       root: absoluteRoot,
       planners,
       qualifiers,
+      determine,
+      research,
       workers,
       actions,
       policies,
