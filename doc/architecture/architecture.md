@@ -1,16 +1,26 @@
-# Архитектура 0.4
+# Архитектура 0.5
 
 Nodus строится вокруг трёх верхних слоёв и нескольких явных границ. Это экспериментальная архитектура: abstractions сохраняются только пока подтверждаются реальными задачами и тестами.
 
 ## Верхние слои
 
 - `app` — startup, composition, CLI и concrete logging;
-- `engine` — task lifecycle, Planner, Determine, Worker, Research, Edit и EngineTest;
+- `engine` — task lifecycle, Process runtime, Planner, Worker, Research, Edit и EngineTest;
 - `model` — граница с LLM/provider transport, response formats/schema и model capabilities.
 
 `model` не зависит от `engine` или `app`. Provider transport не знает про task lifecycle, а Engine не знает OpenAI-compatible wire protocol.
 
-## Runtime path
+## Process 0.5
+
+Версия 0.5 вводит schema-driven Process runtime как явный язык исполнения Core.
+
+`ProcessRuntime` исполняет фиксированные `STEP`, локальные `SEQUENCE`, explicit context (`parent / previous / steps`) и controlled transition ещё не выполненного хвоста. Planner и Worker могут вернуть Core локальную schema через `MODULE_RESULT.SCHEMA`; Core сохраняет и исполняет её сам.
+
+`automation/` является versioned executable configuration layer: там живут concrete Planner/Qualifier/Worker modules. `src/engine/Process/` хранит contracts и execution mechanics.
+
+Production Engine lifecycle пока мигрирует на Process постепенно, поэтому старый task/PlanStep path остаётся compatibility boundary для Edit/EngineTest и части Worker execution.
+
+## Текущий production path
 
 ```ts
 Engine(task) {
@@ -35,11 +45,24 @@ Worker владеет исполнением одного semantic step, но н
 
 ## Planner
 
-Planner описывает outcomes и constraints, а не технические фазы. Разделение по файлам, слоям, Research, Edit validation или EngineTest само по себе не создаёт новый `PlanStep`. Цель — маленький coherent semantic plan.
+Planner описывает outcomes и constraints, а не технические фазы. Разделение по файлам, слоям, Research, Edit validation или EngineTest само по себе не создаёт новый semantic step.
+
+В Process path Planner может вернуть локальную schema; structural replan меняет только невыполненный хвост текущей sequence.
 
 ## Worker и Actions
 
-Worker — ограниченный execution process одного `PlanStep`. Actions — локальные capabilities с явными input/output contracts. Новая Action вводится только когда capability действительно повторяется как самостоятельная граница.
+Core Worker contract отделён от concrete automation Worker.
+
+Process Worker выбирает один из двух implementation type:
+
+- `SCHEMA` — локальная Process schema;
+- `METHOD` — custom `run(request)`.
+
+`WorkerSchema` и `WorkerMethod` задают эти два automation-facing base contract. `WorkerRunner` является adapter `STEP.WORKER -> Worker implementation`, а не base class concrete Worker.
+
+Concrete `WorkerCode`, `WorkerDocumentation` и `WorkerAgent` находятся в `automation/Worker/`. Code/documentation пока используют Core `IterativeWorker` как compatibility execution mechanism; agent loop вынесен в generic `WorkerAgentRunner`.
+
+Actions — локальные capabilities с явными input/output contracts. Новая Action вводится только когда capability действительно повторяется как самостоятельная граница.
 
 Code-changing flow формирует semantic edit intent. Технические `range-replace`, `replace`, `diff` и full-file `edit` не являются Worker Actions.
 
@@ -54,7 +77,7 @@ Edit принадлежит Engine и живёт в пределах одной 
 3. готовит весь batch отдельно от накопленного state;
 4. прогоняет batch через `EditValidator`;
 5. только после успешной проверки добавляет batch в накопленное состояние;
-6. поддерживает checkpoint/restore между PlanStep;
+6. поддерживает checkpoint/restore между semantic steps;
 7. физически записывает выбранное состояние через `apply()`;
 8. при ошибке записи выполняет best-effort rollback.
 
@@ -89,4 +112,4 @@ Research внутри `IterativeWorker` может читать task-local conte
 
 ## Interaction boundary
 
-Engine является естественным control point между автономным Worker и пользователем. Partial apply, approval, correction, interrupt, pause/resume и timeout semantics пока не являются завершённым runtime API.
+Engine остаётся естественным control point между автономным execution и пользователем. Partial apply, approval, correction, interrupt, pause/resume и timeout semantics пока не являются завершённым runtime API.
