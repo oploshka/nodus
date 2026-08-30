@@ -1,4 +1,4 @@
-import { STEP, TASK_TYPE } from '../process.js';
+import { cloneProcessSteps, STEP, TASK_TYPE } from '../process.js';
 
 function replaceTail(plan, step, ...nextSteps) {
   plan.steps.splice(step, plan.steps.length - step, ...nextSteps);
@@ -13,7 +13,7 @@ function appendPlannedSequence(plan, step) {
   replaceTail(plan, step, {
     type: STEP.SEQUENCE,
     task: planned.task,
-    steps: planned.steps,
+    steps: cloneProcessSteps(planned.steps),
   });
 }
 

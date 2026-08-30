@@ -6,6 +6,7 @@ import {
   QualifyProcessModule,
   ReplanProcessModule,
   type iProcessPlanner,
+  type sProcessPlanOutput,
   type sProcessPlanningRequest,
   type sProcessReplanningRequest,
 } from '@engine/Automation/ProcessPlanner.js';
@@ -76,9 +77,10 @@ describe('automation planner schema', () => {
     expect(planner.planCalls).toBe(0);
     expect(schema.steps.map((step) => step.type)).toEqual([STEP.QUALIFY, STEP.WORKER]);
     expect(worker.calls[0]?.context.parent).toBe('One self-contained task');
+    expect(result.output?.value).toBe('One self-contained task');
   });
 
-  it('routes MULTI through PLAN and restarts numbering in a nested semantic sequence', async () => {
+  it('routes MULTI through PLAN with an immutable plan snapshot and a local sequence summary', async () => {
     const schema = await loadPlannerSchema();
     const planner = new SchemaPlanner(TASK_TYPE.MULTI);
     const worker = new SchemaWorker();
@@ -89,6 +91,11 @@ describe('automation planner schema', () => {
     expect(result.status).toBe('SUCCESS');
     expect(planner.planCalls).toBe(1);
     expect(schema.steps.map((step) => step.type)).toEqual([STEP.QUALIFY, STEP.PLAN, STEP.SEQUENCE]);
+
+    const planStep = schema.steps[1];
+    expect(planStep?.type).toBe(STEP.PLAN);
+    const planOutput = planStep?.output?.value as sProcessPlanOutput | undefined;
+    expect(planOutput?.steps.every((step) => step.output === undefined)).toBe(true);
 
     const planned = schema.steps[2];
     expect(planned?.type).toBe(STEP.SEQUENCE);
@@ -104,6 +111,11 @@ describe('automation planner schema', () => {
     expect(summaryCall?.context.path).toEqual([3, 4]);
     expect(summaryCall?.context.parent).toBe('Compare configuration formats');
     expect(Object.keys(summaryCall?.context.steps ?? {})).toEqual(['1', '2', '3']);
+
+    expect(planned.output?.value).toContain('STEP 1: Research JSON');
+    expect(planned.output?.value).toContain('STEP 4: Compare and choose');
+    expect(planned.output?.value).not.toBe(planned.steps[3]?.output?.value);
+    expect(result.output?.value).toBe(planned.output?.value);
   });
 });
 
