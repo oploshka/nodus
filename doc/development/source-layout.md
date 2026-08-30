@@ -6,46 +6,46 @@ This file fixes the source-layout conventions used by Nodus engine code.
 
 A directory that represents an engine domain owns its files. Do not place files for that entity next to its directory at the parent level.
 
-Schema-driven Process execution is split between two sibling engine entities:
+Process owns the generic execution primitive for one semantic step:
 
 ```text
-src/engine/
+src/engine/Process/
   Process/
-    Process/
-    Worker/
-      Deprecated/
-    Planner/
-      Deprecated/
-    Determine/
-    Edit/
-    EngineTest/
-    Research/
-
-  Step/
-    Contract/
-    Worker/
-    Planner/
-    Action/
+    ProcessRuntime.ts
+    ProcessStepSchema.ts
+    ProcessStepMethod.ts
+    ProcessStepTsType.ts
+    ProcessStepRunner.ts
+    ProcessStepResolver.ts
 ```
 
-`Process/` owns the Process language/runtime and still contains untouched legacy/capability directories during migration. `Step/` owns the new shared execution primitive and current semantic Step contracts.
+Role-specific Process Step contracts live separately:
 
-For example, `ProcessRuntime.ts` belongs in `Process/Process/`; shared Step execution belongs in `Step/`; WORKER-specific Step contracts belong in `Step/Worker/`.
+```text
+src/engine/Step/
+  Worker/
+  Planner/
+  Qualifier/
+  Action/
+```
+
+`Step/` is a semantic-role grouping, not the owner of shared execution mechanics. The folder name may evolve; the stable boundary is `ProcessStep*` in Process versus role-specific extension surfaces.
 
 ## File names
 
 Files owned by an entity start with that entity name.
 
 ```text
-StepRunner.ts
-StepResolver.ts
+ProcessStepRunner.ts
+ProcessStepResolver.ts
 WorkerSchema.ts
 PlannerMethod.ts
+QualifierRunner.ts
 ActionRunner.ts
 ProcessRuntime.ts
 ```
 
-Avoid reversed names such as `CodeWorker.ts`, `ModelPlanner.ts`, or `ReadFileAction.ts` in new code.
+Avoid reversed names such as `CodeWorker.ts`, `ModelPlanner.ts`, or `ReadFileAction.ts` in new Core code. Existing legacy/automation files may keep historical names during migration.
 
 The existing lowercase type prefixes remain unchanged inside TypeScript: `s` for structural interfaces, `i` for behavioral interfaces, `t` for derived types, and `p` for primitive aliases.
 
@@ -53,17 +53,10 @@ When supporting TypeScript contracts would clutter an implementation file, place
 
 ## Contract directories
 
-When an entity exposes a small family of automation-facing contracts, keep that family in the entity-local `Contract/` directory.
+Role-specific automation-facing contract families stay in the role-local `Contract/` directory:
 
 ```text
 Step/
-  Contract/
-    StepSchema.ts
-    StepMethod.ts
-    StepTsType.ts
-  StepRunner.ts
-  StepResolver.ts
-
   Worker/
     Contract/
       WorkerSchema.ts
@@ -77,20 +70,26 @@ Step/
       PlannerMethod.ts
       PlannerTsType.ts
     PlannerRunner.ts
+
+  Qualifier/
+    Contract/
+      QualifierSchema.ts
+      QualifierMethod.ts
+      QualifierTsType.ts
+    QualifierRunner.ts
 ```
 
-`Contract/` is not a generic dumping ground for interfaces. Shared execution mechanics belong to `Step/Contract`; role-specific contracts extend them under the semantic Step role so input, result and authority can diverge without duplicating execution mechanics.
+Generic Process Step mechanics do not need a separate `Contract/` directory: the `ProcessStep*` prefix makes their ownership explicit inside the Process entity.
+
+## Automation ownership
+
+Concrete executable behavior belongs in `automation/` when it is a replaceable user/versioned implementation of a Core contract. For example, Core owns the Action role contract while concrete Actions live under `automation/Action/`.
 
 ## Deprecated directories
 
-During migration, the old production Worker/Planner implementation remains quarantined under:
+During an architectural migration, incompatible legacy implementations may be quarantined under the owning entity's `Deprecated/` directory instead of distorting the new contract.
 
-```text
-src/engine/Process/Worker/Deprecated/
-src/engine/Process/Planner/Deprecated/
-```
-
-New Step code must not import these directories. Current Step contracts/runners must not be duplicated beside Deprecated code under `Process/Worker` or `Process/Planner`.
+New Process Step code must not import `Deprecated/`. Existing legacy paths may continue to do so until their behavior is either moved into automation/current Step roles or deleted.
 
 ## Entity-local helpers
 
@@ -98,9 +97,8 @@ Helpers that are implementation details of one entity live under that entity's `
 
 ```text
 Process/
-  Process/
-    Kit/
-      ProcessStepRef.ts
+  Kit/
+    ProcessStepRef.ts
 ```
 
-Do not promote entity-local helpers to an unrelated aggregate root.
+Do not promote entity-local helpers to the aggregate `Process/` root.

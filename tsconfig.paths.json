@@ -12,7 +12,7 @@
         "src/engine/Step/*"
       ],
       "@engine/Planner/*": [
-        "src/engine/Process/Planner/*"
+        "src/engine/Process/Planner/Deprecated/*"
       ],
       "@engine/Determine/*": [
         "src/engine/Process/Determine/*"
@@ -21,10 +21,10 @@
         "src/engine/Step/Action/*"
       ],
       "@engine/Worker/Action/*": [
-        "src/engine/Step/Action/*"
+        "src/engine/Process/Worker/Deprecated/Action/*"
       ],
       "@engine/Worker/*": [
-        "src/engine/Process/Worker/*"
+        "src/engine/Process/Worker/Deprecated/*"
       ],
       "@engine/Research/*": [
         "src/engine/Process/Research/*"

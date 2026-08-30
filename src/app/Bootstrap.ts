@@ -9,9 +9,6 @@ import { Research } from '@engine/Research/Research.js';
 import { ResearchStore } from '@engine/Research/ResearchStore.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
-import { ChangeCodeAction } from '@engine/Worker/Action/ChangeCodeAction.js';
-import { ReadFileAction } from '@engine/Worker/Action/ReadFileAction.js';
-import { FindFileAction } from '@engine/Worker/Action/FindFileAction.js';
 import { WorkerAgentRunner } from '@engine/Worker/WorkerAgentRunner.js';
 import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
 import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEditStrategy.js';
@@ -26,7 +23,6 @@ import { CompositeEngineTest } from '@engine/EngineTest/CompositeEngineTest.js';
 import { UnitEngineTest } from '@engine/EngineTest/UnitEngineTest.js';
 import { TypecheckEngineTest } from '@engine/EngineTest/TypecheckEngineTest.js';
 import type { CommandEngineTest } from '@engine/EngineTest/CommandEngineTest.js';
-import { ResearchAction } from '@engine/Worker/Action/ResearchAction.js';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import { ProjectFileIndex, type iProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/Index/ProjectFileIndex.js';
@@ -65,6 +61,7 @@ export interface BootstrapOverrides {
 }
 
 type tAutomationWorkerConstructor = new (...args: unknown[]) => Worker;
+type tAutomationConstructor = new (...args: unknown[]) => unknown;
 
 /** Composition root for Engine dependencies. */
 export class Bootstrap {
@@ -122,6 +119,10 @@ export class Bootstrap {
     const automation = await AutomationLoader.load(configuration.automation?.root ?? 'automation');
     const WorkerCode = resolveAutomationWorker(automation.workers.code, 'code');
     const WorkerDocumentation = resolveAutomationWorker(automation.workers.documentation, 'documentation');
+    const ChangeCodeAction = resolveAutomationConstructor(automation.actions['change-code'], 'Action', 'change-code');
+    const ReadFileAction = resolveAutomationConstructor(automation.actions['read-file'], 'Action', 'read-file');
+    const FindFileAction = resolveAutomationConstructor(automation.actions['find-file'], 'Action', 'find-file');
+    const ResearchAction = resolveAutomationConstructor(automation.actions.research, 'Action', 'research');
 
     const researchStore = new ResearchStore(target.fileSystem, logger, configuration.target.researchCachePath);
     await researchStore.open();
@@ -205,6 +206,13 @@ function resolveAutomationWorker(value: unknown, id: string): tAutomationWorkerC
     throw new Error(`Automation Worker '${id}' must export a class.`);
   }
   return value as tAutomationWorkerConstructor;
+}
+
+function resolveAutomationConstructor(value: unknown, type: string, id: string): tAutomationConstructor {
+  if (typeof value !== 'function') {
+    throw new Error(`Automation ${type} '${id}' must export a class.`);
+  }
+  return value as tAutomationConstructor;
 }
 
 function createEngineTest(configuration: AppConfiguration, root: string): EngineTest {

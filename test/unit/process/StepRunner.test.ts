@@ -5,6 +5,9 @@ import { WorkerMethod } from '@engine/Step/Worker/Contract/WorkerMethod.js';
 import { WorkerSchema } from '@engine/Step/Worker/Contract/WorkerSchema.js';
 import type { sWorkerRequest, sWorkerSchema, tWorkerResult } from '@engine/Step/Worker/Contract/WorkerTsType.js';
 import { WorkerRunner } from '@engine/Step/Worker/WorkerRunner.js';
+import { QualifierMethod } from '@engine/Step/Qualifier/Contract/QualifierMethod.js';
+import type { sQualifierRequest, tQualifierResult } from '@engine/Step/Qualifier/Contract/QualifierTsType.js';
+import { QualifierRunner } from '@engine/Step/Qualifier/QualifierRunner.js';
 import { ActionMethod } from '@engine/Step/Action/Contract/ActionMethod.js';
 import type { sActionRequest, tActionResult } from '@engine/Step/Action/Contract/ActionTsType.js';
 import { ActionRunner } from '@engine/Step/Action/ActionRunner.js';
@@ -30,6 +33,15 @@ class SchemaWorker extends WorkerSchema {
   public getSchema(): sWorkerSchema { return { type: STEP.SEQUENCE, steps: [] }; }
 }
 
+class TaskQualifier extends QualifierMethod {
+  public request?: sQualifierRequest;
+  public getId(): string { return 'task'; }
+  public async run(request: sQualifierRequest): Promise<tQualifierResult> {
+    this.request = request;
+    return { type: MODULE_RESULT.OUTPUT, output: { status: 'SUCCESS', value: 'SIMPLE' } };
+  }
+}
+
 class TestAction extends ActionMethod {
   public request?: sActionRequest;
   public constructor(private readonly id: string) { super(); }
@@ -40,8 +52,8 @@ class TestAction extends ActionMethod {
   }
 }
 
-describe('Step execution roles', () => {
-  it('runs a WORKER METHOD through shared StepRunner mechanics', async () => {
+describe('Process Step execution roles', () => {
+  it('runs a WORKER METHOD through shared ProcessStepRunner mechanics', async () => {
     const worker = new MethodWorker();
     const runner = new WorkerRunner([worker]);
 
@@ -56,6 +68,16 @@ describe('Step execution roles', () => {
     const result = await runner.execute({ type: STEP.WORKER, task: 'implement change' }, context);
 
     expect(result).toEqual({ type: MODULE_RESULT.SCHEMA, schema: { type: STEP.SEQUENCE, steps: [] } });
+  });
+
+  it('binds QUALIFY as a first-class semantic role', async () => {
+    const qualifier = new TaskQualifier();
+    const runner = new QualifierRunner([qualifier]);
+
+    const result = await runner.execute({ type: STEP.QUALIFY, task: 'classify task' }, context);
+
+    expect(qualifier.request?.type).toBe(STEP.QUALIFY);
+    expect(result).toEqual({ type: MODULE_RESULT.OUTPUT, output: { status: 'SUCCESS', value: 'SIMPLE' } });
   });
 
   it('uses ACTION.action as implementation id instead of preset', async () => {

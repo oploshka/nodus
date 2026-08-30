@@ -1,12 +1,12 @@
 import { STEP } from '@engine/Process/ProcessSchema.js';
 import type { sProcessSchema } from '@engine/Process/ProcessTsType.js';
 import type {
-  iStepImplementation,
-  sStepRequest,
-  tStepResult,
-} from '../../Contract/StepTsType.js';
+  iProcessStepImplementation,
+  sProcessStepRequest,
+  tProcessStepResult,
+} from '@engine/Process/ProcessStepTsType.js';
 
 export interface sWorkerSchema extends sProcessSchema {}
-export interface sWorkerRequest extends sStepRequest<STEP.WORKER> {}
-export type tWorkerResult = tStepResult;
-export interface iWorkerStep extends iStepImplementation<STEP.WORKER, sWorkerRequest, tWorkerResult> {}
+export interface sWorkerRequest extends sProcessStepRequest<STEP.WORKER> {}
+export type tWorkerResult = tProcessStepResult;
+export interface iWorkerStep extends iProcessStepImplementation<STEP.WORKER, sWorkerRequest, tWorkerResult> {}

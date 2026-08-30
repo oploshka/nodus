@@ -6,6 +6,7 @@ export interface sAutomationPackageSource {
   planners?: Record<string, unknown>;
   qualifiers?: Record<string, unknown>;
   workers?: Record<string, unknown>;
+  actions?: Record<string, unknown>;
   policies?: Record<string, unknown>;
   context?: Record<string, unknown>;
 }
@@ -15,6 +16,7 @@ export interface sAutomationPackage {
   planners: Readonly<Record<string, unknown>>;
   qualifiers: Readonly<Record<string, unknown>>;
   workers: Readonly<Record<string, unknown>>;
+  actions: Readonly<Record<string, unknown>>;
   policies: Readonly<Record<string, unknown>>;
   context: Readonly<Record<string, unknown>>;
 }
@@ -27,10 +29,11 @@ export class AutomationLoader {
     const module = await import(pathToFileURL(indexPath).href) as { default?: unknown };
     const source = this.asPackageSource(module.default);
 
-    const [planners, qualifiers, workers, policies, context] = await Promise.all([
+    const [planners, qualifiers, workers, actions, policies, context] = await Promise.all([
       this.hydrateDefinitions(source.planners ?? {}),
       this.hydrateDefinitions(source.qualifiers ?? {}),
       this.hydrateDefinitions(source.workers ?? {}),
+      this.hydrateDefinitions(source.actions ?? {}),
       this.hydrateDefinitions(source.policies ?? {}),
       this.hydrateDefinitions(source.context ?? {}),
     ]);
@@ -40,6 +43,7 @@ export class AutomationLoader {
       planners,
       qualifiers,
       workers,
+      actions,
       policies,
       context,
     };

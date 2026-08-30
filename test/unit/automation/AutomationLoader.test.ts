@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 describe('AutomationLoader', () => {
-  it('hydrates data definitions while preserving executable Worker classes', async () => {
+  it('hydrates data definitions while preserving executable classes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nodus-automation-'));
     temporaryRoots.push(root);
     await mkdir(join(root, 'Planner', 'PlannerTask'), { recursive: true });
@@ -24,6 +24,9 @@ describe('AutomationLoader', () => {
     await writeFile(join(root, 'index.js'), `
       class WorkerCode {
         getId() { return 'code'; }
+      }
+      class ReadAction {
+        getId() { return 'read'; }
       }
 
       export default {
@@ -41,6 +44,9 @@ describe('AutomationLoader', () => {
         },
         workers: {
           code: WorkerCode
+        },
+        actions: {
+          read: ReadAction
         }
       };
     `, 'utf8');
@@ -60,5 +66,9 @@ describe('AutomationLoader', () => {
     const WorkerCode = automation.workers.code as new () => { getId(): string };
     expect(typeof WorkerCode).toBe('function');
     expect(new WorkerCode().getId()).toBe('code');
+
+    const ReadAction = automation.actions.read as new () => { getId(): string };
+    expect(typeof ReadAction).toBe('function');
+    expect(new ReadAction().getId()).toBe('read');
   });
 });

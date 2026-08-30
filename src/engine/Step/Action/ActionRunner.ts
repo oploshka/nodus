@@ -1,13 +1,13 @@
 import { STEP } from '@engine/Process/ProcessSchema.js';
-import { StepRunner } from '../StepRunner.js';
-import type { iStepResolver } from '../StepResolver.js';
+import { ProcessStepRunner } from '@engine/Process/ProcessStepRunner.js';
+import type { iProcessStepResolver } from '@engine/Process/ProcessStepResolver.js';
 import type { iActionStep, sActionRequest, tActionResult } from './Contract/ActionTsType.js';
 
 /** ACTION semantic role. The schema `action` field is the deterministic implementation id. */
-export class ActionRunner extends StepRunner<STEP.ACTION, sActionRequest, tActionResult> {
+export class ActionRunner extends ProcessStepRunner<STEP.ACTION, sActionRequest, tActionResult> {
   public constructor(
     actions: ReadonlyArray<iActionStep>,
-    resolver?: iStepResolver,
+    resolver?: iProcessStepResolver,
   ) {
     super(
       STEP.ACTION,
