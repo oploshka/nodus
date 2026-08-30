@@ -61,11 +61,7 @@ export class ProcessRuntime {
       step.output = output;
 
       const transition = step.transition;
-      this.freezeCompletedStep(step);
-
-      if (transition) {
-        this.applyTransition(sequence, stepNumber, transition);
-      }
+      if (transition) this.applyTransition(sequence, stepNumber, transition);
 
       if (output.status === 'FAILURE') {
         if (!transition || sequence.steps.length <= stepNumber) {
@@ -172,14 +168,5 @@ export class ProcessRuntime {
         throw new Error(`Transition at step ${stepNumber} changed completed step ${index + 1}.`);
       }
     }
-  }
-
-  private freezeCompletedStep(step: tProcessStep): void {
-    if (step.type === STEP.SEQUENCE) {
-      for (const child of step.steps) this.freezeCompletedStep(child);
-      Object.freeze(step.steps);
-    }
-    if (step.output && typeof step.output === 'object') Object.freeze(step.output);
-    Object.freeze(step);
   }
 }
