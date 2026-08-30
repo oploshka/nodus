@@ -29,7 +29,7 @@ STEP.WORKER
 
 ## Текущий compatibility path
 
-Миграция production Engine на новый Process contract ещё не завершена целиком. Существующий code/documentation execution пока использует Core `IterativeWorker`, но concrete классы уже вынесены в `automation/Worker/`.
+Миграция production Engine на новый Process contract ещё не завершена целиком. Существующий code/documentation execution пока использует Core `WorkerIterativeRunner`, но concrete классы уже вынесены в `automation/Worker/`.
 
 Agent-specific bounded loop извлечён из concrete Worker в Core `WorkerAgentRunner`; `automation/WorkerAgent` оставляет только идентичность и подключение этого механизма.
 
