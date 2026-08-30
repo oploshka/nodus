@@ -18,9 +18,9 @@ import type {
   sProcessSchema,
   tProcessStep,
 } from '@engine/Process/ProcessTsType.js';
+import { WorkerMethod } from '@engine/Worker/WorkerMethod.js';
 import { WorkerRunner } from '@engine/Worker/WorkerRunner.js';
-import { WorkerSchema } from '@engine/Worker/WorkerSchema.js';
-import type { sWorkerRequest, sWorkerSchema, tWorkerResult } from '@engine/Worker/WorkerTsType.js';
+import type { sWorkerRequest, tWorkerResult } from '@engine/Worker/WorkerTsType.js';
 
 const TASK_TYPE = {
   SIMPLE: 'SIMPLE',
@@ -89,7 +89,11 @@ class PrototypePlanner implements iProcessPlanner {
   }
 }
 
-class PrototypeWorker extends WorkerRunner {
+class PrototypeWorker extends WorkerMethod {
+  public getId(): string {
+    return 'prototype';
+  }
+
   public async run(request: sWorkerRequest): Promise<tWorkerResult> {
     const selected = request.context.steps
       .map((ref) => `STEP ${ref.number}: ${String(ref.output.value)}`)
@@ -120,15 +124,17 @@ const schema = plannerDefinition.schema;
 if (!schema || typeof schema !== 'object' || (schema as { type?: unknown }).type !== STEP.SEQUENCE) {
   throw new Error('automation PlannerTask schema is not registered');
 }
+if (typeof automation.workers.code !== 'function') {
+  throw new Error('automation WorkerCode class is not registered');
+}
 
-const workerDefinition = automation.workers.code as sWorkerSchema;
 const resolver = new PlannerResolver();
 const planner = resolver.resolve(task, [new PrototypePlanner(type)]);
 const runtime = new ProcessRuntime([
   new QualifyProcessModule(planner),
   new PlanProcessModule(planner),
   new ReplanProcessModule(planner),
-  new PrototypeWorker(new WorkerSchema(workerDefinition)),
+  new WorkerRunner(new PrototypeWorker()),
 ]);
 
 const result = await runtime.run(schema as sProcessSchema, task);
