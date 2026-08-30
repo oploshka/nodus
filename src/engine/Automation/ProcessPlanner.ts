@@ -20,6 +20,11 @@ export interface sProcessReplanningRequest {
   context: sProcessExecutionContext;
 }
 
+export interface sProcessPlanOutput {
+  task: string;
+  steps: tProcessStep[];
+}
+
 /**
  * Planner intelligence is split into atomic runtime steps. The reusable
  * Planner itself is a schema that composes QUALIFY and PLAN.
@@ -58,7 +63,8 @@ export class PlanProcessModule implements iProcessModule {
     const type = requireTaskType(context.previous?.value);
     const steps = await this.planner.plan({ task, type, context });
     assertPlannerSteps(steps);
-    return { status: 'SUCCESS', value: steps };
+    const value: sProcessPlanOutput = { task, steps };
+    return { status: 'SUCCESS', value };
   }
 }
 
@@ -79,7 +85,8 @@ export class ReplanProcessModule implements iProcessModule {
 
     const steps = await this.planner.replan({ task, failure, context });
     assertPlannerSteps(steps);
-    return { status: 'SUCCESS', value: steps };
+    const value: sProcessPlanOutput = { task, steps };
+    return { status: 'SUCCESS', value };
   }
 }
 
