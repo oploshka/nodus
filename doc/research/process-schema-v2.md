@@ -78,14 +78,14 @@ Runtime отклоняет ссылки на текущие, будущие и �
 
 ### StepRef
 
-Числа в persisted schema не являются runtime-ссылками. После проверки Core резолвит каждый выбранный local step в `StepRef`:
+Числа в persisted schema не являются runtime-ссылками. После проверки Core резолвит каждый выбранный local step в `ProcessStepRef`:
 
 ```text
-1 -> StepRef(actual step object)
-2 -> StepRef(actual step object)
+1 -> ProcessStepRef(actual step object)
+2 -> ProcessStepRef(actual step object)
 ```
 
-`StepRef` существует только под капотом и отдаёт output реального выполненного объекта. Модель продолжает писать `steps: [1, 2]` и ничего не знает о ссылочном представлении Runtime.
+`ProcessStepRef` существует только под капотом и отдаёт output реального выполненного объекта. Модель продолжает писать `steps: [1, 2]` и ничего не знает о ссылочном представлении Runtime.
 
 ## Output
 
@@ -146,24 +146,42 @@ Planner не должен создавать `STEP.ACTION`: operational Actions 
 
 ## Worker
 
-Core Worker API разделён на описание и выполнение:
+Core Worker API больше не предполагает, что каждый Worker реализует один и тот же способ выполнения.
+
+Concrete Worker живёт в `automation/` и через `getImplementation()` сообщает один из двух вариантов:
+
+```text
+SCHEMA -> local Process schema
+METHOD -> custom run(request)
+```
+
+Core contract:
 
 ```text
 Process/Worker/
   WorkerSchema.ts
+  WorkerMethod.ts
   WorkerRunner.ts
   WorkerTsType.ts
 ```
 
-`WorkerSchema` — concrete config object с `prompt`, `response`, `actions`, `limits`.
+`WorkerSchema` — abstract base для schema-driven Worker. Concrete Worker реализует `getId()` и `getSchema()`; `getImplementation()` возвращает `{ type: SCHEMA, schema }`.
 
-`WorkerRunner` — abstract execution boundary. Он связывает `STEP.WORKER` с Worker task/context, а конкретный Worker реализует только:
+`WorkerMethod` — abstract base для custom JavaScript/TypeScript Worker. Concrete Worker реализует `getId()` и `run(request)`; `getImplementation()` возвращает `{ type: METHOD, method }`.
 
-```ts
-run(request) -> OUTPUT | SCHEMA
+`WorkerRunner` — concrete Process adapter, а не родитель Worker. Он связывает `STEP.WORKER` с task/context и выбирает execution path по implementation type:
+
+```text
+STEP.WORKER
+  -> WorkerRunner
+  -> getImplementation()
+       -> SCHEMA -> MODULE_RESULT.SCHEMA -> ProcessRuntime
+       -> METHOD -> run(request)
 ```
 
-Кастомные реализации можно держать в `automation/`, не добавляя их поведение в Core.
+Core остаётся единственным исполнителем schema. Worker, который выбрал `SCHEMA`, не запускает её самостоятельно.
+
+Production compatibility path пока отдельно использует Core `IterativeWorker` для code/documentation execution. Concrete `WorkerCode` и `WorkerDocumentation` уже вынесены в `automation/`, но `WorkerCode` будет переведён на schema-driven форму только после фиксации реальной полезной Worker schema. Agent loop вынесен в generic Core `WorkerAgentRunner`, а concrete `WorkerAgent` живёт в automation.
 
 Жёсткий security sandbox по списку Actions пока не вводится.
 
@@ -180,18 +198,24 @@ Failed step остаётся в process document с `status: FAILURE`.
 ```text
 src/engine/
   Process/
-    ProcessRuntime.ts
-    ProcessSchema.ts
-    ProcessTsType.ts
-    StepRef.ts
+    Process/
+      ProcessRuntime.ts
+      ProcessSchema.ts
+      ProcessScope.ts
+      ProcessTsType.ts
+      Kit/
+        ProcessStepRef.ts
 
     Action/
       Action.ts
 
     Worker/
       WorkerSchema.ts
+      WorkerMethod.ts
       WorkerRunner.ts
+      WorkerAgentRunner.ts
       WorkerTsType.ts
+      IterativeWorker.ts
 
     Planner/
       PlannerResolver.ts
@@ -213,9 +237,14 @@ automation/
   Planner/
   Qualifier/
   Worker/
+    WorkerCode/
+    WorkerDocumentation/
+    WorkerAgent/
   index.js
   package.json
 ```
+
+Concrete Workers являются подключаемыми class modules. Core определяет contracts и execution mechanics; automation определяет конкретное versioned поведение.
 
 Markdown prompts и JS response contracts находятся рядом с механизмом.
 
@@ -227,4 +256,4 @@ import QualifierTask from '#automation/Qualifier/QualifierTask/QualifierTask.js'
 
 ## Тестовая стратегия
 
-Runtime тестируется детерминированно готовыми schemas и fake modules. Отдельно проверяются module `OUTPUT`, module `SCHEMA`, `StepRef`, local context, immutable completed prefix, failure -> REPLAN schema, PlannerResolver, WorkerRunner и PlannerTask routing.
+Runtime тестируется детерминированно готовыми schemas и fake modules. Отдельно проверяются module `OUTPUT`, module `SCHEMA`, `ProcessStepRef`, local context, immutable completed prefix, failure -> REPLAN schema, PlannerResolver, WorkerRunner routing и PlannerTask routing.
