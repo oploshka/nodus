@@ -1,6 +1,6 @@
 # Worker
 
-В Nodus 0.5 новый Worker является semantic Step role и живёт под `src/engine/Step/Worker/`.
+В Nodus 0.5 новый Worker является semantic Process Step role и живёт под `src/engine/Step/Worker/`.
 
 ```text
 src/engine/Step/Worker/
@@ -16,19 +16,22 @@ src/engine/Process/Worker/
     WorkerContext.ts
     WorkerIterativeRunner.ts
     WorkerAgentRunner.ts
+    Action/
+      Action.ts
+      WorkerAction.ts
 ```
 
 ## Current contract
 
-`WorkerSchema` и `WorkerMethod` наследуют общие `StepSchema` / `StepMethod`, фиксируют `STEP.WORKER` и остаются точкой для Worker-specific input/result/authority.
+`WorkerSchema` и `WorkerMethod` наследуют общие `ProcessStepSchema` / `ProcessStepMethod`, фиксируют `STEP.WORKER` и остаются точкой для Worker-specific input/result/authority.
 
-Общая mechanics selection/execution принадлежит `StepResolver` и `StepRunner`; `WorkerRunner` только связывает semantic `STEP.WORKER` с этим primitive.
+Общая mechanics selection/execution принадлежит Process через `ProcessStepResolver` и `ProcessStepRunner`; `WorkerRunner` только связывает semantic `STEP.WORKER` с этим primitive.
 
 ```text
 STEP.WORKER
   -> WorkerRunner
-  -> StepRunner
-  -> StepResolver
+  -> ProcessStepRunner
+  -> ProcessStepResolver
   -> Worker implementation
        -> SCHEMA -> ProcessRuntime
        -> METHOD -> run(request)
@@ -38,4 +41,6 @@ STEP.WORKER
 
 `src/engine/Process/Worker/Deprecated/` содержит старый production Worker contract и механики, завязанные на `Task`, `PlanStep`, `WorkerInstrument`, старые result statuses и retrieval context.
 
-Новые Worker contracts/runners рядом с этим legacy path не дублируются. По мере миграции полезная concrete behavior должна уходить в automation или новый Step path, а оставшийся compatibility code — удаляться.
+Старый `WorkerAction` contract тоже находится здесь. Concrete legacy Actions больше не принадлежат Core и вынесены в `automation/Action/`.
+
+По мере миграции полезная concrete behavior должна уходить в automation или новый Step path, а оставшийся compatibility code — удаляться.

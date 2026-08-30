@@ -1,40 +1,53 @@
-# Step
+# Process Step
 
-`src/engine/Step/` — новая schema-driven ветка исполнения semantic Process steps в Nodus 0.5. Она находится на одном уровне с `src/engine/Process/`: Process владеет языком и runtime schema, Step — общей механикой исполнения конкретных semantic roles.
+В Nodus 0.5 Process владеет общей механикой исполнения semantic steps, а `src/engine/Step/` хранит role-specific contracts.
 
-## Общая механика
+## Process-owned primitive
 
-`STEP.WORKER`, `STEP.PLAN`, `STEP.ACTION` и будущие `QUALIFY` / `VALIDATE` остаются разными элементами языка Process. Универсализируется только способ исполнения:
+Общий execution primitive живёт рядом с `ProcessRuntime`:
+
+```text
+src/engine/Process/Process/
+  ProcessRuntime.ts
+  ProcessSchema.ts
+  ProcessTsType.ts
+  ProcessStepSchema.ts
+  ProcessStepMethod.ts
+  ProcessStepTsType.ts
+  ProcessStepRunner.ts
+  ProcessStepResolver.ts
+```
+
+`ProcessStepSchema` и `ProcessStepMethod` задают два способа реализации: декларативная локальная schema или imperative method. `ProcessStepRunner` адаптирует конкретный `STEP` к `iProcessModule`, а `ProcessStepResolver` выполняет только deterministic lookup implementation id.
 
 ```text
 semantic STEP
-  -> StepRunner
-  -> StepResolver
+  -> role Runner
+  -> ProcessStepRunner
+  -> ProcessStepResolver
   -> implementation
        -> SCHEMA -> ProcessRuntime
        -> METHOD -> run(request)
 ```
 
-`StepSchema` и `StepMethod` задают общий automation-facing execution contract. `StepResolver` выполняет только deterministic selection по id и не делает semantic/model-based выбор.
+## Semantic roles
 
-## Role-specific contracts
-
-Специализированные классы не удаляются. Они наследуют общую механику и остаются местом для различий роли: входного контракта, ожидаемого результата, прямых capabilities и разрешённой schema delegation.
+`src/engine/Step/` не владеет общей Process mechanics. Здесь остаются различия ролей: input/result contract, capabilities и допустимая delegation.
 
 ```text
-StepSchema                 StepMethod
-   |                           |
-   +-- WorkerSchema            +-- WorkerMethod
-   +-- PlannerSchema           +-- PlannerMethod
-   +-- ActionSchema            +-- ActionMethod
+src/engine/Step/
+  Worker/
+  Planner/
+  Qualifier/
+  Action/
 ```
 
-Сейчас `Planner*` привязан только к `STEP.PLAN`. `REPLAN` намеренно не склеивается с Planner автоматически: это отдельный semantic Step, и его границу нужно подтвердить отдельно.
+Каждая роль может иметь `Schema`, `Method`, typed contract и тонкий Runner. `QUALIFY` теперь имеет такой же явный role boundary, как `WORKER`, `PLAN` и `ACTION`.
 
-## Migration boundary
+Название каталога `Step/` остаётся рабочим: важно не имя папки, а то, что общий `ProcessStep*` принадлежит Process, а semantic role — отдельной extension surface.
 
-Новые Worker/Planner contracts и runners живут только под `src/engine/Step/`. Старые `src/engine/Process/Worker/` и `src/engine/Process/Planner/` сохраняют только `Deprecated/` compatibility implementation до её разбора.
+## Action ownership
 
-Action полностью перенесён в `src/engine/Step/Action/`. Старые aliases `@engine/Action/*` и `@engine/Worker/Action/*` временно указывают на новое расположение.
+Core `Step/Action/` содержит только новый Process Action contract и `ActionRunner`. Concrete legacy Actions (`change-code`, `find-file`, `read-file`, `research`) являются executable automation behavior и живут в `automation/Action/`.
 
-`Determine`, `Edit`, `EngineTest` и `Research` этим этапом не переосмысляются и не перемещаются.
+Старый `WorkerAction` contract остаётся только в legacy Worker boundary, потому что текущий production `WorkerIterativeRunner` ещё использует его. Он не является новым Process Action API.

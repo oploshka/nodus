@@ -1,6 +1,6 @@
 # Planner
 
-В Nodus 0.5 новый Planner является semantic Step role и живёт под `src/engine/Step/Planner/`.
+В Nodus 0.5 новый Planner является semantic Process Step role и живёт под `src/engine/Step/Planner/`.
 
 ```text
 src/engine/Step/Planner/
@@ -22,15 +22,15 @@ src/engine/Process/Planner/
 
 ## Current contract
 
-`PlannerSchema` и `PlannerMethod` наследуют общие `StepSchema` / `StepMethod`, фиксируют текущую роль `STEP.PLAN` и остаются точкой для Planner-specific input/result/authority.
+`PlannerSchema` и `PlannerMethod` наследуют общие `ProcessStepSchema` / `ProcessStepMethod`, фиксируют текущую роль `STEP.PLAN` и остаются точкой для Planner-specific input/result/authority.
 
-Общая mechanics selection/execution принадлежит `StepResolver` и `StepRunner`; `PlannerRunner` только связывает `STEP.PLAN` с этим primitive. `REPLAN` пока не склеивается с Planner автоматически.
+Общая mechanics selection/execution принадлежит Process через `ProcessStepResolver` и `ProcessStepRunner`; `PlannerRunner` только связывает `STEP.PLAN` с этим primitive. `REPLAN` пока не склеивается с Planner автоматически.
 
 ```text
 STEP.PLAN
   -> PlannerRunner
-  -> StepRunner
-  -> StepResolver
+  -> ProcessStepRunner
+  -> ProcessStepResolver
   -> Planner implementation
        -> SCHEMA -> ProcessRuntime
        -> METHOD -> run(request)
@@ -38,6 +38,6 @@ STEP.PLAN
 
 ## Deprecated
 
-`src/engine/Process/Planner/Deprecated/` хранит старую Planner модель и промежуточный compatibility path. Наличие `qualify/plan/replan` в старом API не задаёт форму нового Step contract.
+`src/engine/Process/Planner/Deprecated/` хранит старую Planner модель и промежуточный compatibility path. Наличие `qualify/plan/replan` в старом API не задаёт форму нового Process Step contract.
 
-Новые Planner contracts/runners рядом с Deprecated code не дублируются. Полезное concrete behavior должно переноситься в automation/Step по мере миграции, остальное — удаляться.
+`ModelPlanner` остаётся concrete legacy behavior и является кандидатом на перенос в automation, когда production path начнёт использовать новый Planner role. Остальной legacy слой — старые contracts/mechanics, а не automation implementation.
