@@ -6,11 +6,21 @@ This file fixes the source-layout conventions used by Nodus engine code.
 
 A directory that represents an engine domain owns its files. Do not place files for that entity next to its directory at the parent level.
 
-The schema-driven Process path groups semantic executable roles under `Step/`:
+Schema-driven Process execution is split between two sibling engine entities:
 
 ```text
-src/engine/Process/
+src/engine/
   Process/
+    Process/
+    Worker/
+      Deprecated/
+    Planner/
+      Deprecated/
+    Determine/
+    Edit/
+    EngineTest/
+    Research/
+
   Step/
     Contract/
     Worker/
@@ -18,9 +28,9 @@ src/engine/Process/
     Action/
 ```
 
-Existing top-level `Worker/`, `Planner/` and other Process directories may remain during migration. New Step architecture is developed under `Step/` instead of reshaping those directories in place.
+`Process/` owns the Process language/runtime and still contains untouched legacy/capability directories during migration. `Step/` owns the new shared execution primitive and current semantic Step contracts.
 
-For example, `ProcessRuntime.ts` belongs in `Process/Process/`; shared Step execution belongs in `Process/Step/`; WORKER-specific Step contracts belong in `Process/Step/Worker/`.
+For example, `ProcessRuntime.ts` belongs in `Process/Process/`; shared Step execution belongs in `Step/`; WORKER-specific Step contracts belong in `Step/Worker/`.
 
 ## File names
 
@@ -73,9 +83,14 @@ Step/
 
 ## Deprecated directories
 
-During an architectural migration, incompatible legacy implementations may be quarantined under the owning entity's `Deprecated/` directory instead of distorting the new contract.
+During migration, the old production Worker/Planner implementation remains quarantined under:
 
-New Step code must not import `Deprecated/`. Existing legacy paths may continue to do so until their behavior is either moved into automation/current Step roles or deleted.
+```text
+src/engine/Process/Worker/Deprecated/
+src/engine/Process/Planner/Deprecated/
+```
+
+New Step code must not import these directories. Current Step contracts/runners must not be duplicated beside Deprecated code under `Process/Worker` or `Process/Planner`.
 
 ## Entity-local helpers
 
@@ -83,8 +98,9 @@ Helpers that are implementation details of one entity live under that entity's `
 
 ```text
 Process/
-  Kit/
-    ProcessStepRef.ts
+  Process/
+    Kit/
+      ProcessStepRef.ts
 ```
 
-Do not promote entity-local helpers to the aggregate `Process/` root.
+Do not promote entity-local helpers to an unrelated aggregate root.

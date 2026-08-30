@@ -1,17 +1,16 @@
 # Worker
 
-В Nodus 0.5 Worker разделён на automation-facing contract, Core execution adapter и временный legacy compatibility path.
+В Nodus 0.5 новый Worker является semantic Step role и живёт под `src/engine/Step/Worker/`.
 
 ```text
-src/engine/Process/Worker/
+src/engine/Step/Worker/
   Contract/
     WorkerSchema.ts
     WorkerMethod.ts
     WorkerTsType.ts
-
   WorkerRunner.ts
-  WorkerResolver.ts
 
+src/engine/Process/Worker/
   Deprecated/
     Worker.ts
     WorkerContext.ts
@@ -19,53 +18,24 @@ src/engine/Process/Worker/
     WorkerAgentRunner.ts
 ```
 
-## Contract
+## Current contract
 
-`Contract/` — API, на который должны опираться новые automation Workers. Новый Process-код не должен импортировать `Deprecated/`.
+`WorkerSchema` и `WorkerMethod` наследуют общие `StepSchema` / `StepMethod`, фиксируют `STEP.WORKER` и остаются точкой для Worker-specific input/result/authority.
 
-Worker сообщает Core способ исполнения через `getImplementation()`:
-
-- `SCHEMA` — Worker предоставляет локальную Process schema;
-- `METHOD` — Worker предоставляет custom `run(request)`.
-
-`WorkerSchema` требует `getId()` + `getSchema()`. `WorkerMethod` требует `getId()` + `run()`.
-
-```text
-Worker
-  -> getImplementation()
-       -> SCHEMA -> schema
-       -> METHOD -> method(request)
-```
-
-Core остаётся единственным исполнителем schema.
-
-## Runner / Resolver
-
-`WorkerRunner` — adapter `STEP.WORKER -> automation Worker`. Он не является superclass concrete Worker.
-
-`WorkerResolver` выполняет только deterministic selection:
-
-- `step.preset` -> exact Worker id;
-- один доступный Worker -> использовать его;
-- несколько Workers без `preset` -> error.
-
-Semantic/model-based выбор Worker не спрятан внутрь Resolver и остаётся отдельной будущей границей.
+Общая mechanics selection/execution принадлежит `StepResolver` и `StepRunner`; `WorkerRunner` только связывает semantic `STEP.WORKER` с этим primitive.
 
 ```text
 STEP.WORKER
   -> WorkerRunner
-  -> WorkerResolver
-  -> Worker.getImplementation()
+  -> StepRunner
+  -> StepResolver
+  -> Worker implementation
        -> SCHEMA -> ProcessRuntime
-       -> METHOD -> custom method
+       -> METHOD -> run(request)
 ```
 
 ## Deprecated
 
-`Deprecated/` содержит старый production Worker contract и механики, которые всё ещё завязаны на `Task`, `PlanStep`, `WorkerInstrument`, `completed/not-completed/failed` и старый retrieval context.
+`src/engine/Process/Worker/Deprecated/` содержит старый production Worker contract и механики, завязанные на `Task`, `PlanStep`, `WorkerInstrument`, старые result statuses и retrieval context.
 
-Они сохраняются только для переходного production path. Новая архитектура не должна проектироваться вокруг этих типов и не должна импортировать `Deprecated/`.
-
-Concrete legacy `WorkerCode` / `WorkerDocumentation` пока используют `Deprecated/WorkerIterativeRunner`. Agent compatibility path использует `Deprecated/WorkerAgentRunner`. Это временное состояние, а не новый Worker API.
-
-Следующий schema-driven `WorkerCode` должен строиться от `Contract/`, а не переписывать `WorkerIterativeRunner` строка-в-строку.
+Новые Worker contracts/runners рядом с этим legacy path не дублируются. По мере миграции полезная concrete behavior должна уходить в automation или новый Step path, а оставшийся compatibility code — удаляться.
