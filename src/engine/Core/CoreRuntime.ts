@@ -17,6 +17,7 @@ import type {
   sCoreStepRef,
   sCoreTraceEntry,
   tCoreModuleDefinition,
+  tCoreRunDependencies,
 } from './CoreTsType.js';
 
 export class CoreRuntime {
@@ -46,7 +47,7 @@ export class CoreRuntime {
     this.start = start;
   }
 
-  public async run(input: unknown): Promise<sCoreRunResult> {
+  public async run(input: unknown, dependencies: tCoreRunDependencies = {}): Promise<sCoreRunResult> {
     this.trace = [];
     const schema: sCoreSequence = {
       type: CORE_STEP.SEQUENCE,
@@ -60,7 +61,7 @@ export class CoreRuntime {
       ],
     };
 
-    const output = await this.executeSequence(schema, input, [], undefined);
+    const output = await this.executeSequence(schema, input, [], undefined, dependencies);
     return {
       status: output.status,
       output,
@@ -110,7 +111,7 @@ export class CoreRuntime {
       throw new Error(`Engine module '${name}' must expose string group.`);
     }
     if (typeof module.execute !== 'function') {
-      throw new Error(`Engine module '${name}' must expose execute(request).`);
+      throw new Error(`Engine module '${name}' must expose execute(request, dependencies).`);
     }
     return module;
   }
@@ -132,6 +133,7 @@ export class CoreRuntime {
     parentInput: unknown,
     path: number[],
     authorityGroup: string | undefined,
+    dependencies: tCoreRunDependencies,
   ): Promise<sCoreOutput> {
     this.trace.push({ path: [...path], type: CORE_STEP.SEQUENCE, status: 'STARTED' });
 
@@ -142,7 +144,7 @@ export class CoreRuntime {
       if (!step) throw new Error(`Missing step ${stepNumber}.`);
 
       const context = this.buildContext(sequence, index, parentInput, [...path, stepNumber]);
-      const output = await this.executeStep(step, context, [...path, stepNumber], authorityGroup);
+      const output = await this.executeStep(step, context, [...path, stepNumber], authorityGroup, dependencies);
       step.output = output;
 
       const transition = step.transition;
@@ -173,19 +175,21 @@ export class CoreRuntime {
     context: sCoreExecutionContext,
     path: number[],
     authorityGroup: string | undefined,
+    dependencies: tCoreRunDependencies,
   ): Promise<sCoreOutput> {
     if (isCoreSequence(step)) {
       const childInput = step.task ?? this.contextPayload(context);
-      return this.executeSequence(step, childInput, path, authorityGroup);
+      return this.executeSequence(step, childInput, path, authorityGroup, dependencies);
     }
 
-    return this.executeModule(step, context, path);
+    return this.executeModule(step, context, path, dependencies);
   }
 
   private async executeModule(
     step: sCoreModuleStep,
     context: sCoreExecutionContext,
     path: number[],
+    dependencies: tCoreRunDependencies,
   ): Promise<sCoreOutput> {
     const registered = this.modules.get(step.module);
     if (!registered) throw new Error(`Unknown Engine module: ${step.module}`);
@@ -194,7 +198,7 @@ export class CoreRuntime {
     const result = await registered.module.execute({
       task: step.task ?? context.parent,
       context,
-    });
+    }, dependencies);
 
     let output: sCoreOutput;
     switch (result.type) {
@@ -210,6 +214,7 @@ export class CoreRuntime {
           result.schema.task ?? step.task ?? this.contextPayload(context),
           path,
           registered.module.group,
+          dependencies,
         );
         break;
 
