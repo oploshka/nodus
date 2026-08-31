@@ -1,55 +1,43 @@
 import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import type { Engine } from '@engine/Engine.js';
-import type { tCoreRunDependencies } from '@engine/Core/CoreTsType.js';
 
 export interface CliRuntime {
-  engine: Engine;
-  dependencies: tCoreRunDependencies;
   projectId: string;
-  scanProject(): Promise<number>;
+  onInput(value: string): Promise<void>;
 }
 
 export async function runCli(runtime: CliRuntime): Promise<void> {
   console.log(`Nodus runtime. Project: ${runtime.projectId}`);
-  console.log('Commands: /help /scan /exit');
+  console.log('Commands: /help /exit');
   console.log('Input: Enter = new line, Ctrl+Enter or Ctrl+D = submit, Ctrl+C = cancel; Ctrl+C on empty input = exit.');
 
   while (true) {
-    const inputResult = await readCliInput();
-    if (inputResult.type === 'exit') break;
-    const value = inputResult.value.trim();
-    if (!value) continue;
-    if (value === '/exit') break;
-    if (value === '/help') {
-      console.log('/scan - refresh project index\n/exit - exit\nAny other input is sent to engine.run().');
+    const value = await readCliInput();
+    if (value === undefined) break;
+
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    if (trimmed === '/exit') break;
+    if (trimmed === '/help') {
+      console.log('/exit - exit\nAny other input starts a process.');
       console.log('Enter = new line; Ctrl+Enter or Ctrl+D = submit; Ctrl+C = cancel current input; Ctrl+C on empty input = exit.');
-      continue;
-    }
-    if (value === '/scan') {
-      console.log(`Indexed ${await runtime.scanProject()} files.`);
       continue;
     }
 
     try {
-      const result = await runtime.engine.run(value, runtime.dependencies);
-      if (result.status === 'FAILURE') {
-        console.error(`\n✗ ${result.reason ?? 'Execution failed.'}`);
-      }
+      await runtime.onInput(value);
     } catch (error) {
       console.error(`\n✗ Задача завершилась ошибкой: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }
 
-type CliInputResult = { type: 'input'; value: string } | { type: 'exit' };
-
-async function readCliInput(): Promise<CliInputResult> {
+async function readCliInput(): Promise<string | undefined> {
   if (!input.isTTY || typeof input.setRawMode !== 'function') {
     const readline = createInterface({ input, output });
     try {
-      return { type: 'input', value: await readline.question('\n> ') };
+      return await readline.question('\n> ');
     } finally {
       readline.close();
     }
@@ -61,26 +49,26 @@ async function readCliInput(): Promise<CliInputResult> {
   input.resume();
   output.write('\n> ');
 
-  return new Promise<CliInputResult>((resolve) => {
+  return new Promise<string | undefined>((resolve) => {
     let buffer = '';
     let previousWasCarriageReturn = false;
 
-    const finish = (result: CliInputResult): void => {
+    const finish = (value: string | undefined): void => {
       input.off('keypress', onKeypress);
       input.setRawMode(Boolean(previousRawMode));
       output.write('\n');
-      resolve(result);
+      resolve(value);
     };
 
     const onKeypress = (text: string, key: { name?: string; ctrl?: boolean; sequence?: string }): void => {
       if (key.ctrl && key.name === 'c') {
         output.write('^C');
-        finish(buffer ? { type: 'input', value: '' } : { type: 'exit' });
+        finish(buffer ? '' : undefined);
         return;
       }
 
       if ((key.ctrl && (key.name === 'return' || key.name === 'enter')) || (key.ctrl && key.name === 'd')) {
-        finish({ type: 'input', value: buffer });
+        finish(buffer);
         return;
       }
 
