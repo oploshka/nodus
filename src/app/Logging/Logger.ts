@@ -89,7 +89,8 @@ function serialize(value: unknown): unknown {
   }
 
   try {
-    return JSON.parse(JSON.stringify(value));
+    const serialized = JSON.stringify(value);
+    return serialized === undefined ? String(value) : JSON.parse(serialized);
   } catch {
     return String(value);
   }
