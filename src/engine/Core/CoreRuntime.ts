@@ -9,7 +9,6 @@ import {
 } from './CoreSchema.js';
 import type {
   iCoreModule,
-  sCoreConfig,
   sCoreExecutionContext,
   sCoreGroupConfig,
   sCoreRegisteredModule,
@@ -19,6 +18,7 @@ import type {
   tCoreModuleDefinition,
   tCoreRunDependencies,
 } from './CoreTsType.js';
+import type { sEngineConfig } from '../EngineConfigTsType.js';
 
 export class CoreRuntime {
   private readonly groups: Readonly<Record<string, sCoreGroupConfig>>;
@@ -26,7 +26,7 @@ export class CoreRuntime {
   private readonly rootDefinitions = new Map<tCoreModuleDefinition, sCoreRegisteredModule>();
   private trace: sCoreTraceEntry[] = [];
 
-  public constructor(config: sCoreConfig) {
+  public constructor(config: sEngineConfig) {
     this.groups = config.groups;
     this.validateGroups();
 
