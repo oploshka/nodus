@@ -29,7 +29,7 @@ export interface sEngineComputedContext {
  *
  * `module` describes the Step handler for this node.
  * `task` describes the primary semantic task for this node.
- * `steps` describes the following local chain; `null` explicitly means that
+ * `steps` describes a nested local chain; `null` explicitly means that
  * this node has no child chain.
  * `computedContext` is runtime state resolved from `input.context` by EngineSchema.
  */
@@ -44,4 +44,4 @@ export interface sEngineSchemaStep {
   steps: sEngineSchemaStep[] | null;
 }
 
-export type tEngineTransition = (sequence: sEngineSchemaStep, stepNumber: number) => void;
+export type tEngineTransition = (sequence: sEngineSchemaStep[], stepNumber: number) => void;
