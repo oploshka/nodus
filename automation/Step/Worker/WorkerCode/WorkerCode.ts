@@ -6,7 +6,7 @@ import {
 } from '@engine/Core/EngineSchemaTsType.js';
 import { EngineSchema } from '@engine/Core/EngineSchema.js';
 import type { sEngineStepRequest } from '@engine/Core/EngineStepInterface.js';
-import { StepWorker } from '@engine/Step/Worker/StepWorker.js';
+import { StepWorker } from '@engine/Step/StepWorker.js';
 import {
   readActionCoreResult,
   type sActionCoreRequest,
