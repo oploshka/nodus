@@ -1,4 +1,4 @@
-import { TASK_TYPE } from '#automation/Qualifier/QualifierTask/QualifierTask.js';
+import { TASK_TYPE } from '#automation/Deprecated/Qualifier/QualifierTask/QualifierTask.js';
 import PlannerTaskResponse from './PlannerTaskResponse.js';
 
 function replaceTail(plan, step, ...nextSteps) {
