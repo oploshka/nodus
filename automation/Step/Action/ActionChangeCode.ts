@@ -24,12 +24,6 @@ interface ChangeDecision {
   edits?: Array<{ path: string; instruction: string }>;
 }
 
-interface ChangeAssignment {
-  task?: { description?: string };
-  step?: { goal?: string };
-  settings?: Readonly<Record<string, unknown>>;
-}
-
 interface ChangeCodeRuntime {
   fileSystem: FileSystem;
   fileIndex: iProjectFileIndex;
@@ -43,7 +37,6 @@ interface ChangeCodeActionData {
   edit?: {
     strategy: 'range-replace';
     edits: Array<{ path: string; instruction: string }>;
-    settings?: Readonly<Record<string, unknown>>;
   };
 }
 
@@ -53,7 +46,7 @@ type ChangeCodeRequestInput =
   | { question: string };
 
 const decisionSchema: ModelResponseSchema = {
-  description: 'One bounded attempt to determine the semantic project changes needed for the assigned step.',
+  description: 'One bounded attempt to determine the semantic project changes needed for the assigned task.',
   fields: {
     outcome: { type: 'option', optionList: [
       { id: 'ready', description: 'Enough information is available; return semantic edit intents.' },
@@ -84,21 +77,12 @@ export class ChangeCodeAction extends EngineStep {
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const assignment = step.task as ChangeAssignment;
-    if (!assignment?.task || !assignment?.step) {
-      return actionCoreResult({
-        status: 'failed',
-        reason: 'ActionCodeChange task must contain task and step.',
-        canContinue: false,
-      });
-    }
-
     const context = (step.computedContext?.steps ?? [])
       .map((contextStep) => readActionCoreData<unknown>(contextStep.output))
       .filter((item) => item !== undefined);
 
     try {
-      return actionCoreResult(await new ChangeCodeExecution(runtimeDependencies(dependencies)).run(assignment, context));
+      return actionCoreResult(await new ChangeCodeExecution(runtimeDependencies(dependencies)).run(step.task, context));
     } catch (error) {
       return actionCoreResult({
         status: 'not-completed',
@@ -114,18 +98,16 @@ class ChangeCodeExecution {
   public constructor(private readonly runtime: ChangeCodeRuntime) {}
 
   public async run(
-    assignment: ChangeAssignment,
+    task: unknown,
     context: readonly unknown[],
   ): Promise<tActionCoreResult<ChangeCodeActionData, ChangeCodeRequestInput>> {
-    const task = assignment.task?.description ?? '';
-    const step = assignment.step?.goal ?? '';
+    const taskText = describeTask(task);
     const decision = await callModel<ChangeDecision>(this.runtime.model, this.runtime.logger, {
       request: {
-        message: 'Determine the concrete project edits required to complete the assigned step now.',
+        message: 'Determine the concrete project edits required to complete the assigned task now.',
         data: {
           task,
-          step: assignment.step,
-          candidateFiles: this.candidateFiles(task, step, context),
+          candidateFiles: this.candidateFiles(taskText, context),
           context,
         },
         format: ModelRequestFormat.Json,
@@ -141,7 +123,7 @@ class ChangeCodeExecution {
         ].join('\n'),
       },
       response: { format: ModelResponseFormat.Raw, schema: decisionSchema },
-      settings: { maxTokens: 2048, ...assignment.settings },
+      settings: { maxTokens: 2048 },
     });
 
     if (decision.outcome === 'already-completed') {
@@ -170,15 +152,15 @@ class ChangeCodeExecution {
       status: 'completed',
       data: {
         summary: decision.summary ?? `Prepared ${normalized.length} project edit intent(s).`,
-        edit: { strategy: 'range-replace', edits: normalized, settings: assignment.settings },
+        edit: { strategy: 'range-replace', edits: normalized },
       },
     };
   }
 
-  private candidateFiles(task: string, step: string, context: readonly unknown[]): string[] {
+  private candidateFiles(task: string, context: readonly unknown[]): string[] {
     const paths = new Set<string>();
     for (const item of context) collectPaths(item, paths);
-    for (const file of this.runtime.fileIndex.findFiles(`${task}\n${step}`, 16)) paths.add(file.path);
+    for (const file of this.runtime.fileIndex.findFiles(task, 16)) paths.add(file.path);
     return [...paths].slice(0, 24);
   }
 }
@@ -198,6 +180,16 @@ function runtimeDependencies(dependencies: tEngineRunDependencies): ChangeCodeRu
     logger,
     language: language ?? { project: 'en', nodus: 'en', response: 'en' },
   };
+}
+
+function describeTask(task: unknown): string {
+  if (typeof task === 'string') return task;
+  if (task === undefined) return '';
+  try {
+    return JSON.stringify(task);
+  } catch {
+    return String(task);
+  }
 }
 
 function collectPaths(value: unknown, paths: Set<string>): void {
