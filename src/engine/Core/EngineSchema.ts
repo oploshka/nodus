@@ -39,7 +39,8 @@ export class EngineSchema {
       steps: selectedSteps,
     };
 
-    step.computedContext = context;
+    step.runtime ??= { events: [] };
+    step.runtime.context = context;
     return context;
   }
 }
