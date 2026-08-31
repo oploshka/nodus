@@ -1,4 +1,4 @@
-import type { Presentation, PresentedMessage } from '@engine/Presentation/Presentation.js';
+import type { Presentation, PresentedMessage} from "@engine/Common/Presentation/Presentation.js";
 
 export type EditPresentationEvent =
   | { type: 'change-set-prepare'; files: number }

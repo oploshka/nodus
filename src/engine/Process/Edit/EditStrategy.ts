@@ -1,4 +1,4 @@
-import type { EditPreparationContext, EditPrepareResult, EditStrategyId } from '@engine/Edit/EditTypes.js';
+import type { EditPreparationContext, EditPrepareResult, EditStrategyId} from "@engine/Process/Edit/EditTypes.js";
 
 /** One technical serialization/apply strategy owned by the Engine Edit layer. */
 export interface EditStrategy {

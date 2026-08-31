@@ -1,4 +1,4 @@
-import type { EditValidationCheck, EditValidationResult } from '@engine/Edit/Validation/EditValidator.js';
+import type { EditValidationCheck, EditValidationResult} from "@engine/Process/Edit/Validation/EditValidator.js";
 
 /** Strict JSON parse is informational for now: JSON-like example/config files may intentionally contain comments. */
 export class JsonEditValidationCheck implements EditValidationCheck {

@@ -1,4 +1,4 @@
-import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
+import type { ProjectEditor} from "@engine/Process/Edit/ProjectEditor.js";
 
 /** Small capability contracts exposed to individual Process implementations. */
 export interface EditInstrument {

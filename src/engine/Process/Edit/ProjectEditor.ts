@@ -1,11 +1,11 @@
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import { EditPresentation } from '@engine/Presentation/EditPresentation.js';
-import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
-import type { EditStrategyId, PreparedProjectChange, ProjectEditRequest, EditPrepareResult, EditPreparationContext } from '@engine/Edit/EditTypes.js';
+import { EditPresentation} from "@engine/Common/Presentation/EditPresentation.js";
+import type { EditStrategy} from "@engine/Process/Edit/EditStrategy.js";
+import type { EditStrategyId, PreparedProjectChange, ProjectEditRequest, EditPrepareResult, EditPreparationContext} from "@engine/Process/Edit/EditTypes.js";
 import type { PlanStep } from '@engine/Planner/Plan.js';
 import type { Task } from '@engine/Task/Task.js';
-import { EditValidator, type EditCandidate, type EditValidationResult } from '@engine/Edit/Validation/EditValidator.js';
+import { EditValidator, type EditCandidate, type EditValidationResult} from "@engine/Process/Edit/Validation/EditValidator.js";
 
 export type ProjectEditResult =
   | { status: 'completed'; files: number; operations: number; strategy: EditStrategyId; paths: string[] }

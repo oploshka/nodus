@@ -1,6 +1,6 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import type { ResearchAnswer } from '@engine/Research/ResearchTypes.js';
+import type { ResearchAnswer} from "@engine/Process/Research/ResearchTypes.js";
 
 export const DEFAULT_RESEARCH_CACHE_PATH = '.nodus/research-cache.json';
 

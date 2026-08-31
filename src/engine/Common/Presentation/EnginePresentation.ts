@@ -1,5 +1,5 @@
-import type { TaskExecutionMetrics } from '@engine/Metrics/TaskExecutionMetrics.js';
-import type { Presentation, PresentedMessage } from '@engine/Presentation/Presentation.js';
+import type { TaskExecutionMetrics} from "@engine/Common/Metrics/TaskExecutionMetrics.js";
+import type { Presentation, PresentedMessage} from "@engine/Common/Presentation/Presentation.js";
 
 export type EnginePresentationEvent =
   | { type: 'task-start' }

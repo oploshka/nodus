@@ -1,8 +1,8 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import type { ResearchAnswer, ResearchResolveOptions, ResearchResolver } from '@engine/Research/ResearchTypes.js';
-import { ResearchStore } from '@engine/Research/ResearchStore.js';
-import { ResearchPresentation } from '@engine/Presentation/ResearchPresentation.js';
+import type { ResearchAnswer, ResearchResolveOptions, ResearchResolver} from "@engine/Process/Research/ResearchTypes.js";
+import { ResearchStore} from "@engine/Process/Research/ResearchStore.js";
+import { ResearchPresentation} from "@engine/Common/Presentation/ResearchPresentation.js";
 
 export class Research {
   public readonly presentation = new ResearchPresentation();

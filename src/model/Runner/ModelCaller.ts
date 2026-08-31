@@ -1,6 +1,6 @@
 import type { ModelRunInput } from '@model/Request/ModelRun.js';
 import type { DiffFileRunInput, ModelRunError, ModelRunner, UnifiedDiffModelResponse } from '@model/Runner/ModelRunner.js';
-import { ModelPresentation } from '@engine/Presentation/ModelPresentation.js';
+import { ModelPresentation} from "@engine/Common/Presentation/ModelPresentation.js";
 
 /**
  * Minimal logging contract intentionally kept local to this boundary.

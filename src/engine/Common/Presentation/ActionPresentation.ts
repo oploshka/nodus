@@ -3,8 +3,8 @@ import {
   type LocalizedText,
   type Presentation,
   type PresentationColor,
-  type PresentedMessage,
-} from '@engine/Presentation/Presentation.js';
+  type PresentedMessage
+} from "@engine/Common/Presentation/Presentation.js";
 
 export type ActionPresentationEvent =
   | { type: 'start'; attempt?: number }

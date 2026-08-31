@@ -19,7 +19,7 @@
     "requestTimeoutMs": 600000
   },
   "automation": {
-    "root": "automation"
+    "root": "../../automation"
   },
   "runtime": {
     "maxWorkerAttempts": 4,

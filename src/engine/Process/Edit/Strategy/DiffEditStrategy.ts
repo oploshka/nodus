@@ -1,10 +1,10 @@
-import { PatchApplicator } from '@engine/Edit/Applicator/PatchApplicator.js';
-import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
-import type { EditPreparationContext, EditPrepareResult } from '@engine/Edit/EditTypes.js';
+import { PatchApplicator} from "@engine/Process/Edit/Applicator/PatchApplicator.js";
+import type { EditStrategy} from "@engine/Process/Edit/EditStrategy.js";
+import type { EditPreparationContext, EditPrepareResult} from "@engine/Process/Edit/EditTypes.js";
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import { callDiffFile } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
-import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
+import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 

@@ -1,4 +1,4 @@
-import type { Presentation, PresentedMessage } from '@engine/Presentation/Presentation.js';
+import type { Presentation, PresentedMessage} from "@engine/Common/Presentation/Presentation.js";
 
 export type ResearchPresentationEvent =
   | { type: 'question'; index?: number; max?: number; question?: string }
