@@ -61,9 +61,22 @@ The lowercase type prefixes remain unchanged inside TypeScript: `s` for structur
 
 Concrete executable behavior belongs in `automation/` when it is replaceable user/versioned behavior. Core must not gain special execution logic for a new semantic group merely because the default automation contains one.
 
+The active automation surface is intentionally small while the new execution path is proven vertically:
+
+```text
+automation/
+  Action/
+  Planner/
+  Worker/
+    WorkerCode/
+  Deprecated/
+```
+
+Legacy Determine, Qualifier, Research strategy, Agent Worker and Documentation Worker implementations are preserved under `automation/Deprecated/`. They remain available to `EngineOld`, but they are not part of the active automation surface.
+
 A module may inherit convenience behavior from Nodus-owned Step classes, but Core accepts it structurally. User modules do not need to inherit a Nodus interface or base class if their executable shape matches the Core contract.
 
-Worker orchestration belongs in the Worker schema. The active `automation/Worker/WorkerCode/WorkerCode.ts` expresses its retry/retrieval/edit lifecycle as `SEQUENCE` transitions; the old imperative Worker implementation is kept under automation and engine `Deprecated/` paths only for `EngineOld` compatibility.
+Worker orchestration belongs in the Worker schema. `WorkerCode` declares the concrete modules it depends on; the Worker base class exposes them to Core and gives the schema stable names such as `WorkerCode::ActionCodeChange`. Core executes the resulting schema.
 
 ## Deprecated directories
 

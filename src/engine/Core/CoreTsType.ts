@@ -33,6 +33,7 @@ export type tCoreModuleConstructor = new () => iCoreModule;
 export type tCoreModuleDefinition = iCoreModule | tCoreModuleConstructor;
 
 export interface iCoreModule {
+  readonly id?: string;
   readonly group: string;
   readonly dependencies?: Readonly<Record<string, tCoreModuleDefinition>>;
   execute(request: sCoreModuleRequest): Promise<tCoreModuleResult>;

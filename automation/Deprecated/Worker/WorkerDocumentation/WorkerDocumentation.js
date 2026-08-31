@@ -1,7 +1,7 @@
-import { WorkerIterativeRunner } from '../../../src/engine/Deprecated/Worker/WorkerIterativeRunner.ts';
-import { WorkerPresentation } from '../../../src/engine/Common/Presentation/WorkerPresentation.ts';
+import { WorkerIterativeRunner } from '../../../../src/engine/Deprecated/Worker/WorkerIterativeRunner.ts';
+import { WorkerPresentation } from '../../../../src/engine/Common/Presentation/WorkerPresentation.ts';
 
-/** Legacy production Documentation Worker. New Process Worker implementations use Worker/Contract. */
+/** Legacy production Documentation Worker kept for EngineOld composition. */
 export default class WorkerDocumentation extends WorkerIterativeRunner {
   presentation = new WorkerPresentation({ name: { en: 'Documentation', ru: 'Документация' } });
   name = this.presentation.name();
