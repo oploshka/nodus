@@ -1,75 +1,67 @@
+import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { ModelRunInput } from '@model/Request/ModelRun.js';
 import type { DiffFileRunInput, ModelRunError, ModelRunner, UnifiedDiffModelResponse } from '@model/Runner/ModelRunner.js';
-import { ModelPresentation} from "@engine/Common/Presentation/ModelPresentation.js";
 
 /**
- * Minimal logging contract intentionally kept local to this boundary.
- *
  * ModelRunner returns the full diagnostic result (`data + exchange + meta`).
- * Ordinary engine steps normally need only `data`, while logging needs the rest.
- * These functions record the complete result and expose only application data,
- * so diagnostic transport details do not spread through Planner/Research/Worker.
- *
- * This is intentionally a plain function boundary, not a class and not part of
- * ModelRunner's lifecycle. The logger is passed explicitly on purpose; hiding it
- * behind DI would add structure without removing any real responsibility.
+ * Steps normally need only `data`, while runtime events keep the diagnostic
+ * exchange available to subscribers and the executing schema step.
  */
-const modelPresentation = new ModelPresentation();
-
-export interface ModelCallLogger {
-  info(event: string, data?: unknown): void;
-}
-
 export async function callModel<TOutput extends object>(
   runner: ModelRunner,
-  logger: ModelCallLogger,
+  emit: tEngineEmit,
   input: ModelRunInput<TOutput>,
 ): Promise<TOutput> {
-  logger.info('model.run.start', {
-    kind: 'model',
-    message: input.request.message,
-    responseFormat: input.response.format,
-    presentation: modelPresentation,
+  emit({
+    type: 'model.start',
+    data: {
+      kind: 'model',
+      message: input.request.message,
+      responseFormat: input.response.format,
+    },
   });
   try {
     const result = await runner.run<TOutput>(input);
-    logger.info('model.run', { ...result, presentation: modelPresentation });
+    emit({ type: 'model.finish', data: result });
     return result.data;
   } catch (error) {
-    logModelFailure(logger, error);
+    emitModelFailure(emit, error);
     throw error;
   }
 }
 
 export async function callDiffFile(
   runner: ModelRunner,
-  logger: ModelCallLogger,
+  emit: tEngineEmit,
   input: DiffFileRunInput,
 ): Promise<UnifiedDiffModelResponse> {
-  logger.info('model.run.start', {
-    kind: 'diff',
-    path: input.path,
-    message: input.request.message,
-    presentation: modelPresentation,
+  emit({
+    type: 'model.start',
+    data: {
+      kind: 'diff',
+      path: input.path,
+      message: input.request.message,
+    },
   });
   try {
     const result = await runner.diffFile(input);
-    logger.info('model.run', { ...result, presentation: modelPresentation });
+    emit({ type: 'model.finish', data: result });
     return result.data;
   } catch (error) {
-    logModelFailure(logger, error);
+    emitModelFailure(emit, error);
     throw error;
   }
 }
 
-function logModelFailure(logger: ModelCallLogger, error: unknown): void {
+function emitModelFailure(emit: tEngineEmit, error: unknown): void {
   if (!(error instanceof Error)) return;
   const modelRun = (error as ModelRunError).modelRun;
-  if (!modelRun) return;
-
-  logger.info('model.run.error', {
-    error: { name: error.name, message: error.message },
-    ...modelRun,
-    presentation: modelPresentation,
+  emit({
+    type: 'model.error',
+    level: 'error',
+    data: {
+      error: { name: error.name, message: error.message },
+      ...(modelRun ?? {}),
+    },
   });
 }
