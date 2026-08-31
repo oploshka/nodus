@@ -24,6 +24,20 @@ export interface sEngineComputedContext {
   steps: readonly sEngineSchemaStep[];
 }
 
+export interface sEngineEvent {
+  type: string;
+  level?: 'info' | 'warning' | 'error';
+  data?: unknown;
+}
+
+export type tEngineEmit = (event: sEngineEvent) => void;
+
+/** Removable execution-only state. Engine can rebuild it from the working schema. */
+export interface sEngineSchemaRuntimeStep {
+  context?: sEngineComputedContext;
+  events: sEngineEvent[];
+}
+
 /**
  * One uniform node of an Engine execution schema.
  *
@@ -31,13 +45,14 @@ export interface sEngineComputedContext {
  * `task` describes the primary semantic task for this node.
  * `steps` describes a nested local chain; `null` explicitly means that
  * this node has no child chain.
- * `computedContext` is runtime state resolved from `input.context` by EngineSchema.
+ * `runtime` contains removable execution-only state such as resolved context
+ * and events. Step output remains part of the working schema itself.
  */
 export interface sEngineSchemaStep {
   type: ENGINE_STEP.SEQUENCE;
   task?: unknown;
   input?: sEngineStepInput;
-  computedContext?: sEngineComputedContext;
+  runtime?: sEngineSchemaRuntimeStep;
   output?: sEngineOutput;
   transition?: tEngineTransition;
   module?: string;
