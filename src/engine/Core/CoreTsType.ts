@@ -50,12 +50,6 @@ export interface sCoreGroupConfig {
   readonly schema: false | sCoreGroupSchemaConfig;
 }
 
-export interface sCoreConfig {
-  readonly start: tCoreModuleDefinition;
-  readonly groups: Readonly<Record<string, sCoreGroupConfig>>;
-  readonly modules: Readonly<Record<string, tCoreModuleDefinition>>;
-}
-
 export interface sCoreTraceEntry {
   path: readonly number[];
   module?: string;

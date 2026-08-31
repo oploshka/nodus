@@ -9,7 +9,6 @@ import {
 } from './CoreSchema.js';
 import type {
   iCoreModule,
-  sCoreConfig,
   sCoreExecutionContext,
   sCoreGroupConfig,
   sCoreRegisteredModule,
@@ -19,15 +18,15 @@ import type {
   tCoreModuleDefinition,
   tCoreRunDependencies,
 } from './CoreTsType.js';
+import type { sEngineConfig } from '../EngineConfigTsType.js';
 
 export class CoreRuntime {
   private readonly groups: Readonly<Record<string, sCoreGroupConfig>>;
   private readonly modules = new Map<string, sCoreRegisteredModule>();
   private readonly rootDefinitions = new Map<tCoreModuleDefinition, sCoreRegisteredModule>();
-  private readonly start: sCoreRegisteredModule;
   private trace: sCoreTraceEntry[] = [];
 
-  public constructor(config: sCoreConfig) {
+  public constructor(config: sEngineConfig) {
     this.groups = config.groups;
     this.validateGroups();
 
@@ -38,27 +37,11 @@ export class CoreRuntime {
       const registered = this.registerModule(name, definition);
       this.rootDefinitions.set(definition, registered);
     }
-
-    const start = this.rootDefinitions.get(config.start);
-    if (!start) throw new Error('Engine start module must be registered in config.modules.');
-    this.start = start;
   }
 
-  public async run(input: unknown, dependencies: tCoreRunDependencies = {}): Promise<sCoreRunResult> {
+  public async run(schema: sCoreSequence, dependencies: tCoreRunDependencies = {}): Promise<sCoreRunResult> {
     this.trace = [];
-    const schema: sCoreSequence = {
-      type: CORE_STEP.SEQUENCE,
-      task: input,
-      steps: [
-        {
-          module: this.start.name,
-          task: input,
-          input: { context: { parent: true } },
-        },
-      ],
-    };
-
-    const output = await this.executeSequence(schema, input, [], undefined, dependencies);
+    const output = await this.executeSequence(schema, schema.task, [], undefined, dependencies);
     return {
       status: output.status,
       output,
