@@ -1,6 +1,6 @@
 import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
-import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { actionCoreResult, readActionCoreResult } from './ActionCoreResult.js';
 
 interface EditRuntime {
@@ -30,10 +30,10 @@ export class ApplyEditAction extends EngineStep {
   }
 
   public async run(
-    request: sEngineStepRequest,
+    step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const assignment = request.task as { task?: unknown; step?: unknown };
+    const assignment = (step.data ?? step.computedContext?.parent) as { task?: unknown; step?: unknown };
     if (!assignment?.task || !assignment?.step) {
       return actionCoreResult({
         status: 'failed',
@@ -42,7 +42,7 @@ export class ApplyEditAction extends EngineStep {
       });
     }
 
-    const change = readActionCoreResult<ChangeCodeActionData>(request.context.previous);
+    const change = readActionCoreResult<ChangeCodeActionData>(step.computedContext?.previous?.output);
     if (!change || change.status !== 'completed') {
       return actionCoreResult({
         status: 'failed',
