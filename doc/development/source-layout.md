@@ -72,18 +72,27 @@ automation/
   Deprecated/
 ```
 
-`automation/index.js` is a flat list of plugins available to the configured product:
+`automation/index.js` owns the configured product's group restrictions and available modules as two separate sections:
 
 ```js
 export default {
-  PlannerTask,
-  PlannerModel,
-  WorkerCode,
-  ActionCodeChange,
+  groups: {
+    planner: { schema: { allowedGroups: ['worker', 'research'] } },
+    worker: { schema: { allowedGroups: ['action', 'research'] } },
+    research: { schema: { allowedGroups: ['action'] } },
+    action: { schema: false },
+  },
+
+  modules: {
+    PlannerTask,
+    PlannerModel,
+    WorkerCode,
+    ActionCodeChange,
+  },
 };
 ```
 
-Plugin availability is separate from Core group policy. `groups` defines what each semantic type may emit or call; the plugin registry only defines which implementations the product provides. `EngineOld` loads the legacy flat registry from `automation/Deprecated/index.js`.
+`groups` defines what each semantic type may emit or call. `modules` defines which implementations the configured product provides. `EngineOld` keeps using the legacy flat registry from `automation/Deprecated/index.js`.
 
 Legacy Determine, Qualifier, Research strategy, Agent Worker and Documentation Worker implementations are preserved under `automation/Deprecated/`. They remain available to `EngineOld`, but they are not part of the active automation surface.
 
