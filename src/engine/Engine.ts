@@ -1,15 +1,17 @@
 import { CoreRuntime } from './Core/CoreRuntime.js';
-import type { sCoreConfig, sCoreRunResult, tCoreRunDependencies } from './Core/CoreTsType.js';
+import type { sCoreRunResult, tCoreRunDependencies } from './Core/CoreTsType.js';
+import type { sCoreSequence } from './Core/CoreSchema.js';
+import type { sEngineConfig } from './EngineConfigTsType.js';
 
 /** Public entry point for the configurable Core orchestration runtime. */
 export class Engine {
   private readonly runtime: CoreRuntime;
 
-  public constructor(config: sCoreConfig) {
+  public constructor(config: sEngineConfig) {
     this.runtime = new CoreRuntime(config);
   }
 
-  public run(input: unknown, dependencies: tCoreRunDependencies = {}): Promise<sCoreRunResult> {
-    return this.runtime.run(input, dependencies);
+  public run(schema: sCoreSequence, dependencies: tCoreRunDependencies = {}): Promise<sCoreRunResult> {
+    return this.runtime.run(schema, dependencies);
   }
 }
