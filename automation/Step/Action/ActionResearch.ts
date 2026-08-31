@@ -1,7 +1,6 @@
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineOutput, sEngineSchemaStep, tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import { StepAction } from '@engine/Step/StepAction.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
@@ -26,13 +25,9 @@ const researchResponseSchema: ModelResponseSchema = {
   },
 };
 
-export class ResearchAction extends EngineStep {
+export class ResearchAction extends StepAction {
   public getId(): string {
     return 'research';
-  }
-
-  public getGroup(): string {
-    return 'action';
   }
 
   public async run(
@@ -45,10 +40,10 @@ export class ResearchAction extends EngineStep {
   private async perform(input: ResearchActionInput, dependencies: tEngineRunDependencies) {
     try {
       const model = dependencies.model as ModelRunner | undefined;
-      const logger = dependencies.logger as EngineLogger | undefined;
-      if (!model || !logger) throw new Error('ActionResearch requires runtime model and logger.');
+      const emit = dependencies.emit as tEngineEmit | undefined;
+      if (!model || !emit) throw new Error('ActionResearch requires runtime model and emit.');
 
-      const response = await callModel<ResearchResponse>(model, logger, {
+      const response = await callModel<ResearchResponse>(model, emit, {
         request: {
           message: input.question,
           format: ModelRequestFormat.Text,
