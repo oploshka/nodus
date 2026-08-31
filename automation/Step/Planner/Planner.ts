@@ -1,25 +1,20 @@
-import { CORE_MODULE_RESULT } from '@engine/Core/CoreSchema.js';
-import type {
-  iCoreModule,
-  sCoreModuleRequest,
-  tCoreModuleResult,
-  tCoreRunDependencies,
-} from '@engine/Core/CoreTsType.js';
+import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import { StepPlanner } from '@engine/Step/Planner/StepPlanner.js';
 
-/** Minimal Planner used to verify the application -> Core execution path. */
-export class Planner implements iCoreModule {
-  public readonly group = 'planner';
+/** Minimal Planner used to verify the application -> Engine execution path. */
+export class Planner extends StepPlanner {
+  public getId(): string {
+    return 'Planner';
+  }
 
-  public async execute(
-    request: sCoreModuleRequest,
-    _dependencies: tCoreRunDependencies,
-  ): Promise<tCoreModuleResult> {
+  public async run(
+    request: sEngineStepRequest,
+    _dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
     return {
-      type: CORE_MODULE_RESULT.OUTPUT,
-      output: {
-        status: 'SUCCESS',
-        value: request.context.previous?.value ?? request.task,
-      },
+      status: 'SUCCESS',
+      value: request.context.previous?.value ?? request.task,
     };
   }
 }
