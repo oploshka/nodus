@@ -1,3 +1,4 @@
+import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { ModelRunSettings } from '@model/Request/ModelRun.js';
 
 export type EditStrategyId = 'range-replace' | 'replace' | 'diff' | 'edit';
@@ -20,6 +21,7 @@ export interface EditPreparationContext {
   step: unknown;
   edit: ProjectEditIntent;
   source: string;
+  emit: tEngineEmit;
   settings?: ModelRunSettings;
 }
 
