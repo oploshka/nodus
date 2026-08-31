@@ -1,4 +1,6 @@
-import type { sCoreModuleRequest, tCoreModuleResult, tCoreRunDependencies } from '@engine/Core/CoreTsType.js';
+import { EngineStep } from '@engine/Core/EngineStep.js';
+import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { actionCoreResult, readActionCoreResult } from './ActionCoreResult.js';
 
 interface EditRuntime {
@@ -18,13 +20,19 @@ interface ChangeCodeActionData {
 }
 
 /** Applies edit intent using the runtime edit capability supplied for this run. */
-export class ApplyEditAction {
-  public readonly group = 'action';
+export class ApplyEditAction extends EngineStep {
+  public getId(): string {
+    return 'apply-edit';
+  }
 
-  public async execute(
-    request: sCoreModuleRequest,
-    dependencies: tCoreRunDependencies,
-  ): Promise<tCoreModuleResult> {
+  public getGroup(): string {
+    return 'action';
+  }
+
+  public async run(
+    request: sEngineStepRequest,
+    dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
     const assignment = request.task as { task?: unknown; step?: unknown };
     if (!assignment?.task || !assignment?.step) {
       return actionCoreResult({
