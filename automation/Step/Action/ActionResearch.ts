@@ -1,6 +1,6 @@
 import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
-import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { actionCoreResult } from './ActionCoreResult.js';
 
 interface ResearchRuntime {
@@ -22,10 +22,11 @@ export class ResearchAction extends EngineStep {
   }
 
   public async run(
-    request: sEngineStepRequest,
+    step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    return actionCoreResult(await this.perform(request.task as ResearchActionInput, dependencies));
+    const input = (step.data ?? step.computedContext?.parent) as ResearchActionInput;
+    return actionCoreResult(await this.perform(input, dependencies));
   }
 
   private async perform(input: ResearchActionInput, dependencies: tEngineRunDependencies) {
