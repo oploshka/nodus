@@ -2,8 +2,8 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
 import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
-import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
@@ -81,10 +81,10 @@ export class ChangeCodeAction extends EngineStep {
   }
 
   public async run(
-    request: sEngineStepRequest,
+    step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const assignment = request.task as ChangeAssignment;
+    const assignment = (step.data ?? step.computedContext?.parent) as ChangeAssignment;
     if (!assignment?.task || !assignment?.step) {
       return actionCoreResult({
         status: 'failed',
@@ -93,8 +93,8 @@ export class ChangeCodeAction extends EngineStep {
       });
     }
 
-    const context = request.context.steps
-      .map((ref) => readActionCoreData<unknown>(ref.output))
+    const context = (step.computedContext?.steps ?? [])
+      .map((contextStep) => readActionCoreData<unknown>(contextStep.output))
       .filter((item) => item !== undefined);
 
     try {
