@@ -8,6 +8,8 @@ import PlannerTask from '#automation/Step/Planner/PlannerTask/PlannerTask.js';
 import WorkerCode from '#automation/Step/Worker/WorkerCode/WorkerCode.ts';
 
 export default {
+  start: 'WorkerCode',
+
   groups: {
     planner: {
       schema: {

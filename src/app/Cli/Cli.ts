@@ -1,7 +1,7 @@
 import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import type { EngineOld as Engine } from '@engine/Deprecated/EngineOld.js';
+import type { Engine } from '@engine/Engine.js';
 
 export interface CliRuntime {
   engine: Engine;
@@ -10,7 +10,7 @@ export interface CliRuntime {
 }
 
 export async function runCli(runtime: CliRuntime): Promise<void> {
-  console.log(`Nodus 0.3 runtime spike. Project: ${runtime.projectId}`);
+  console.log(`Nodus runtime. Project: ${runtime.projectId}`);
   console.log('Commands: /help /scan /exit');
   console.log('Input: Enter = new line, Ctrl+Enter or Ctrl+D = submit, Ctrl+C = cancel; Ctrl+C on empty input = exit.');
 
@@ -31,7 +31,10 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
     }
 
     try {
-      await runtime.engine.run(value);
+      const result = await runtime.engine.run(value);
+      if (result.status === 'FAILURE') {
+        console.error(`\n✗ ${result.reason ?? 'Execution failed.'}`);
+      }
     } catch (error) {
       console.error(`\n✗ Задача завершилась ошибкой: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -70,8 +73,6 @@ async function readCliInput(): Promise<CliInputResult> {
     const onKeypress = (text: string, key: { name?: string; ctrl?: boolean; sequence?: string }): void => {
       if (key.ctrl && key.name === 'c') {
         output.write('^C');
-        // Ctrl+C cancels a partially typed task. On an empty prompt it exits the CLI,
-        // restoring the conventional terminal escape hatch that raw mode otherwise hides.
         finish(buffer ? { type: 'input', value: '' } : { type: 'exit' });
         return;
       }
@@ -96,7 +97,6 @@ async function readCliInput(): Promise<CliInputResult> {
         return;
       }
 
-      // Ignore the LF half of CRLF when terminals/paste emit it separately.
       if (text === '\n' && previousWasCarriageReturn) {
         previousWasCarriageReturn = false;
         return;
