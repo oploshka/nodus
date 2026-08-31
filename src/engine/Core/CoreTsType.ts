@@ -51,7 +51,6 @@ export interface sCoreGroupConfig {
 }
 
 export interface sCoreConfig {
-  readonly start: tCoreModuleDefinition;
   readonly groups: Readonly<Record<string, sCoreGroupConfig>>;
   readonly modules: Readonly<Record<string, tCoreModuleDefinition>>;
 }
