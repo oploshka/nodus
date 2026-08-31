@@ -1,28 +1,35 @@
-import type { sEngineSequence, tEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
 
-export type tWorkerCodeStepMatch = (step: tEngineSchemaStep) => boolean;
+export type tWorkerCodeStepMatch = (step: sEngineSchemaStep) => boolean;
 
 export function previousSteps(
-  sequence: sEngineSequence,
+  sequence: sEngineSchemaStep,
   stepNumber: number,
   match: tWorkerCodeStepMatch,
-): tEngineSchemaStep[] {
-  const end = Math.max(0, Math.min(sequence.steps.length, stepNumber - 1));
-  return sequence.steps.slice(0, end).filter(match);
+): sEngineSchemaStep[] {
+  const steps = sequenceSteps(sequence);
+  const end = Math.max(0, Math.min(steps.length, stepNumber - 1));
+  return steps.slice(0, end).filter(match);
 }
 
 export function previousStepNumbers(
-  sequence: sEngineSequence,
+  sequence: sEngineSchemaStep,
   stepNumber: number,
   match: tWorkerCodeStepMatch,
 ): number[] {
-  const end = Math.max(0, Math.min(sequence.steps.length, stepNumber - 1));
+  const steps = sequenceSteps(sequence);
+  const end = Math.max(0, Math.min(steps.length, stepNumber - 1));
   const result: number[] = [];
 
   for (let index = 0; index < end; index += 1) {
-    const step = sequence.steps[index];
+    const step = steps[index];
     if (step && match(step)) result.push(index + 1);
   }
 
   return result;
+}
+
+function sequenceSteps(sequence: sEngineSchemaStep): sEngineSchemaStep[] {
+  if (sequence.steps === null) throw new Error('WorkerCode expected a schema step chain.');
+  return sequence.steps;
 }
