@@ -1,5 +1,7 @@
 import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
-import type { sCoreModuleRequest, tCoreModuleResult, tCoreRunDependencies } from '@engine/Core/CoreTsType.js';
+import { EngineStep } from '@engine/Core/EngineStep.js';
+import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { actionCoreResult } from './ActionCoreResult.js';
 
 export interface sFindFileActionInput {
@@ -8,18 +10,23 @@ export interface sFindFileActionInput {
 }
 
 /** Cheap bounded lookup that locates project file paths without reading file content. */
-export class FindFileAction {
-  public readonly group = 'action';
-  public readonly id = 'find-file';
-
-  public async execute(
-    request: sCoreModuleRequest,
-    dependencies: tCoreRunDependencies,
-  ): Promise<tCoreModuleResult> {
-    return actionCoreResult(await this.run(request.task as sFindFileActionInput, dependencies));
+export class FindFileAction extends EngineStep {
+  public getId(): string {
+    return 'find-file';
   }
 
-  public async run(input: sFindFileActionInput, dependencies: tCoreRunDependencies) {
+  public getGroup(): string {
+    return 'action';
+  }
+
+  public async run(
+    request: sEngineStepRequest,
+    dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
+    return actionCoreResult(await this.perform(request.task as sFindFileActionInput, dependencies));
+  }
+
+  private async perform(input: sFindFileActionInput, dependencies: tEngineRunDependencies) {
     const query = input.query.trim();
     if (!query) return { status: 'failed' as const, reason: 'File lookup query is empty.', canContinue: false as const };
 
@@ -30,7 +37,7 @@ export class FindFileAction {
   }
 }
 
-function projectFileIndex(dependencies: tCoreRunDependencies): iProjectFileIndex {
+function projectFileIndex(dependencies: tEngineRunDependencies): iProjectFileIndex {
   const target = dependencies.target as { fileIndex?: iProjectFileIndex } | undefined;
   if (!target?.fileIndex) throw new Error('ActionFileFind requires runtime target.fileIndex.');
   return target.fileIndex;

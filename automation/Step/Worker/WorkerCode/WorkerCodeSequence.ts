@@ -1,18 +1,18 @@
-import type { sCoreSequence, tCoreStep } from '@engine/Core/CoreSchema.js';
+import type { sEngineSequence, tEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
 
-export type tWorkerCodeStepMatch = (step: tCoreStep) => boolean;
+export type tWorkerCodeStepMatch = (step: tEngineSchemaStep) => boolean;
 
 export function previousSteps(
-  sequence: sCoreSequence,
+  sequence: sEngineSequence,
   stepNumber: number,
   match: tWorkerCodeStepMatch,
-): tCoreStep[] {
+): tEngineSchemaStep[] {
   const end = Math.max(0, Math.min(sequence.steps.length, stepNumber - 1));
   return sequence.steps.slice(0, end).filter(match);
 }
 
 export function previousStepNumbers(
-  sequence: sCoreSequence,
+  sequence: sEngineSequence,
   stepNumber: number,
   match: tWorkerCodeStepMatch,
 ): number[] {

@@ -7,11 +7,10 @@ import { CompositeLogger, ConsoleLogger, FileLogger } from '@app/Logging/Logger.
 import { createModel } from '@app/Model/Model.js';
 import { clearProjectIndex, createProject } from '@app/Project/Project.js';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
-import { CORE_STEP, type sCoreSequence } from '@engine/Core/CoreSchema.js';
-import type {
-  sCoreGroupConfig,
-  tCoreModuleDefinition,
-} from '@engine/Core/CoreTsType.js';
+import { EngineSchema } from '@engine/Core/EngineSchema.js';
+import { ENGINE_STEP } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineGroupConfig } from '@engine/Core/EngineRuntimeTsType.js';
+import type { tEngineStepDefinition } from '@engine/Core/EngineStepInterface.js';
 import { Engine } from '@engine/Engine.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 
@@ -22,8 +21,8 @@ interface StartupOptions {
 }
 
 interface sAutomationRuntimePackage {
-  groups: Readonly<Record<string, sCoreGroupConfig>>;
-  modules: Readonly<Record<string, tCoreModuleDefinition>>;
+  groups: Readonly<Record<string, sEngineGroupConfig>>;
+  modules: Readonly<Record<string, tEngineStepDefinition>>;
 }
 
 const ACTION_USER_INPUT_CLI = 'ActionUserInputCli';
@@ -80,7 +79,7 @@ async function main(args: string[]): Promise<void> {
   await runCli({
     projectId: target.id,
     onInput: async (value) => {
-      const result = await engine.run(createCliSequence(value), dependencies);
+      const result = await engine.run(createCliSchema(value), dependencies);
       if (result.status === 'FAILURE') {
         throw new Error(result.reason ?? 'Execution failed.');
       }
@@ -91,9 +90,9 @@ async function main(args: string[]): Promise<void> {
   logger.info('app.exit');
 }
 
-function createCliSequence(input: string): sCoreSequence {
-  return {
-    type: CORE_STEP.SEQUENCE,
+function createCliSchema(input: string): EngineSchema {
+  return new EngineSchema({
+    type: ENGINE_STEP.SEQUENCE,
     task: input,
     steps: [
       {
@@ -105,7 +104,7 @@ function createCliSequence(input: string): sCoreSequence {
         input: { context: { previous: true } },
       },
     ],
-  };
+  });
 }
 
 function resolveAutomationRuntime(value: Readonly<Record<string, unknown>>): sAutomationRuntimePackage {
@@ -116,8 +115,8 @@ function resolveAutomationRuntime(value: Readonly<Record<string, unknown>>): sAu
   if (!isRecord(modules)) throw new Error('automation/index.js must export modules.');
 
   return {
-    groups: groups as Readonly<Record<string, sCoreGroupConfig>>,
-    modules: modules as Readonly<Record<string, tCoreModuleDefinition>>,
+    groups: groups as Readonly<Record<string, sEngineGroupConfig>>,
+    modules: modules as Readonly<Record<string, tEngineStepDefinition>>,
   };
 }
 

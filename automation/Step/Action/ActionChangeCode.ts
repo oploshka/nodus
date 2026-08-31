@@ -1,14 +1,16 @@
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
-import type { sCoreModuleRequest, tCoreModuleResult, tCoreRunDependencies } from '@engine/Core/CoreTsType.js';
+import { EngineStep } from '@engine/Core/EngineStep.js';
+import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
-import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
+import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
 import { actionCoreResult, readActionCoreData } from './ActionCoreResult.js';
 import type { tActionCoreResult } from './ActionCoreResult.js';
 
@@ -69,14 +71,19 @@ const decisionSchema: ModelResponseSchema = {
 };
 
 /** Stateless module definition. Per-run infrastructure is owned by ChangeCodeExecution. */
-export class ChangeCodeAction {
-  public readonly group = 'action';
-  public readonly id = 'change-code';
+export class ChangeCodeAction extends EngineStep {
+  public getId(): string {
+    return 'change-code';
+  }
 
-  public async execute(
-    request: sCoreModuleRequest,
-    dependencies: tCoreRunDependencies,
-  ): Promise<tCoreModuleResult> {
+  public getGroup(): string {
+    return 'action';
+  }
+
+  public async run(
+    request: sEngineStepRequest,
+    dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
     const assignment = request.task as ChangeAssignment;
     if (!assignment?.task || !assignment?.step) {
       return actionCoreResult({
@@ -176,7 +183,7 @@ class ChangeCodeExecution {
   }
 }
 
-function runtimeDependencies(dependencies: tCoreRunDependencies): ChangeCodeRuntime {
+function runtimeDependencies(dependencies: tEngineRunDependencies): ChangeCodeRuntime {
   const target = dependencies.target as { fileSystem?: FileSystem; fileIndex?: iProjectFileIndex } | undefined;
   const model = dependencies.model as ModelRunner | undefined;
   const logger = dependencies.logger as EngineLogger | undefined;

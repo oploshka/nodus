@@ -1,5 +1,4 @@
-import { CORE_MODULE_RESULT, type sCoreOutput } from '@engine/Core/CoreSchema.js';
-import type { tCoreModuleResult } from '@engine/Core/CoreTsType.js';
+import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
 
 export interface sActionCoreRequest<TInput = unknown> {
   actionId: string;
@@ -19,19 +18,16 @@ export type tActionCoreResult<TData = unknown, TRequest = unknown> =
 
 export function actionCoreResult<TData, TRequest>(
   result: tActionCoreResult<TData, TRequest>,
-): tCoreModuleResult {
+): sEngineOutput {
   return {
-    type: CORE_MODULE_RESULT.OUTPUT,
-    output: {
-      status: result.status === 'completed' ? 'SUCCESS' : 'FAILURE',
-      value: result,
-      ...(result.status === 'completed' ? {} : { reason: result.reason }),
-    },
+    status: result.status === 'completed' ? 'SUCCESS' : 'FAILURE',
+    value: result,
+    ...(result.status === 'completed' ? {} : { reason: result.reason }),
   };
 }
 
 export function readActionCoreResult<TData = unknown, TRequest = unknown>(
-  output: sCoreOutput | undefined,
+  output: sEngineOutput | undefined,
 ): tActionCoreResult<TData, TRequest> | undefined {
   const value = output?.value;
   if (!value || typeof value !== 'object' || !('status' in value)) return undefined;
@@ -40,7 +36,7 @@ export function readActionCoreResult<TData = unknown, TRequest = unknown>(
   return value as tActionCoreResult<TData, TRequest>;
 }
 
-export function readActionCoreData<TData>(output: sCoreOutput | undefined): TData | undefined {
+export function readActionCoreData<TData>(output: sEngineOutput | undefined): TData | undefined {
   const result = readActionCoreResult<TData>(output);
   return result?.status === 'completed' ? result.data : undefined;
 }

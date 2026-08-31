@@ -1,30 +1,32 @@
 import {
-  CORE_MODULE_RESULT,
-  CORE_STEP,
-  isCoreSequence,
-  type sCoreModuleStep,
-  type sCoreOutput,
-  type sCoreSequence,
-  type tCoreStep,
-} from './CoreSchema.js';
+  ENGINE_STEP,
+  isEngineSequence,
+  type sEngineModuleStep,
+  type sEngineOutput,
+  type sEngineSequence,
+  type tEngineSchemaStep,
+} from './EngineSchemaTsType.js';
+import { EngineSchema } from './EngineSchema.js';
 import type {
-  iCoreModule,
-  sCoreExecutionContext,
-  sCoreGroupConfig,
-  sCoreRegisteredModule,
-  sCoreRunResult,
-  sCoreStepRef,
-  sCoreTraceEntry,
-  tCoreModuleDefinition,
-  tCoreRunDependencies,
-} from './CoreTsType.js';
+  iEngineStep,
+  sEngineExecutionContext,
+  sEngineStepRef,
+  tEngineRunDependencies,
+  tEngineStepDefinition,
+} from './EngineStepInterface.js';
+import type {
+  sEngineGroupConfig,
+  sEngineRegisteredModule,
+  sEngineRunResult,
+  sEngineTraceEntry,
+} from './EngineRuntimeTsType.js';
 import type { sEngineConfig } from '../EngineConfigTsType.js';
 
-export class CoreRuntime {
-  private readonly groups: Readonly<Record<string, sCoreGroupConfig>>;
-  private readonly modules = new Map<string, sCoreRegisteredModule>();
-  private readonly rootDefinitions = new Map<tCoreModuleDefinition, sCoreRegisteredModule>();
-  private trace: sCoreTraceEntry[] = [];
+export class EngineRuntime {
+  private readonly groups: Readonly<Record<string, sEngineGroupConfig>>;
+  private readonly modules = new Map<string, sEngineRegisteredModule>();
+  private readonly rootDefinitions = new Map<tEngineStepDefinition, sEngineRegisteredModule>();
+  private trace: sEngineTraceEntry[] = [];
 
   public constructor(config: sEngineConfig) {
     this.groups = config.groups;
@@ -39,9 +41,10 @@ export class CoreRuntime {
     }
   }
 
-  public async run(schema: sCoreSequence, dependencies: tCoreRunDependencies = {}): Promise<sCoreRunResult> {
+  public async run(schema: EngineSchema, dependencies: tEngineRunDependencies = {}): Promise<sEngineRunResult> {
     this.trace = [];
-    const output = await this.executeSequence(schema, schema.task, [], undefined, dependencies);
+    const sequence = schema.value;
+    const output = await this.executeSequence(sequence, sequence.task, [], undefined, dependencies);
     return {
       status: output.status,
       output,
@@ -53,22 +56,23 @@ export class CoreRuntime {
 
   private registerModule(
     name: string,
-    definition: tCoreModuleDefinition,
-    lineage: readonly tCoreModuleDefinition[] = [],
-  ): sCoreRegisteredModule {
+    definition: tEngineStepDefinition,
+    lineage: readonly tEngineStepDefinition[] = [],
+  ): sEngineRegisteredModule {
     if (!name.trim()) throw new Error('Engine module name must be non-empty.');
     if (this.modules.has(name)) throw new Error(`Duplicate Engine module name: ${name}`);
     if (lineage.includes(definition)) throw new Error(`Circular Engine module dependency: ${name}`);
 
     const module = this.resolveDefinition(definition, name);
-    if (!module.group.trim()) throw new Error(`Engine module '${name}' must declare a non-empty group.`);
-    if (!this.groups[module.group]) throw new Error(`Engine module '${name}' references unknown group '${module.group}'.`);
+    const group = module.getGroup();
+    if (!group.trim()) throw new Error(`Engine module '${name}' must declare a non-empty group.`);
+    if (!this.groups[group]) throw new Error(`Engine module '${name}' references unknown group '${group}'.`);
 
     const registered = { name, definition, module };
     this.modules.set(name, registered);
 
     const nextLineage = [...lineage, definition];
-    for (const [dependencyName, dependency] of Object.entries(module.dependencies ?? {})) {
+    for (const [dependencyName, dependency] of Object.entries(module.getDependencies() ?? {})) {
       if (!dependencyName.trim()) throw new Error(`Engine module '${name}' has an empty dependency name.`);
       this.registerModule(`${name}::${dependencyName}`, dependency, nextLineage);
     }
@@ -76,13 +80,15 @@ export class CoreRuntime {
     return registered;
   }
 
-  private resolveDefinition(definition: tCoreModuleDefinition, name: string): iCoreModule {
+  private resolveDefinition(definition: tEngineStepDefinition, name: string): iEngineStep {
     const module = typeof definition === 'function' ? new definition() : definition;
     if (!module || typeof module !== 'object') {
       throw new Error(`Engine module '${name}' must be an executable object or zero-argument class.`);
     }
-    if (typeof module.group !== 'string') throw new Error(`Engine module '${name}' must expose string group.`);
-    if (typeof module.execute !== 'function') throw new Error(`Engine module '${name}' must expose execute(request, dependencies).`);
+    if (typeof module.getGroup !== 'function') throw new Error(`Engine module '${name}' must expose getGroup().`);
+    if (typeof module.getId !== 'function') throw new Error(`Engine module '${name}' must expose getId().`);
+    if (typeof module.getDependencies !== 'function') throw new Error(`Engine module '${name}' must expose getDependencies().`);
+    if (typeof module.run !== 'function') throw new Error(`Engine module '${name}' must expose run(request, dependencies).`);
     return module;
   }
 
@@ -97,13 +103,13 @@ export class CoreRuntime {
   }
 
   private async executeSequence(
-    sequence: sCoreSequence,
+    sequence: sEngineSequence,
     parentInput: unknown,
     path: number[],
     authorityGroup: string | undefined,
-    dependencies: tCoreRunDependencies,
-  ): Promise<sCoreOutput> {
-    this.trace.push({ path: [...path], type: CORE_STEP.SEQUENCE, status: 'STARTED' });
+    dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
+    this.trace.push({ path: [...path], type: ENGINE_STEP.SEQUENCE, status: 'STARTED' });
 
     let index = 0;
     while (index < sequence.steps.length) {
@@ -121,9 +127,9 @@ export class CoreRuntime {
 
       if (output.status === 'FAILURE') {
         if (!tailChanged || sequence.steps.length <= stepNumber) {
-          const failed: sCoreOutput = { status: 'FAILURE', reason: output.reason, value: output.value };
+          const failed: sEngineOutput = { status: 'FAILURE', reason: output.reason, value: output.value };
           sequence.output = failed;
-          this.trace.push({ path: [...path], type: CORE_STEP.SEQUENCE, status: 'FAILURE' });
+          this.trace.push({ path: [...path], type: ENGINE_STEP.SEQUENCE, status: 'FAILURE' });
           return failed;
         }
       }
@@ -132,20 +138,20 @@ export class CoreRuntime {
     }
 
     const lastOutput = sequence.steps.at(-1)?.output;
-    const completed: sCoreOutput = lastOutput ? { ...lastOutput } : { status: 'SUCCESS' };
+    const completed: sEngineOutput = lastOutput ? { ...lastOutput } : { status: 'SUCCESS' };
     sequence.output = completed;
-    this.trace.push({ path: [...path], type: CORE_STEP.SEQUENCE, status: completed.status });
+    this.trace.push({ path: [...path], type: ENGINE_STEP.SEQUENCE, status: completed.status });
     return completed;
   }
 
   private async executeStep(
-    step: tCoreStep,
-    context: sCoreExecutionContext,
+    step: tEngineSchemaStep,
+    context: sEngineExecutionContext,
     path: number[],
     authorityGroup: string | undefined,
-    dependencies: tCoreRunDependencies,
-  ): Promise<sCoreOutput> {
-    if (isCoreSequence(step)) {
+    dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
+    if (isEngineSequence(step)) {
       const childInput = step.task ?? this.contextPayload(context);
       return this.executeSequence(step, childInput, path, authorityGroup, dependencies);
     }
@@ -153,46 +159,43 @@ export class CoreRuntime {
   }
 
   private async executeModule(
-    step: sCoreModuleStep,
-    context: sCoreExecutionContext,
+    step: sEngineModuleStep,
+    context: sEngineExecutionContext,
     path: number[],
-    dependencies: tCoreRunDependencies,
-  ): Promise<sCoreOutput> {
+    dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
     const registered = this.modules.get(step.module);
     if (!registered) throw new Error(`Unknown Engine module: ${step.module}`);
 
     this.trace.push({ path: [...path], module: registered.name, status: 'STARTED' });
-    const result = await registered.module.execute({
+    const result = await registered.module.run({
       task: step.task ?? context.parent,
       context,
     }, dependencies);
 
-    let output: sCoreOutput;
-    switch (result.type) {
-      case CORE_MODULE_RESULT.OUTPUT:
-        output = result.output;
-        break;
-      case CORE_MODULE_RESULT.SCHEMA:
-        this.validateReturnedSchema(result.schema, registered.module.group);
-        step.schema = result.schema;
-        output = await this.executeSequence(
-          result.schema,
-          result.schema.task ?? step.task ?? this.contextPayload(context),
-          path,
-          registered.module.group,
-          dependencies,
-        );
-        break;
-      default:
-        throw new Error(`Engine module '${registered.name}' returned an unknown result type.`);
+    let output: sEngineOutput;
+    if (result instanceof EngineSchema) {
+      const sequence = result.value;
+      const group = registered.module.getGroup();
+      this.validateReturnedSchema(sequence, group);
+      step.schema = sequence;
+      output = await this.executeSequence(
+        sequence,
+        sequence.task ?? step.task ?? this.contextPayload(context),
+        path,
+        group,
+        dependencies,
+      );
+    } else {
+      output = result;
     }
 
     this.trace.push({ path: [...path], module: registered.name, status: output.status });
     return output;
   }
 
-  private validateReturnedSchema(sequence: sCoreSequence, groupName: string): void {
-    if (!sequence || sequence.type !== CORE_STEP.SEQUENCE || !Array.isArray(sequence.steps)) {
+  private validateReturnedSchema(sequence: sEngineSequence, groupName: string): void {
+    if (!sequence || sequence.type !== ENGINE_STEP.SEQUENCE || !Array.isArray(sequence.steps)) {
       throw new Error(`Engine group '${groupName}' returned an invalid SEQUENCE schema.`);
     }
 
@@ -204,16 +207,16 @@ export class CoreRuntime {
     this.validateSequenceModules(sequence, groupName, allowed);
   }
 
-  private validateSequenceModules(sequence: sCoreSequence, ownerGroup: string, allowed: ReadonlySet<string>): void {
+  private validateSequenceModules(sequence: sEngineSequence, ownerGroup: string, allowed: ReadonlySet<string>): void {
     for (const step of sequence.steps) {
-      if (isCoreSequence(step)) {
+      if (isEngineSequence(step)) {
         this.validateSequenceModules(step, ownerGroup, allowed);
         continue;
       }
 
       const registered = this.modules.get(step.module);
       if (!registered) throw new Error(`Schema from group '${ownerGroup}' references unknown module '${step.module}'.`);
-      const targetGroup = registered.module.group;
+      const targetGroup = registered.module.getGroup();
       if (!allowed.has(targetGroup)) {
         throw new Error(`Schema from group '${ownerGroup}' cannot call group '${targetGroup}' via module '${step.module}'.`);
       }
@@ -221,13 +224,13 @@ export class CoreRuntime {
   }
 
   private buildContext(
-    sequence: sCoreSequence,
+    sequence: sEngineSequence,
     index: number,
     parentInput: unknown,
     path: number[],
-  ): sCoreExecutionContext {
+  ): sEngineExecutionContext {
     const config = sequence.steps[index]?.input?.context;
-    const selectedSteps: sCoreStepRef[] = [];
+    const selectedSteps: sEngineStepRef[] = [];
 
     for (const stepNumber of config?.steps ?? []) {
       if (!Number.isInteger(stepNumber) || stepNumber < 1 || stepNumber > index) {
@@ -249,7 +252,7 @@ export class CoreRuntime {
     };
   }
 
-  private contextPayload(context: sCoreExecutionContext): unknown {
+  private contextPayload(context: sEngineExecutionContext): unknown {
     return {
       parent: context.parent,
       previous: context.previous,
@@ -258,9 +261,9 @@ export class CoreRuntime {
   }
 
   private applyTransition(
-    sequence: sCoreSequence,
+    sequence: sEngineSequence,
     stepNumber: number,
-    transition: NonNullable<sCoreSequence['transition']>,
+    transition: NonNullable<sEngineSequence['transition']>,
   ): boolean {
     const completedPrefix = sequence.steps.slice(0, stepNumber);
     const previousTail = sequence.steps.slice(stepNumber);

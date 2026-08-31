@@ -1,5 +1,7 @@
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import type { sCoreModuleRequest, tCoreModuleResult, tCoreRunDependencies } from '@engine/Core/CoreTsType.js';
+import { EngineStep } from '@engine/Core/EngineStep.js';
+import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { actionCoreResult } from './ActionCoreResult.js';
 
 export interface sReadFileActionInput {
@@ -7,18 +9,23 @@ export interface sReadFileActionInput {
 }
 
 /** Cheap task-local read of one already known project file. */
-export class ReadFileAction {
-  public readonly group = 'action';
-  public readonly id = 'read-file';
-
-  public async execute(
-    request: sCoreModuleRequest,
-    dependencies: tCoreRunDependencies,
-  ): Promise<tCoreModuleResult> {
-    return actionCoreResult(await this.run(request.task as sReadFileActionInput, dependencies));
+export class ReadFileAction extends EngineStep {
+  public getId(): string {
+    return 'read-file';
   }
 
-  public async run(input: sReadFileActionInput, dependencies: tCoreRunDependencies) {
+  public getGroup(): string {
+    return 'action';
+  }
+
+  public async run(
+    request: sEngineStepRequest,
+    dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
+    return actionCoreResult(await this.perform(request.task as sReadFileActionInput, dependencies));
+  }
+
+  private async perform(input: sReadFileActionInput, dependencies: tEngineRunDependencies) {
     const path = input.path.trim();
     if (!path) return { status: 'failed' as const, reason: 'File read path is empty.', canContinue: false as const };
 
@@ -31,7 +38,7 @@ export class ReadFileAction {
   }
 }
 
-function projectFileSystem(dependencies: tCoreRunDependencies): FileSystem {
+function projectFileSystem(dependencies: tEngineRunDependencies): FileSystem {
   const target = dependencies.target as { fileSystem?: FileSystem } | undefined;
   if (!target?.fileSystem) throw new Error('ActionFileRead requires runtime target.fileSystem.');
   return target.fileSystem;

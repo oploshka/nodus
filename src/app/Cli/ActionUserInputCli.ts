@@ -1,24 +1,23 @@
-import { CORE_MODULE_RESULT } from '@engine/Core/CoreSchema.js';
-import type {
-  iCoreModule,
-  sCoreModuleRequest,
-  tCoreModuleResult,
-  tCoreRunDependencies,
-} from '@engine/Core/CoreTsType.js';
+import { EngineStep } from '@engine/Core/EngineStep.js';
+import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 
-export class ActionUserInputCli implements iCoreModule {
-  public readonly group = 'action';
+export class ActionUserInputCli extends EngineStep {
+  public getId(): string {
+    return 'ActionUserInputCli';
+  }
 
-  public async execute(
-    request: sCoreModuleRequest,
-    _dependencies: tCoreRunDependencies,
-  ): Promise<tCoreModuleResult> {
+  public getGroup(): string {
+    return 'action';
+  }
+
+  public async run(
+    request: sEngineStepRequest,
+    _dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
     return {
-      type: CORE_MODULE_RESULT.OUTPUT,
-      output: {
-        status: 'SUCCESS',
-        value: request.task,
-      },
+      status: 'SUCCESS',
+      value: request.task,
     };
   }
 }

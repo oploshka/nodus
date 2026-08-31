@@ -1,15 +1,16 @@
 import {
-  CORE_STEP,
-  type sCoreModuleStep,
-  type sCoreSequence,
-  type tCoreStep,
-} from '@engine/Core/CoreSchema.js';
-import { WorkerSchema } from '@engine/Step/Worker/Contract/WorkerSchema.js';
-import type { sWorkerRequest, sWorkerSchema } from '@engine/Step/Worker/Contract/WorkerTsType.js';
+  ENGINE_STEP,
+  type sEngineModuleStep,
+  type sEngineSequence,
+  type tEngineSchemaStep,
+} from '@engine/Core/EngineSchemaTsType.js';
+import { EngineSchema } from '@engine/Core/EngineSchema.js';
+import type { sEngineStepRequest } from '@engine/Core/EngineStepInterface.js';
+import { StepWorker } from '@engine/Step/Worker/StepWorker.js';
 import {
   readActionCoreResult,
-  type sActionCoreRequest
-} from "@automation/Step/Action/ActionCoreResult.js";
+  type sActionCoreRequest,
+} from '@automation/Step/Action/ActionCoreResult.js';
 import { previousStepNumbers, previousSteps } from './WorkerCodeSequence.js';
 
 const ACTION_CODE_CHANGE = 'ActionCodeChange';
@@ -24,20 +25,20 @@ const MAX_READ_FILE_REQUESTS = 6;
 const MAX_RESEARCH_REQUESTS = 2;
 
 /** WorkerCode owns orchestration only; runtime dependencies are supplied when modules execute. */
-export default class WorkerCode extends WorkerSchema {
-  public constructor() {
-    super('WorkerCode');
+export default class WorkerCode extends StepWorker {
+  public getId(): string {
+    return 'WorkerCode';
   }
 
-  public getSchema(request: sWorkerRequest): sWorkerSchema {
-    return {
-      type: CORE_STEP.SEQUENCE,
+  public run(request: sEngineStepRequest): EngineSchema {
+    return new EngineSchema({
+      type: ENGINE_STEP.SEQUENCE,
       task: request.task,
       steps: [this.changeStep(request.task, [])],
-    };
+    });
   }
 
-  private changeStep(task: unknown, contextSteps: readonly number[]): sCoreModuleStep {
+  private changeStep(task: unknown, contextSteps: readonly number[]): sEngineModuleStep {
     return {
       module: ACTION_CODE_CHANGE,
       task,
@@ -51,7 +52,7 @@ export default class WorkerCode extends WorkerSchema {
     };
   }
 
-  private transitionChange(sequence: sCoreSequence, stepNumber: number): void {
+  private transitionChange(sequence: sEngineSequence, stepNumber: number): void {
     const step = sequence.steps[stepNumber - 1];
     if (!step || !('module' in step)) return;
 
@@ -99,7 +100,7 @@ export default class WorkerCode extends WorkerSchema {
   }
 
   private planRequests(
-    sequence: sCoreSequence,
+    sequence: sEngineSequence,
     stepNumber: number,
     requests: ReadonlyArray<sActionCoreRequest>,
   ): Array<{ module: string; input: unknown }> | undefined {
@@ -129,17 +130,17 @@ export default class WorkerCode extends WorkerSchema {
     return undefined;
   }
 
-  private contextSteps(sequence: sCoreSequence, stepNumber: number): number[] {
+  private contextSteps(sequence: sEngineSequence, stepNumber: number): number[] {
     const contextModules = new Set([ACTION_FILE_FIND, ACTION_FILE_READ, ACTION_RESEARCH]);
     return previousStepNumbers(sequence, stepNumber, (step) => 'module' in step && contextModules.has(step.module));
   }
 
-  private countThrough(sequence: sCoreSequence, stepNumber: number, module: string): number {
+  private countThrough(sequence: sEngineSequence, stepNumber: number, module: string): number {
     return previousSteps(sequence, stepNumber + 1, (step) => isModule(step, module)).length;
   }
 
   private wasRequested(
-    sequence: sCoreSequence,
+    sequence: sEngineSequence,
     stepNumber: number,
     candidate: { module: string; input: unknown },
   ): boolean {
@@ -150,12 +151,12 @@ export default class WorkerCode extends WorkerSchema {
     ).length > 0;
   }
 
-  private replaceTail(sequence: sCoreSequence, stepNumber: number, next: sCoreModuleStep[]): void {
+  private replaceTail(sequence: sEngineSequence, stepNumber: number, next: sEngineModuleStep[]): void {
     sequence.steps.splice(stepNumber, sequence.steps.length - stepNumber, ...next);
   }
 }
 
-function isModule(step: tCoreStep, module: string): step is sCoreModuleStep {
+function isModule(step: tEngineSchemaStep, module: string): step is sEngineModuleStep {
   return 'module' in step && step.module === module;
 }
 
