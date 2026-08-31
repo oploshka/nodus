@@ -22,12 +22,12 @@ interface StartupOptions {
 }
 
 interface sAutomationRuntimePackage {
-  start: string;
   groups: Readonly<Record<string, sCoreGroupConfig>>;
   modules: Readonly<Record<string, tCoreModuleDefinition>>;
 }
 
 const ACTION_USER_INPUT_CLI = 'ActionUserInputCli';
+const PLANNER = 'Planner';
 
 async function main(args: string[]): Promise<void> {
   const options = parseStartupOptions(args);
@@ -64,8 +64,8 @@ async function main(args: string[]): Promise<void> {
   if (automation.modules[ACTION_USER_INPUT_CLI]) {
     throw new Error(`Automation module '${ACTION_USER_INPUT_CLI}' is reserved by the CLI application.`);
   }
-  if (!automation.modules[automation.start]) {
-    throw new Error(`Automation start module '${automation.start}' is not registered.`);
+  if (!automation.modules[PLANNER]) {
+    throw new Error(`Automation module '${PLANNER}' is not registered.`);
   }
 
   const engine = new Engine({
@@ -80,17 +80,18 @@ async function main(args: string[]): Promise<void> {
   await runCli({
     projectId: target.id,
     onInput: async (value) => {
-      const result = await engine.run(createCliSequence(value, automation.start), dependencies);
+      const result = await engine.run(createCliSequence(value), dependencies);
       if (result.status === 'FAILURE') {
         throw new Error(result.reason ?? 'Execution failed.');
       }
+      if (result.output.value !== undefined) console.log(result.output.value);
     },
   });
 
   logger.info('app.exit');
 }
 
-function createCliSequence(input: string, start: string): sCoreSequence {
+function createCliSequence(input: string): sCoreSequence {
   return {
     type: CORE_STEP.SEQUENCE,
     task: input,
@@ -100,26 +101,21 @@ function createCliSequence(input: string, start: string): sCoreSequence {
         input: { context: { parent: true } },
       },
       {
-        module: start,
-        input: { context: { parent: true, previous: true } },
+        module: PLANNER,
+        input: { context: { previous: true } },
       },
     ],
   };
 }
 
 function resolveAutomationRuntime(value: Readonly<Record<string, unknown>>): sAutomationRuntimePackage {
-  const start = value.start;
   const groups = value.groups;
   const modules = value.modules;
 
-  if (typeof start !== 'string' || !start.trim()) {
-    throw new Error('automation/index.js must export a non-empty start module id.');
-  }
   if (!isRecord(groups)) throw new Error('automation/index.js must export groups.');
   if (!isRecord(modules)) throw new Error('automation/index.js must export modules.');
 
   return {
-    start,
     groups: groups as Readonly<Record<string, sCoreGroupConfig>>,
     modules: modules as Readonly<Record<string, tCoreModuleDefinition>>,
   };
