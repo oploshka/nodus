@@ -115,7 +115,7 @@ function createRuntime(planner: iProcessPlanner, worker: WorkerRunner): ProcessR
 
 async function loadPlannerSchema(): Promise<sProcessSchema> {
   const automation = await AutomationLoader.load(resolve('automation'));
-  const definition = automation.planners.task as { schema?: unknown };
+  const definition = automation.PlannerTask as { schema?: unknown };
   const schema = definition.schema;
   if (!schema || typeof schema !== 'object' || (schema as { type?: unknown }).type !== STEP.SEQUENCE) {
     throw new Error('automation PlannerTask schema is not registered');
