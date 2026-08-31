@@ -36,9 +36,6 @@ export class CoreRuntime {
         throw new Error(`Engine root module is registered more than once: ${name}`);
       }
       const registered = this.registerModule(name, definition);
-      if (registered.module.id && registered.module.id !== name) {
-        throw new Error(`Engine root module '${name}' must match module id '${registered.module.id}'.`);
-      }
       this.rootDefinitions.set(definition, registered);
     }
 
@@ -78,24 +75,18 @@ export class CoreRuntime {
   ): sCoreRegisteredModule {
     if (!name.trim()) throw new Error('Engine module name must be non-empty.');
     if (this.modules.has(name)) throw new Error(`Duplicate Engine module name: ${name}`);
-    if (lineage.includes(definition)) {
-      throw new Error(`Circular Engine module dependency: ${name}`);
-    }
+    if (lineage.includes(definition)) throw new Error(`Circular Engine module dependency: ${name}`);
 
     const module = this.resolveDefinition(definition, name);
     if (!module.group.trim()) throw new Error(`Engine module '${name}' must declare a non-empty group.`);
-    if (!this.groups[module.group]) {
-      throw new Error(`Engine module '${name}' references unknown group '${module.group}'.`);
-    }
+    if (!this.groups[module.group]) throw new Error(`Engine module '${name}' references unknown group '${module.group}'.`);
 
     const registered = { name, definition, module };
     this.modules.set(name, registered);
 
     const nextLineage = [...lineage, definition];
     for (const [dependencyName, dependency] of Object.entries(module.dependencies ?? {})) {
-      if (!dependencyName.trim()) {
-        throw new Error(`Engine module '${name}' has an empty dependency name.`);
-      }
+      if (!dependencyName.trim()) throw new Error(`Engine module '${name}' has an empty dependency name.`);
       this.registerModule(`${name}::${dependencyName}`, dependency, nextLineage);
     }
 
@@ -107,12 +98,8 @@ export class CoreRuntime {
     if (!module || typeof module !== 'object') {
       throw new Error(`Engine module '${name}' must be an executable object or zero-argument class.`);
     }
-    if (typeof module.group !== 'string') {
-      throw new Error(`Engine module '${name}' must expose string group.`);
-    }
-    if (typeof module.execute !== 'function') {
-      throw new Error(`Engine module '${name}' must expose execute(request, dependencies).`);
-    }
+    if (typeof module.group !== 'string') throw new Error(`Engine module '${name}' must expose string group.`);
+    if (typeof module.execute !== 'function') throw new Error(`Engine module '${name}' must expose execute(request, dependencies).`);
     return module;
   }
 
@@ -121,9 +108,7 @@ export class CoreRuntime {
       if (!name.trim()) throw new Error('Engine group name must be non-empty.');
       if (group.schema === false) continue;
       for (const allowed of group.schema.allowedGroups) {
-        if (!this.groups[allowed]) {
-          throw new Error(`Engine group '${name}' allows unknown group '${allowed}'.`);
-        }
+        if (!this.groups[allowed]) throw new Error(`Engine group '${name}' allows unknown group '${allowed}'.`);
       }
     }
   }
@@ -181,7 +166,6 @@ export class CoreRuntime {
       const childInput = step.task ?? this.contextPayload(context);
       return this.executeSequence(step, childInput, path, authorityGroup, dependencies);
     }
-
     return this.executeModule(step, context, path, dependencies);
   }
 
@@ -205,7 +189,6 @@ export class CoreRuntime {
       case CORE_MODULE_RESULT.OUTPUT:
         output = result.output;
         break;
-
       case CORE_MODULE_RESULT.SCHEMA:
         this.validateReturnedSchema(result.schema, registered.module.group);
         step.schema = result.schema;
@@ -217,7 +200,6 @@ export class CoreRuntime {
           dependencies,
         );
         break;
-
       default:
         throw new Error(`Engine module '${registered.name}' returned an unknown result type.`);
     }
@@ -233,9 +215,7 @@ export class CoreRuntime {
 
     const group = this.groups[groupName];
     if (!group) throw new Error(`Unknown Engine group: ${groupName}`);
-    if (group.schema === false) {
-      throw new Error(`Engine group '${groupName}' cannot return schema.`);
-    }
+    if (group.schema === false) throw new Error(`Engine group '${groupName}' cannot return schema.`);
 
     const allowed = new Set(group.schema.allowedGroups);
     this.validateSequenceModules(sequence, groupName, allowed);
@@ -275,9 +255,7 @@ export class CoreRuntime {
       selectedSteps.push({ number: stepNumber, output: target.output });
     }
 
-    const previous = config?.previous && index > 0
-      ? sequence.steps[index - 1]?.output
-      : undefined;
+    const previous = config?.previous && index > 0 ? sequence.steps[index - 1]?.output : undefined;
 
     return {
       parent: config?.parent ? parentInput : undefined,
@@ -305,9 +283,7 @@ export class CoreRuntime {
     const previousTail = sequence.steps.slice(stepNumber);
     transition(sequence, stepNumber);
 
-    if (sequence.steps.length < stepNumber) {
-      throw new Error(`Transition at step ${stepNumber} removed completed steps.`);
-    }
+    if (sequence.steps.length < stepNumber) throw new Error(`Transition at step ${stepNumber} removed completed steps.`);
 
     for (let index = 0; index < completedPrefix.length; index += 1) {
       if (sequence.steps[index] !== completedPrefix[index]) {
