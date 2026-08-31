@@ -4,7 +4,7 @@ import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js
 import { actionCoreResult, readActionCoreResult } from './ActionCoreResult.js';
 
 interface EditRuntime {
-  change(task: unknown, step: unknown, request: unknown): Promise<{
+  change(task: unknown, request: unknown): Promise<{
     status: 'completed' | 'not-completed';
     reason?: string;
     files?: number;
@@ -33,15 +33,6 @@ export class ApplyEditAction extends EngineStep {
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const assignment = step.task as { task?: unknown; step?: unknown };
-    if (!assignment?.task || !assignment?.step) {
-      return actionCoreResult({
-        status: 'failed',
-        reason: 'ActionEditApply task must contain task and step.',
-        canContinue: false,
-      });
-    }
-
     const change = readActionCoreResult<ChangeCodeActionData>(step.computedContext?.previous?.output);
     if (!change || change.status !== 'completed') {
       return actionCoreResult({
@@ -58,7 +49,7 @@ export class ApplyEditAction extends EngineStep {
     const edit = dependencies.edit as EditRuntime | undefined;
     if (!edit) throw new Error('ActionEditApply requires runtime edit dependency.');
 
-    const result = await edit.change(assignment.task, assignment.step, change.data.edit);
+    const result = await edit.change(step.task, change.data.edit);
     if (result.status === 'not-completed') {
       return actionCoreResult({
         status: 'not-completed',
