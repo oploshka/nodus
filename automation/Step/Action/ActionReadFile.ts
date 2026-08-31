@@ -1,7 +1,7 @@
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import { EngineStep } from '@engine/Core/EngineStep.js';
 import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
 import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import { StepAction } from '@engine/Step/StepAction.js';
 import { actionCoreResult } from './ActionCoreResult.js';
 
 export interface sReadFileActionInput {
@@ -9,13 +9,9 @@ export interface sReadFileActionInput {
 }
 
 /** Cheap task-local read of one already known project file. */
-export class ReadFileAction extends EngineStep {
+export class ReadFileAction extends StepAction {
   public getId(): string {
     return 'read-file';
-  }
-
-  public getGroup(): string {
-    return 'action';
   }
 
   public async run(
