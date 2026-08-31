@@ -14,8 +14,12 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
   console.log('Commands: /help /exit');
   console.log('Input: Enter = new line, Ctrl+Enter or Ctrl+D = submit, Ctrl+C = cancel; Ctrl+C on empty input = exit.');
 
-  while (await runtime.onRun()) {
-    // Each Engine run starts from the CLI input Step and waits for user input there.
+  while (true) {
+    try {
+      if (!await runtime.onRun()) break;
+    } catch (error) {
+      console.error(`\n✗ Задача завершилась ошибкой: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 
