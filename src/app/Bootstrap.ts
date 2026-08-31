@@ -2,46 +2,25 @@ import { resolve } from 'node:path';
 import type { AppConfiguration } from '@app/Config/Configuration.js';
 import { ConsoleLogger } from '@app/Logging/Logger.js';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
-import type { Determine } from '@engine/Determine/Determine.js';
-import { EngineOld as Engine } from '@engine/Deprecated/EngineOld.js';
-import type { Planner } from '@engine/Planner/Planner.js';
-import { Research } from '@engine/Research/Research.js';
-import { ResearchStore } from '@engine/Research/ResearchStore.js';
-import type { ResearchResolver } from '@engine/Research/ResearchTypes.js';
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
-import { WorkerAgentRunner } from '@engine/Worker/WorkerAgentRunner.js';
-import { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
-import { RangeReplaceEditStrategy } from '@engine/Edit/Strategy/RangeReplaceEditStrategy.js';
-import { ReplaceEditStrategy } from '@engine/Edit/Strategy/ReplaceEditStrategy.js';
-import { DiffEditStrategy } from '@engine/Edit/Strategy/DiffEditStrategy.js';
-import { FullFileEditStrategy } from '@engine/Edit/Strategy/FullFileEditStrategy.js';
-import { EditValidator } from '@engine/Edit/Validation/EditValidator.js';
-import { JsonEditValidationCheck } from '@engine/Edit/Validation/JsonEditValidationCheck.js';
-import type { EngineTest } from '@engine/EngineTest/EngineTest.js';
-import { ResolveEngineTest } from '@engine/EngineTest/ResolveEngineTest.js';
-import { CompositeEngineTest } from '@engine/EngineTest/CompositeEngineTest.js';
-import { UnitEngineTest } from '@engine/EngineTest/UnitEngineTest.js';
-import { TypecheckEngineTest } from '@engine/EngineTest/TypecheckEngineTest.js';
-import type { CommandEngineTest } from '@engine/EngineTest/CommandEngineTest.js';
+import { Engine } from '@engine/Engine.js';
+import type {
+  sCoreGroupConfig,
+  tCoreModuleDefinition,
+} from '@engine/Core/CoreTsType.js';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
-import { ProjectFileIndex, type iProjectFileIndex, type sProjectFileIndexState } from '@engine/Project/File/Index/ProjectFileIndex.js';
+import {
+  ProjectFileIndex,
+  type iProjectFileIndex,
+  type sProjectFileIndexState,
+} from '@engine/Project/File/Index/ProjectFileIndex.js';
 import { ProjectFileIndex_Scanner } from '@engine/Project/File/Index/ProjectFileIndex_Scanner.js';
 import { ProjectFileIndex_Store } from '@engine/Project/File/Index/ProjectFileIndex_Store.js';
+import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
-import { isAgentModelAdapter } from '@model/Adapter/AgentModelAdapter.js';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter.js';
-import { AgentRunner } from '@model/Runner/AgentRunner.js';
 import { ModelRunner } from '@model/Runner/ModelRunner.js';
-import { FileSystemTool } from '@model/Tool/FileSystem/FileSystemTool.js';
-import { GitTool } from '@model/Tool/Git/GitTool.js';
-import { SearchTool } from '@model/Tool/Search/SearchTool.js';
-import { TerminalTool } from '@model/Tool/Terminal/TerminalTool.js';
-import type { Worker } from '@engine/Worker/Worker.js';
-import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
-import type { NodusSettings } from '../settings/NodusSettings.js';
-import { defaultNodusSettings } from '../settings/defaultSettings.js';
 
 /** App composition capability for one configured target. */
 export interface iTargetRuntime {
@@ -53,40 +32,63 @@ export interface iTargetRuntime {
   clearIndex(): Promise<void>;
 }
 
+export interface iAppRuntime {
+  engine: Engine;
+  target: iTargetRuntime;
+  logger: EngineLogger;
+  model: ModelRunner;
+}
+
 export interface BootstrapOverrides {
   logger?: EngineLogger;
   model?: ModelAdapter;
   target?: iTargetRuntime;
-  engineTest?: EngineTest;
-  settings?: NodusSettings;
 }
 
-type tAutomationWorkerConstructor = new (...args: unknown[]) => Worker;
-type tAutomationConstructor = new (...args: unknown[]) => unknown;
-type tAutomationPlannerConstructor = new (
-  model: ModelRunner,
-  logger: EngineLogger,
-  nodusLanguage?: string,
-  messageTemplate?: string,
-) => Planner;
-type tAutomationDetermineConstructor = new (
-  model: ModelRunner,
-  logger: EngineLogger,
-  nodusLanguage?: string,
-) => Determine;
-type tAutomationResearchConstructor = new (
-  fileSystem: FileSystem,
-  fileIndex: iProjectFileIndex,
-  model: ModelRunner,
-  logger: EngineLogger,
-  nodusLanguage?: string,
-) => ResearchResolver;
+interface sAutomationRuntimePackage {
+  start: string;
+  groups: Readonly<Record<string, sCoreGroupConfig>>;
+  modules: Readonly<Record<string, tCoreModuleDefinition>>;
+}
 
-/** Composition root for Engine dependencies. */
+/** Composition root for application infrastructure plus the configured Core runtime. */
 export class Bootstrap {
+  public static async create(
+    configuration: AppConfiguration,
+    overrides: BootstrapOverrides = {},
+  ): Promise<iAppRuntime> {
+    const logger = overrides.logger ?? new ConsoleLogger(configuration.language?.response);
+    const adapter = overrides.model ?? new OpenAICompatibleModelAdapter(
+      configuration.model.endpoint,
+      configuration.model.apiKey,
+      configuration.model.requestTimeoutMs,
+    );
+    const model = new ModelRunner(adapter, configuration.model);
+    const target = overrides.target ?? await this.createTarget(configuration.target, logger);
+
+    const automationRoot = configuration.automation?.root ?? 'automation';
+    const automation = await AutomationLoader.load(resolve(automationRoot));
+    const runtime = resolveAutomationRuntime(automation);
+    const start = runtime.modules[runtime.start];
+    if (!start) throw new Error(`Automation start module '${runtime.start}' is not registered.`);
+
+    const engine = new Engine({
+      start,
+      groups: runtime.groups,
+      modules: runtime.modules,
+    });
+
+    return { engine, target, logger, model };
+  }
+
   public static async createTarget(configuration: sTargetConfig, logger: EngineLogger): Promise<iTargetRuntime> {
     const scanner = new ProjectFileIndex_Scanner();
-    const indexStore = new ProjectFileIndex_Store(configuration.root, configuration.id, logger, configuration.indexCachePath);
+    const indexStore = new ProjectFileIndex_Store(
+      configuration.root,
+      configuration.id,
+      logger,
+      configuration.indexCachePath,
+    );
     const loadedState = await indexStore.load();
     const initialState: sProjectFileIndexState = loadedState ?? {
       version: 1,
@@ -97,7 +99,13 @@ export class Bootstrap {
     };
     const fileIndex = new ProjectFileIndex(initialState);
     const pathResolver = new PathResolver(configuration.root);
-    const fileSystem = new FileSystem(configuration.root, pathResolver, () => fileIndex.snapshot(), logger, configuration.exclude);
+    const fileSystem = new FileSystem(
+      configuration.root,
+      pathResolver,
+      () => fileIndex.snapshot(),
+      logger,
+      configuration.exclude,
+    );
 
     const scan = async (): Promise<sProjectFileIndexState> => {
       const state = await scanner.scan(configuration);
@@ -118,141 +126,26 @@ export class Bootstrap {
       clearIndex: () => indexStore.clear(),
     };
   }
+}
 
-  public static async createEngine(
-    configuration: AppConfiguration,
-    overrides: BootstrapOverrides = {},
-  ): Promise<Engine> {
-    const settings = overrides.settings ?? defaultNodusSettings;
-    const workerAdaptation = settings.process.worker;
-    const language = resolveLanguageConfiguration(configuration);
-    const logger = overrides.logger ?? new ConsoleLogger(language.response);
-    const adapter = overrides.model ?? new OpenAICompatibleModelAdapter(
-      configuration.model.endpoint,
-      configuration.model.apiKey,
-      configuration.model.requestTimeoutMs,
-    );
-    const model = new ModelRunner(adapter, configuration.model);
+function resolveAutomationRuntime(value: Readonly<Record<string, unknown>>): sAutomationRuntimePackage {
+  const start = value.start;
+  const groups = value.groups;
+  const modules = value.modules;
 
-    const target = overrides.target ?? await this.createTarget(configuration.target, logger);
-    const automationRoot = configuration.automation?.root ?? 'automation';
-    const automation = await AutomationLoader.load(resolve(automationRoot, 'Deprecated'));
-    const WorkerCode = resolveAutomationWorker(automation.WorkerCode, 'WorkerCode');
-    const WorkerDocumentation = resolveAutomationWorker(automation.WorkerDocumentation, 'WorkerDocumentation');
-    const ChangeCodeAction = resolveAutomationConstructor(automation.ChangeCodeAction, 'Action', 'ChangeCodeAction');
-    const ReadFileAction = resolveAutomationConstructor(automation.ReadFileAction, 'Action', 'ReadFileAction');
-    const FindFileAction = resolveAutomationConstructor(automation.FindFileAction, 'Action', 'FindFileAction');
-    const ResearchAction = resolveAutomationConstructor(automation.ResearchAction, 'Action', 'ResearchAction');
-    const PlannerModel = resolveAutomationConstructor(automation.PlannerModel, 'Planner', 'PlannerModel') as tAutomationPlannerConstructor;
-    const DetermineModel = resolveAutomationConstructor(automation.DetermineModel, 'Determine', 'DetermineModel') as tAutomationDetermineConstructor;
-    const ResearchBoundedModelResolver = resolveAutomationConstructor(
-      automation.ResearchBoundedModelResolver,
-      'Research',
-      'ResearchBoundedModelResolver',
-    ) as tAutomationResearchConstructor;
-
-    const researchStore = new ResearchStore(target.fileSystem, logger, configuration.target.researchCachePath);
-    await researchStore.open();
-    const research = new Research(
-      researchStore,
-      new ResearchBoundedModelResolver(target.fileSystem, target.fileIndex, model, logger, language.nodus),
-      target.fileSystem,
-      logger,
-    );
-
-    const readFileAction = new ReadFileAction();
-    const findFileAction = new FindFileAction(target.fileIndex);
-    const researchAction = new ResearchAction(research, workerAdaptation.research.guidance);
-
-    const codeWorker = new WorkerCode(
-      new ChangeCodeAction(target.fileSystem, target.fileIndex, model, logger, {
-        ...workerAdaptation.profiles.code,
-        adaptationGuidance: workerAdaptation.change.guidance,
-        adaptationTemplate: workerAdaptation.change.template,
-        language,
-      }),
-      readFileAction,
-      findFileAction,
-      researchAction,
-      logger,
-      configuration.runtime?.maxWorkerAttempts,
-      configuration.runtime?.maxResearchRequests,
-    );
-
-    const documentationWorker = new WorkerDocumentation(
-      new ChangeCodeAction(target.fileSystem, target.fileIndex, model, logger, {
-        ...workerAdaptation.profiles.documentation,
-        adaptationGuidance: workerAdaptation.change.guidance,
-        adaptationTemplate: workerAdaptation.change.template,
-        language,
-      }),
-      readFileAction,
-      findFileAction,
-      researchAction,
-      logger,
-      configuration.runtime?.maxWorkerAttempts,
-      configuration.runtime?.maxResearchRequests,
-    );
-
-    const workers: Worker[] = [codeWorker, documentationWorker];
-    if (isAgentModelAdapter(adapter)) {
-      const WorkerAgent = resolveAutomationWorker(automation.WorkerAgent, 'WorkerAgent');
-      const tools = [new FileSystemTool(), new SearchTool(), new TerminalTool(), new GitTool()];
-      workers.push(new WorkerAgent(new WorkerAgentRunner(
-        new AgentRunner(adapter, configuration.model),
-        tools,
-        { projectRoot: target.root, exclude: configuration.target.exclude ?? [] },
-        logger,
-        configuration.runtime?.maxAgentRounds,
-        language,
-      )));
-    }
-
-    const editValidator = new EditValidator([new JsonEditValidationCheck()]);
-    const createEdit = () => new ProjectEditor(target.fileSystem, logger, [
-      new RangeReplaceEditStrategy(target.fileSystem, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-      new ReplaceEditStrategy(target.fileSystem, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-      new DiffEditStrategy(model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-      new FullFileEditStrategy(target.fileSystem, model, logger, language, 'Prefer existing project APIs and conventions. Keep source edits minimal.'),
-    ], editValidator);
-
-    return new Engine(
-      target.id,
-      new PlannerModel(model, logger, language.nodus, settings.process.planner.template),
-      workers,
-      new DetermineModel(model, logger, language.nodus),
-      createEdit,
-      overrides.engineTest ?? createEngineTest(configuration, target.root),
-      logger,
-    );
+  if (typeof start !== 'string' || !start.trim()) {
+    throw new Error('automation/index.js must export a non-empty start module id.');
   }
-}
+  if (!isRecord(groups)) throw new Error('automation/index.js must export groups.');
+  if (!isRecord(modules)) throw new Error('automation/index.js must export modules.');
 
-function resolveAutomationWorker(value: unknown, id: string): tAutomationWorkerConstructor {
-  if (typeof value !== 'function') {
-    throw new Error(`Automation Worker '${id}' must export a class.`);
-  }
-  return value as tAutomationWorkerConstructor;
-}
-
-function resolveAutomationConstructor(value: unknown, type: string, id: string): tAutomationConstructor {
-  if (typeof value !== 'function') {
-    throw new Error(`Automation ${type} '${id}' must export a class.`);
-  }
-  return value as tAutomationConstructor;
-}
-
-function createEngineTest(configuration: AppConfiguration, root: string): EngineTest {
-  const tests: CommandEngineTest[] = [];
-  if (configuration.engineTest?.typecheck) tests.push(new TypecheckEngineTest(root, configuration.engineTest.typecheck));
-  if (configuration.engineTest?.unit) tests.push(new UnitEngineTest(root, configuration.engineTest.unit));
-  return tests.length === 0 ? new ResolveEngineTest() : new CompositeEngineTest(tests);
-}
-
-function resolveLanguageConfiguration(configuration: AppConfiguration): LanguageConfiguration {
   return {
-    project: configuration.language?.project ?? 'en',
-    nodus: configuration.language?.nodus ?? 'en',
-    response: configuration.language?.response ?? 'en',
+    start,
+    groups: groups as Readonly<Record<string, sCoreGroupConfig>>,
+    modules: modules as Readonly<Record<string, tCoreModuleDefinition>>,
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
