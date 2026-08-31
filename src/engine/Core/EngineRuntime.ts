@@ -37,8 +37,7 @@ export class EngineRuntime {
 
   public async run(schema: EngineSchema, dependencies: tEngineRunDependencies = {}): Promise<sEngineRunResult> {
     this.trace = [];
-    const root = schema.value;
-    const output = await this.executeSequence(schema, root, root.task, [], undefined, dependencies);
+    const output = await this.executeSequence(schema, schema.value, undefined, [], undefined, dependencies);
     return {
       status: output.status,
       output,
@@ -92,19 +91,19 @@ export class EngineRuntime {
 
   private async executeSequence(
     schema: EngineSchema,
-    sequence: sEngineSchemaStep,
+    sequence: sEngineSchemaStep[],
     parentInput: unknown,
     path: number[],
     authorityGroup: string | undefined,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const steps = this.requireSteps(sequence, path);
+    this.requireSteps(sequence, path);
     this.trace.push({ path: [...path], type: ENGINE_STEP.SEQUENCE, status: 'STARTED' });
 
     let index = 0;
-    while (index < steps.length) {
+    while (index < sequence.length) {
       const stepNumber = index + 1;
-      const step = steps[index];
+      const step = sequence[index];
       if (!step) throw new Error(`Missing step ${stepNumber}.`);
 
       schema.computeContext(sequence, index, parentInput);
@@ -116,10 +115,8 @@ export class EngineRuntime {
       if (tailChanged && authorityGroup) this.validateReturnedSchema(sequence, authorityGroup);
 
       if (output.status === 'FAILURE') {
-        const currentSteps = this.requireSteps(sequence, path);
-        if (!tailChanged || currentSteps.length <= stepNumber) {
+        if (!tailChanged || sequence.length <= stepNumber) {
           const failed: sEngineOutput = { status: 'FAILURE', reason: output.reason, value: output.value };
-          sequence.output = failed;
           this.trace.push({ path: [...path], type: ENGINE_STEP.SEQUENCE, status: 'FAILURE' });
           return failed;
         }
@@ -128,10 +125,8 @@ export class EngineRuntime {
       index += 1;
     }
 
-    const currentSteps = this.requireSteps(sequence, path);
-    const lastOutput = currentSteps.at(-1)?.output;
+    const lastOutput = sequence.at(-1)?.output;
     const completed: sEngineOutput = lastOutput ? { ...lastOutput } : { status: 'SUCCESS' };
-    sequence.output = completed;
     this.trace.push({ path: [...path], type: ENGINE_STEP.SEQUENCE, status: completed.status });
     return completed;
   }
@@ -147,7 +142,9 @@ export class EngineRuntime {
 
     if (step.module) return this.executeModule(step, path, dependencies);
 
-    return this.executeSequence(schema, step, step.task, path, authorityGroup, dependencies);
+    const steps = step.steps;
+    if (steps === null) throw new Error(`Engine schema step at ${path.join('.')} has no step chain.`);
+    return this.executeSequence(schema, steps, step.task, path, authorityGroup, dependencies);
   }
 
   private async executeModule(
@@ -169,14 +166,7 @@ export class EngineRuntime {
       const sequence = result.value;
       const group = registered.module.getGroup();
       this.validateReturnedSchema(sequence, group);
-      output = await this.executeSequence(
-        result,
-        sequence,
-        sequence.task,
-        path,
-        group,
-        dependencies,
-      );
+      output = await this.executeSequence(result, sequence, undefined, path, group, dependencies);
     } else {
       output = result;
     }
@@ -185,11 +175,8 @@ export class EngineRuntime {
     return output;
   }
 
-  private validateReturnedSchema(sequence: sEngineSchemaStep, groupName: string): void {
-    this.validateStepShape(sequence, []);
-    if (sequence.module || sequence.steps === null) {
-      throw new Error(`Engine group '${groupName}' must return a schema with a step chain.`);
-    }
+  private validateReturnedSchema(sequence: sEngineSchemaStep[], groupName: string): void {
+    this.requireSteps(sequence, []);
 
     const group = this.groups[groupName];
     if (!group) throw new Error(`Unknown Engine group: ${groupName}`);
@@ -200,17 +187,18 @@ export class EngineRuntime {
   }
 
   private validateSequenceModules(
-    sequence: sEngineSchemaStep,
+    sequence: sEngineSchemaStep[],
     ownerGroup: string,
     allowed: ReadonlySet<string>,
   ): void {
-    const steps = this.requireSteps(sequence, []);
+    this.requireSteps(sequence, []);
 
-    for (const step of steps) {
+    for (const step of sequence) {
       this.validateStepShape(step, []);
 
       if (!step.module) {
-        this.validateSequenceModules(step, ownerGroup, allowed);
+        if (step.steps === null) throw new Error(`Schema from group '${ownerGroup}' contains an invalid empty chain.`);
+        this.validateSequenceModules(step.steps, ownerGroup, allowed);
         continue;
       }
 
@@ -224,25 +212,23 @@ export class EngineRuntime {
   }
 
   private applyTransition(
-    sequence: sEngineSchemaStep,
+    sequence: sEngineSchemaStep[],
     stepNumber: number,
     transition: NonNullable<sEngineSchemaStep['transition']>,
   ): boolean {
-    const steps = this.requireSteps(sequence, []);
-    const completedPrefix = steps.slice(0, stepNumber);
-    const previousTail = steps.slice(stepNumber);
+    const completedPrefix = sequence.slice(0, stepNumber);
+    const previousTail = sequence.slice(stepNumber);
     transition(sequence, stepNumber);
 
-    const nextSteps = this.requireSteps(sequence, []);
-    if (nextSteps.length < stepNumber) throw new Error(`Transition at step ${stepNumber} removed completed steps.`);
+    if (sequence.length < stepNumber) throw new Error(`Transition at step ${stepNumber} removed completed steps.`);
 
     for (let index = 0; index < completedPrefix.length; index += 1) {
-      if (nextSteps[index] !== completedPrefix[index]) {
+      if (sequence[index] !== completedPrefix[index]) {
         throw new Error(`Transition at step ${stepNumber} changed completed step ${index + 1}.`);
       }
     }
 
-    const nextTail = nextSteps.slice(stepNumber);
+    const nextTail = sequence.slice(stepNumber);
     if (nextTail.length !== previousTail.length) return true;
     return nextTail.some((step, index) => step !== previousTail[index]);
   }
@@ -267,15 +253,10 @@ export class EngineRuntime {
     }
   }
 
-  private requireSteps(step: sEngineSchemaStep, path: readonly number[]): sEngineSchemaStep[] {
-    if (step.steps === null) {
+  private requireSteps(sequence: sEngineSchemaStep[], path: readonly number[]): void {
+    if (sequence.length === 0) {
       const location = path.length > 0 ? path.join('.') : 'root';
-      throw new Error(`Engine schema step at ${location} has no step chain.`);
+      throw new Error(`Engine schema at ${location} has an empty step chain.`);
     }
-    if (step.steps.length === 0) {
-      const location = path.length > 0 ? path.join('.') : 'root';
-      throw new Error(`Engine schema step at ${location} has an empty step chain. Use null for a terminal module step.`);
-    }
-    return step.steps;
   }
 }
