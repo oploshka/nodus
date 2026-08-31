@@ -1,5 +1,5 @@
 import { TASK_TYPE } from '#automation/Deprecated/Qualifier/QualifierTask/QualifierTask.js';
-import PlannerTaskResponse from './PlannerTaskResponse.js';
+import PlannerTaskResponse from './PlannerTaskResponse.ts';
 
 function replaceTail(plan, step, ...nextSteps) {
   plan.steps.splice(step, plan.steps.length - step, ...nextSteps);
