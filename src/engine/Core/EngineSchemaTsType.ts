@@ -36,6 +36,7 @@ export type tEngineEmit = (event: sEngineEvent) => void;
 export interface sEngineSchemaRuntimeStep {
   context?: sEngineComputedContext;
   events: sEngineEvent[];
+  schema?: sEngineSchemaStep[];
 }
 
 /**
@@ -45,8 +46,8 @@ export interface sEngineSchemaRuntimeStep {
  * `task` describes the primary semantic task for this node.
  * `steps` describes a nested local chain; `null` explicitly means that
  * this node has no child chain.
- * `runtime` contains removable execution-only state such as resolved context
- * and events. Step output remains part of the working schema itself.
+ * `runtime` contains removable execution-only state such as resolved context,
+ * emitted schema and events. Step output remains part of the working schema itself.
  */
 export interface sEngineSchemaStep {
   type: ENGINE_STEP.SEQUENCE;
