@@ -72,6 +72,19 @@ automation/
   Deprecated/
 ```
 
+`automation/index.js` is a flat list of plugins available to the configured product:
+
+```js
+export default {
+  PlannerTask,
+  PlannerModel,
+  WorkerCode,
+  ActionCodeChange,
+};
+```
+
+Plugin availability is separate from Core group policy. `groups` defines what each semantic type may emit or call; the plugin registry only defines which implementations the product provides. `EngineOld` loads the legacy flat registry from `automation/Deprecated/index.js`.
+
 Legacy Determine, Qualifier, Research strategy, Agent Worker and Documentation Worker implementations are preserved under `automation/Deprecated/`. They remain available to `EngineOld`, but they are not part of the active automation surface.
 
 A module may inherit convenience behavior from Nodus-owned Step classes, but Core accepts it structurally. User modules do not need to inherit a Nodus interface or base class if their executable shape matches the Core contract.
