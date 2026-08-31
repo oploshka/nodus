@@ -1,6 +1,6 @@
-import { WorkerPresentation } from '../../../src/engine/Common/Presentation/WorkerPresentation.ts';
+import { WorkerPresentation } from '../../../../src/engine/Common/Presentation/WorkerPresentation.ts';
 
-/** Versioned general-purpose Agent Worker backed by the Core WorkerAgentRunner mechanism. */
+/** Legacy general-purpose Agent Worker kept for EngineOld composition. */
 export default class WorkerAgent {
   presentation = new WorkerPresentation({ name: { en: 'General agent', ru: 'Универсальный агент' } });
   name = this.presentation.name();

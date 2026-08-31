@@ -35,6 +35,9 @@ export class CoreRuntime {
         throw new Error(`Engine root module is registered more than once: ${name}`);
       }
       const registered = this.registerModule(name, definition);
+      if (registered.module.id && registered.module.id !== name) {
+        throw new Error(`Engine root module '${name}' must match module id '${registered.module.id}'.`);
+      }
       this.rootDefinitions.set(definition, registered);
     }
 
