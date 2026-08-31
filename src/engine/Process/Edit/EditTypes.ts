@@ -16,7 +16,7 @@ export interface ProjectEditRequest {
 }
 
 export interface EditPreparationContext {
-  task: unknown;
+  task: { description: string };
   step: unknown;
   edit: ProjectEditIntent;
   source: string;
