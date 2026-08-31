@@ -1,10 +1,9 @@
-import type { EditStrategy} from "@engine/Process/Edit/EditStrategy.js";
-import type { EditPreparationContext, EditPrepareResult} from "@engine/Process/Edit/EditTypes.js";
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
+import type { EditPreparationContext, EditPrepareResult } from '@engine/Process/Edit/EditTypes.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
-import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
+import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
@@ -18,14 +17,13 @@ export class FullFileEditStrategy implements EditStrategy {
   public constructor(
     private readonly fileSystem: FileSystem,
     private readonly model: ModelRunner,
-    private readonly logger: EngineLogger,
     private readonly language: LanguageConfiguration,
     private readonly guidance: string,
   ) {}
 
   public async prepare(context: EditPreparationContext): Promise<EditPrepareResult> {
     const path = context.edit.path;
-    const response = await callModel<EditFileResponse>(this.model, this.editModelLogger(), {
+    const response = await callModel<EditFileResponse>(this.model, context.emit, {
       request: {
         message: 'Apply this concrete project edit by returning the complete resulting file.',
         data: { task: context.task.description, step: context.step, instruction: context.edit.instruction, authoritativeSource: { path, content: context.source } },
@@ -45,14 +43,6 @@ export class FullFileEditStrategy implements EditStrategy {
     const responsePath = await this.fileSystem.resolvePath(response.path);
     if (responsePath !== path) return { status: 'not-completed', reason: `Edit path mismatch: expected ${path}, received ${responsePath}` };
     return { status: 'completed', path, content: preserveEol(context.source, response.content), operations: 1 };
-  }
-
-  private editModelLogger(): EngineLogger {
-    return {
-      info: (event, data) => this.logger.info(`engine.edit.model.${event}`, data),
-      warn: (event, data) => this.logger.warn(`engine.edit.model.${event}`, data),
-      error: (event, data) => this.logger.error(`engine.edit.model.${event}`, data),
-    };
   }
 }
 
