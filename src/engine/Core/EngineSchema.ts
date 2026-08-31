@@ -5,15 +5,14 @@ import type {
 
 /** Runtime wrapper for an Engine execution schema. */
 export class EngineSchema {
-  public constructor(public readonly value: sEngineSchemaStep) {}
+  public constructor(public readonly value: sEngineSchemaStep[]) {}
 
   public computeContext(
-    sequence: sEngineSchemaStep,
+    sequence: sEngineSchemaStep[],
     index: number,
     parentInput: unknown,
   ): sEngineComputedContext {
-    const steps = this.requireSteps(sequence);
-    const step = steps[index];
+    const step = sequence[index];
     if (!step) throw new Error(`Missing step ${index + 1}.`);
 
     const config = step.input?.context;
@@ -24,12 +23,12 @@ export class EngineSchema {
         throw new Error(`Step ${index + 1} cannot read unavailable local step ${stepNumber}.`);
       }
 
-      const target = steps[stepNumber - 1];
+      const target = sequence[stepNumber - 1];
       if (!target?.output) throw new Error(`Local step ${stepNumber} has no output.`);
       selectedSteps.push(target);
     }
 
-    const previous = config?.previous && index > 0 ? steps[index - 1] : undefined;
+    const previous = config?.previous && index > 0 ? sequence[index - 1] : undefined;
     if (previous && !previous.output) {
       throw new Error(`Previous local step ${index} has no output.`);
     }
@@ -42,10 +41,5 @@ export class EngineSchema {
 
     step.computedContext = context;
     return context;
-  }
-
-  private requireSteps(sequence: sEngineSchemaStep): sEngineSchemaStep[] {
-    if (sequence.steps === null) throw new Error('EngineSchema expected a step chain.');
-    return sequence.steps;
   }
 }
