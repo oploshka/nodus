@@ -1,8 +1,5 @@
-import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
-import type { iProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
-import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
-import type { sWorkerSearchContext } from '@engine/Worker/WorkerContext.js';
-import type { sCoreModuleRequest, tCoreModuleResult } from '@engine/Core/CoreTsType.js';
+import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
+import type { sCoreModuleRequest, tCoreModuleResult, tCoreRunDependencies } from '@engine/Core/CoreTsType.js';
 import { actionCoreResult } from './ActionCoreResult.js';
 
 export interface sFindFileActionInput {
@@ -11,24 +8,30 @@ export interface sFindFileActionInput {
 }
 
 /** Cheap bounded lookup that locates project file paths without reading file content. */
-export class FindFileAction implements WorkerAction<sFindFileActionInput, sWorkerSearchContext> {
+export class FindFileAction {
   public readonly group = 'action';
   public readonly id = 'find-file';
-  public readonly presentation = new ActionPresentation({ name: { en: 'Find file', ru: 'Поиск файла' } });
-  public readonly name = this.presentation.name();
-  public readonly description = 'Locate likely project file paths without reading file contents or model analysis.';
 
-  public constructor(private readonly index: iProjectFileIndex, private readonly maxResults = 12) {}
-
-  public async execute(request: sCoreModuleRequest): Promise<tCoreModuleResult> {
-    return actionCoreResult(await this.run(request.task as sFindFileActionInput));
+  public async execute(
+    request: sCoreModuleRequest,
+    dependencies: tCoreRunDependencies,
+  ): Promise<tCoreModuleResult> {
+    return actionCoreResult(await this.run(request.task as sFindFileActionInput, dependencies));
   }
 
-  public async run(input: sFindFileActionInput) {
+  public async run(input: sFindFileActionInput, dependencies: tCoreRunDependencies) {
     const query = input.query.trim();
     if (!query) return { status: 'failed' as const, reason: 'File lookup query is empty.', canContinue: false as const };
-    const limit = Math.max(1, Math.min(input.limit ?? 8, this.maxResults));
-    const paths = this.index.findFiles(query, limit).map((file) => file.path);
+
+    const index = projectFileIndex(dependencies);
+    const limit = Math.max(1, Math.min(input.limit ?? 8, 12));
+    const paths = index.findFiles(query, limit).map((file) => file.path);
     return { status: 'completed' as const, data: { kind: 'search' as const, query, paths } };
   }
+}
+
+function projectFileIndex(dependencies: tCoreRunDependencies): iProjectFileIndex {
+  const target = dependencies.target as { fileIndex?: iProjectFileIndex } | undefined;
+  if (!target?.fileIndex) throw new Error('ActionFileFind requires runtime target.fileIndex.');
+  return target.fileIndex;
 }

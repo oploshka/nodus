@@ -43,6 +43,9 @@ export class AutomationLoader {
 
     if (typeof value !== 'object' || value === null || value instanceof URL) return value;
 
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return value;
+
     const entries = await Promise.all(Object.entries(value).map(async ([entryKey, entryValue]) => [
       entryKey,
       await this.hydrateValue(entryValue, entryKey),

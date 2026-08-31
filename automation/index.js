@@ -3,8 +3,6 @@ import { ChangeCodeAction as ActionCodeChange } from '#automation/Step/Action/Ac
 import { FindFileAction as ActionFileFind } from '#automation/Step/Action/ActionFindFile.ts';
 import { ReadFileAction as ActionFileRead } from '#automation/Step/Action/ActionReadFile.ts';
 import { ResearchAction as ActionResearch } from '#automation/Step/Action/ActionResearch.ts';
-import { PlannerModel } from '#automation/Step/Planner/PlannerModel.ts';
-import PlannerTask from '#automation/Step/Planner/PlannerTask/PlannerTask.js';
 import WorkerCode from '#automation/Step/Worker/WorkerCode/WorkerCode.ts';
 
 export default {
@@ -32,13 +30,11 @@ export default {
   },
 
   modules: {
-    PlannerTask,
-    PlannerModel,
-    WorkerCode,
-    ActionCodeChange,
-    ActionFileFind,
-    ActionFileRead,
-    ActionResearch,
-    ActionEditApply,
+    WorkerCode: new WorkerCode(),
+    ActionCodeChange: new ActionCodeChange(),
+    ActionFileFind: new ActionFileFind(),
+    ActionFileRead: new ActionFileRead(),
+    ActionResearch: new ActionResearch(),
+    ActionEditApply: new ActionEditApply(),
   },
 };

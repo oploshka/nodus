@@ -6,38 +6,27 @@ import {
 } from '@engine/Core/CoreSchema.js';
 import { WorkerSchema } from '@engine/Step/Worker/Contract/WorkerSchema.js';
 import type { sWorkerRequest, sWorkerSchema } from '@engine/Step/Worker/Contract/WorkerTsType.js';
-import type { ChangeCodeAction as ActionCodeChange } from '#automation/Step/Action/ActionChangeCode.ts';
-import type { FindFileAction as ActionFileFind } from '#automation/Step/Action/ActionFindFile.ts';
-import type { ReadFileAction as ActionFileRead } from '#automation/Step/Action/ActionReadFile.ts';
-import type { ResearchAction as ActionResearch } from '#automation/Step/Action/ActionResearch.ts';
-import type { ApplyEditAction as ActionEditApply } from '#automation/Step/Action/ActionApplyEdit.ts';
 import {
   readActionCoreResult,
   type sActionCoreRequest,
 } from '#automation/Step/Action/ActionCoreResult.ts';
 import { previousStepNumbers, previousSteps } from './WorkerCodeSequence.js';
 
+const ACTION_CODE_CHANGE = 'ActionCodeChange';
+const ACTION_FILE_FIND = 'ActionFileFind';
+const ACTION_FILE_READ = 'ActionFileRead';
+const ACTION_RESEARCH = 'ActionResearch';
+const ACTION_EDIT_APPLY = 'ActionEditApply';
+
 const MAX_ATTEMPTS = 5;
 const MAX_FIND_FILE_REQUESTS = 4;
 const MAX_READ_FILE_REQUESTS = 6;
 const MAX_RESEARCH_REQUESTS = 2;
 
-/** WorkerCode owns concrete dependencies; Core executes the returned schema. */
+/** WorkerCode owns orchestration only; runtime dependencies are supplied when modules execute. */
 export default class WorkerCode extends WorkerSchema {
-  public constructor(
-    actionCodeChange: ActionCodeChange,
-    actionFileFind: ActionFileFind,
-    actionFileRead: ActionFileRead,
-    actionResearch: ActionResearch,
-    actionEditApply: ActionEditApply,
-  ) {
-    super('WorkerCode', {
-      ActionCodeChange: actionCodeChange,
-      ActionFileFind: actionFileFind,
-      ActionFileRead: actionFileRead,
-      ActionResearch: actionResearch,
-      ActionEditApply: actionEditApply,
-    });
+  public constructor() {
+    super('WorkerCode');
   }
 
   public getSchema(request: sWorkerRequest): sWorkerSchema {
@@ -50,7 +39,7 @@ export default class WorkerCode extends WorkerSchema {
 
   private changeStep(task: unknown, contextSteps: readonly number[]): sCoreModuleStep {
     return {
-      module: this.module('ActionCodeChange'),
+      module: ACTION_CODE_CHANGE,
       task,
       input: {
         context: {
@@ -74,7 +63,7 @@ export default class WorkerCode extends WorkerSchema {
     if (result.status === 'completed') {
       if (hasEdit(result.data)) {
         this.replaceTail(sequence, stepNumber, [{
-          module: this.module('ActionEditApply'),
+          module: ACTION_EDIT_APPLY,
           task,
           input: { context: { previous: true } },
         }]);
@@ -83,7 +72,7 @@ export default class WorkerCode extends WorkerSchema {
     }
 
     if (result.status === 'failed' || !result.canContinue) return;
-    if (this.countThrough(sequence, stepNumber, this.module('ActionCodeChange')) >= MAX_ATTEMPTS) return;
+    if (this.countThrough(sequence, stepNumber, ACTION_CODE_CHANGE) >= MAX_ATTEMPTS) return;
 
     if (result.retry) {
       this.replaceTail(sequence, stepNumber, [
@@ -121,9 +110,7 @@ export default class WorkerCode extends WorkerSchema {
       if (!route) continue;
 
       const candidate = { module: route.module, input: request.input };
-      if (this.wasRequested(sequence, stepNumber, candidate) || planned.some((item) => sameRequest(item, candidate))) {
-        continue;
-      }
+      if (this.wasRequested(sequence, stepNumber, candidate) || planned.some((item) => sameRequest(item, candidate))) continue;
 
       const existing = this.countThrough(sequence, stepNumber, route.module);
       const pending = planned.filter((item) => item.module === route.module).length;
@@ -136,30 +123,15 @@ export default class WorkerCode extends WorkerSchema {
   }
 
   private route(actionId: string): { module: string; limit: number } | undefined {
-    if (actionId === 'find-file') {
-      return { module: this.module('ActionFileFind'), limit: MAX_FIND_FILE_REQUESTS };
-    }
-    if (actionId === 'read-file') {
-      return { module: this.module('ActionFileRead'), limit: MAX_READ_FILE_REQUESTS };
-    }
-    if (actionId === 'research') {
-      return { module: this.module('ActionResearch'), limit: MAX_RESEARCH_REQUESTS };
-    }
+    if (actionId === 'find-file') return { module: ACTION_FILE_FIND, limit: MAX_FIND_FILE_REQUESTS };
+    if (actionId === 'read-file') return { module: ACTION_FILE_READ, limit: MAX_READ_FILE_REQUESTS };
+    if (actionId === 'research') return { module: ACTION_RESEARCH, limit: MAX_RESEARCH_REQUESTS };
     return undefined;
   }
 
   private contextSteps(sequence: sCoreSequence, stepNumber: number): number[] {
-    const contextModules = new Set([
-      this.module('ActionFileFind'),
-      this.module('ActionFileRead'),
-      this.module('ActionResearch'),
-    ]);
-
-    return previousStepNumbers(
-      sequence,
-      stepNumber,
-      (step) => 'module' in step && contextModules.has(step.module),
-    );
+    const contextModules = new Set([ACTION_FILE_FIND, ACTION_FILE_READ, ACTION_RESEARCH]);
+    return previousStepNumbers(sequence, stepNumber, (step) => 'module' in step && contextModules.has(step.module));
   }
 
   private countThrough(sequence: sCoreSequence, stepNumber: number, module: string): number {
@@ -191,10 +163,7 @@ function hasEdit(data: unknown): boolean {
   return typeof data === 'object' && data !== null && 'edit' in data && Boolean((data as { edit?: unknown }).edit);
 }
 
-function sameRequest(
-  left: { module: string; input: unknown },
-  right: { module: string; input: unknown },
-): boolean {
+function sameRequest(left: { module: string; input: unknown }, right: { module: string; input: unknown }): boolean {
   return left.module === right.module && sameValue(left.input, right.input);
 }
 

@@ -1,70 +1,73 @@
-import type { PlanStep } from '@engine/Planner/Plan.js';
-import type { Task } from '@engine/Task/Task.js';
-import type { ProjectEditor } from '@engine/Edit/ProjectEditor.js';
-import type { sCoreModuleRequest, tCoreModuleResult } from '@engine/Core/CoreTsType.js';
+import type { sCoreModuleRequest, tCoreModuleResult, tCoreRunDependencies } from '@engine/Core/CoreTsType.js';
 import { actionCoreResult, readActionCoreResult } from './ActionCoreResult.js';
-import type { ChangeCodeActionData } from './ActionChangeCode.js';
 
-export interface sApplyEditActionData {
-  summary: string;
-  edit?: {
-    files: number;
-    operations: number;
-    strategy: string;
-    paths: string[];
-  };
+interface EditRuntime {
+  change(task: unknown, step: unknown, request: unknown): Promise<{
+    status: 'completed' | 'not-completed';
+    reason?: string;
+    files?: number;
+    operations?: number;
+    strategy?: string;
+    paths?: string[];
+  }>;
 }
 
-/** Applies the edit intent produced by ChangeCodeAction. Worker schema owns when this capability is called. */
+interface ChangeCodeActionData {
+  summary: string;
+  edit?: unknown;
+}
+
+/** Applies edit intent using the runtime edit capability supplied for this run. */
 export class ApplyEditAction {
   public readonly group = 'action';
 
-  public constructor(private readonly edit: ProjectEditor) {}
-
-  public async execute(request: sCoreModuleRequest): Promise<tCoreModuleResult> {
-    const assignment = request.task as { task?: Task; step?: PlanStep };
+  public async execute(
+    request: sCoreModuleRequest,
+    dependencies: tCoreRunDependencies,
+  ): Promise<tCoreModuleResult> {
+    const assignment = request.task as { task?: unknown; step?: unknown };
     if (!assignment?.task || !assignment?.step) {
-      return actionCoreResult<sApplyEditActionData, never>({
+      return actionCoreResult({
         status: 'failed',
-        reason: 'ApplyEditAction Core task must contain task and step.',
+        reason: 'ActionEditApply task must contain task and step.',
         canContinue: false,
       });
     }
 
     const change = readActionCoreResult<ChangeCodeActionData>(request.context.previous);
     if (!change || change.status !== 'completed') {
-      return actionCoreResult<sApplyEditActionData, never>({
+      return actionCoreResult({
         status: 'failed',
-        reason: 'ApplyEditAction requires the previous completed ChangeCodeAction output.',
+        reason: 'ActionEditApply requires the previous completed ActionCodeChange output.',
         canContinue: false,
       });
     }
 
     if (!change.data.edit) {
-      return actionCoreResult<sApplyEditActionData, never>({
-        status: 'completed',
-        data: { summary: change.data.summary },
-      });
+      return actionCoreResult({ status: 'completed', data: { summary: change.data.summary } });
     }
 
-    const result = await this.edit.change(assignment.task, assignment.step, change.data.edit);
+    const edit = dependencies.edit as EditRuntime | undefined;
+    if (!edit) throw new Error('ActionEditApply requires runtime edit dependency.');
+
+    const result = await edit.change(assignment.task, assignment.step, change.data.edit);
     if (result.status === 'not-completed') {
-      return actionCoreResult<sApplyEditActionData, never>({
+      return actionCoreResult({
         status: 'not-completed',
         reason: result.reason,
         canContinue: true,
       });
     }
 
-    return actionCoreResult<sApplyEditActionData, never>({
+    return actionCoreResult({
       status: 'completed',
       data: {
         summary: change.data.summary,
         edit: {
-          files: result.files,
-          operations: result.operations,
-          strategy: result.strategy,
-          paths: result.paths,
+          files: result.files ?? 0,
+          operations: result.operations ?? 0,
+          strategy: result.strategy ?? '',
+          paths: result.paths ?? [],
         },
       },
     });

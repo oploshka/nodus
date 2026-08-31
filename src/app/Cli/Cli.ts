@@ -2,9 +2,11 @@ import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import type { Engine } from '@engine/Engine.js';
+import type { tCoreRunDependencies } from '@engine/Core/CoreTsType.js';
 
 export interface CliRuntime {
   engine: Engine;
+  dependencies: tCoreRunDependencies;
   projectId: string;
   scanProject(): Promise<number>;
 }
@@ -31,7 +33,7 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
     }
 
     try {
-      const result = await runtime.engine.run(value);
+      const result = await runtime.engine.run(value, runtime.dependencies);
       if (result.status === 'FAILURE') {
         console.error(`\n✗ ${result.reason ?? 'Execution failed.'}`);
       }
