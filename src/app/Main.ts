@@ -1,19 +1,33 @@
 import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { Bootstrap } from '@app/Bootstrap.js';
+import { ActionUserInputCli } from '@app/Cli/ActionUserInputCli.js';
 import { runCli } from '@app/Cli/Cli.js';
-import { scanProject } from '@app/Cli/ScanProject.js';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import { CompositeLogger, ConsoleLogger, FileLogger } from '@app/Logging/Logger.js';
-import { DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH } from '@engine/Project/File/Index/ProjectFileIndex_Store.js';
-import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
+import { createModel } from '@app/Model/Model.js';
+import { clearProjectIndex, createProject } from '@app/Project/Project.js';
+import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
+import { CORE_STEP, type sCoreSequence } from '@engine/Core/CoreSchema.js';
+import type {
+  sCoreGroupConfig,
+  tCoreModuleDefinition,
+} from '@engine/Core/CoreTsType.js';
+import { Engine } from '@engine/Engine.js';
+import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 
 interface StartupOptions {
   configPath: string;
   clearCache: boolean;
   clearLogs: boolean;
-  scan: boolean;
 }
+
+interface sAutomationRuntimePackage {
+  start: string;
+  groups: Readonly<Record<string, sCoreGroupConfig>>;
+  modules: Readonly<Record<string, tCoreModuleDefinition>>;
+}
+
+const ACTION_USER_INPUT_CLI = 'ActionUserInputCli';
 
 async function main(args: string[]): Promise<void> {
   const options = parseStartupOptions(args);
@@ -32,44 +46,101 @@ async function main(args: string[]): Promise<void> {
     projectId: configuration.target.id,
     clearCache: options.clearCache,
     clearLogs: options.clearLogs,
-    scan: options.scan,
     logPath,
   });
 
-  if (options.clearCache) await clearTargetCache(configuration.target);
+  if (options.clearCache) await clearProjectIndex(configuration.target);
 
-  const runtime = await Bootstrap.create(configuration, { logger });
-  if (options.scan && configuration.target.scanMode !== 'on-open') await runtime.target.scan();
+  const model = createModel(configuration.model);
+  const target = await createProject(configuration.target, logger);
+  const language: LanguageConfiguration = {
+    project: configuration.language?.project ?? 'en',
+    nodus: configuration.language?.nodus ?? 'en',
+    response: configuration.language?.response ?? 'en',
+  };
+
+  const automationRoot = configuration.automation?.root ?? 'automation';
+  const automation = resolveAutomationRuntime(await AutomationLoader.load(resolve(automationRoot)));
+  if (automation.modules[ACTION_USER_INPUT_CLI]) {
+    throw new Error(`Automation module '${ACTION_USER_INPUT_CLI}' is reserved by the CLI application.`);
+  }
+  if (!automation.modules[automation.start]) {
+    throw new Error(`Automation start module '${automation.start}' is not registered.`);
+  }
+
+  const engine = new Engine({
+    groups: automation.groups,
+    modules: {
+      ...automation.modules,
+      [ACTION_USER_INPUT_CLI]: new ActionUserInputCli(),
+    },
+  });
+  const dependencies = { target, logger, model, language };
 
   await runCli({
-    engine: runtime.engine,
-    dependencies: runtime.dependencies,
-    projectId: runtime.target.id,
-    scanProject: () => scanProject(runtime.target.scan),
+    projectId: target.id,
+    onInput: async (value) => {
+      const result = await engine.run(createCliSequence(value, automation.start), dependencies);
+      if (result.status === 'FAILURE') {
+        throw new Error(result.reason ?? 'Execution failed.');
+      }
+    },
   });
 
   logger.info('app.exit');
+}
+
+function createCliSequence(input: string, start: string): sCoreSequence {
+  return {
+    type: CORE_STEP.SEQUENCE,
+    task: input,
+    steps: [
+      {
+        module: ACTION_USER_INPUT_CLI,
+        input: { context: { parent: true } },
+      },
+      {
+        module: start,
+        input: { context: { parent: true, previous: true } },
+      },
+    ],
+  };
+}
+
+function resolveAutomationRuntime(value: Readonly<Record<string, unknown>>): sAutomationRuntimePackage {
+  const start = value.start;
+  const groups = value.groups;
+  const modules = value.modules;
+
+  if (typeof start !== 'string' || !start.trim()) {
+    throw new Error('automation/index.js must export a non-empty start module id.');
+  }
+  if (!isRecord(groups)) throw new Error('automation/index.js must export groups.');
+  if (!isRecord(modules)) throw new Error('automation/index.js must export modules.');
+
+  return {
+    start,
+    groups: groups as Readonly<Record<string, sCoreGroupConfig>>,
+    modules: modules as Readonly<Record<string, tCoreModuleDefinition>>,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function parseStartupOptions(args: string[]): StartupOptions {
   let configPath = 'nodus.config.json';
   let clearCache = false;
   let clearLogs = false;
-  let scan = false;
 
   for (const arg of args) {
     if (arg === '--clear-cache') { clearCache = true; continue; }
     if (arg === '--clear-logs') { clearLogs = true; continue; }
-    if (arg === '--scan') { scan = true; continue; }
     if (!arg.startsWith('--')) configPath = arg;
   }
 
-  return { configPath, clearCache, clearLogs, scan };
-}
-
-async function clearTargetCache(configuration: sTargetConfig): Promise<void> {
-  const indexPath = configuration.indexCachePath ?? DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH;
-  await rm(resolve(configuration.root, indexPath), { force: true });
+  return { configPath, clearCache, clearLogs };
 }
 
 function fileTimestamp(): string {
