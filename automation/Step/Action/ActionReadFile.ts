@@ -1,7 +1,7 @@
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
-import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { actionCoreResult } from './ActionCoreResult.js';
 
 export interface sReadFileActionInput {
@@ -19,10 +19,11 @@ export class ReadFileAction extends EngineStep {
   }
 
   public async run(
-    request: sEngineStepRequest,
+    step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    return actionCoreResult(await this.perform(request.task as sReadFileActionInput, dependencies));
+    const input = (step.data ?? step.computedContext?.parent) as sReadFileActionInput;
+    return actionCoreResult(await this.perform(input, dependencies));
   }
 
   private async perform(input: sReadFileActionInput, dependencies: tEngineRunDependencies) {
