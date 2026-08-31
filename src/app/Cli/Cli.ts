@@ -2,9 +2,11 @@ import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 
+export const CLI_EXIT = Symbol('CLI_EXIT');
+
 export interface CliRuntime {
   projectId: string;
-  onInput(value: string): Promise<void>;
+  onRun(): Promise<boolean>;
 }
 
 export async function runCli(runtime: CliRuntime): Promise<void> {
@@ -12,28 +14,30 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
   console.log('Commands: /help /exit');
   console.log('Input: Enter = new line, Ctrl+Enter or Ctrl+D = submit, Ctrl+C = cancel; Ctrl+C on empty input = exit.');
 
+  while (await runtime.onRun()) {
+    // Each Engine run starts from the CLI input Step and waits for user input there.
+  }
+}
+
+export async function readCliInput(): Promise<string | typeof CLI_EXIT> {
   while (true) {
-    const value = await readCliInput();
-    if (value === undefined) break;
+    const value = await readInput();
+    if (value === undefined) return CLI_EXIT;
 
     const trimmed = value.trim();
     if (!trimmed) continue;
-    if (trimmed === '/exit') break;
+    if (trimmed === '/exit') return CLI_EXIT;
     if (trimmed === '/help') {
       console.log('/exit - exit\nAny other input starts a process.');
       console.log('Enter = new line; Ctrl+Enter or Ctrl+D = submit; Ctrl+C = cancel current input; Ctrl+C on empty input = exit.');
       continue;
     }
 
-    try {
-      await runtime.onInput(value);
-    } catch (error) {
-      console.error(`\n✗ Задача завершилась ошибкой: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    return value;
   }
 }
 
-async function readCliInput(): Promise<string | undefined> {
+async function readInput(): Promise<string | undefined> {
   if (!input.isTTY || typeof input.setRawMode !== 'function') {
     const readline = createInterface({ input, output });
     try {
