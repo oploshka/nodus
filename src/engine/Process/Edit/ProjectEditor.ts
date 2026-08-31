@@ -71,9 +71,13 @@ export class ProjectEditor {
   }
 
   public async change(task: unknown, step: unknown, request: ProjectEditRequest): Promise<ProjectEditResult> {
+    if (!task || typeof task !== 'object' || typeof (task as { description?: unknown }).description !== 'string') {
+      return { status: 'not-completed', reason: 'Edit task must contain description.' };
+    }
     if (request.edits.length === 0) return { status: 'completed', files: 0, operations: 0, strategy: request.strategy, paths: [] };
     if (!this.strategies.has(request.strategy)) return { status: 'not-completed', reason: `Unknown edit strategy: ${request.strategy}` };
 
+    const editTask = task as EditPreparationContext['task'];
     const draft = this.cloneFiles(this.files);
     const touched = new Set<string>();
     let operations = 0;
@@ -90,7 +94,7 @@ export class ProjectEditor {
       }
 
       this.logger.info('engine.edit.file.start', { strategy: request.strategy, path, presentation: this.presentation });
-      const context: EditPreparationContext = { task, step, edit: { ...edit, path }, source: file.current, settings: request.settings };
+      const context: EditPreparationContext = { task: editTask, step, edit: { ...edit, path }, source: file.current, settings: request.settings };
       const prepared = await this.prepareWithFallback(request.strategy, context);
       if (prepared.status === 'not-completed') {
         this.logger.warn('engine.edit.file.failed', { strategy: request.strategy, path, reason: prepared.reason, presentation: this.presentation });
