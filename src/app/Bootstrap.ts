@@ -6,6 +6,7 @@ import { Engine } from '@engine/Engine.js';
 import type {
   sCoreGroupConfig,
   tCoreModuleDefinition,
+  tCoreRunDependencies,
 } from '@engine/Core/CoreTsType.js';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
@@ -18,6 +19,7 @@ import { ProjectFileIndex_Scanner } from '@engine/Project/File/Index/ProjectFile
 import { ProjectFileIndex_Store } from '@engine/Project/File/Index/ProjectFileIndex_Store.js';
 import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
+import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
 import { OpenAICompatibleModelAdapter } from '@model/Adapter/OpenAICompatibleModelAdapter.js';
 import { ModelRunner } from '@model/Runner/ModelRunner.js';
@@ -32,11 +34,19 @@ export interface iTargetRuntime {
   clearIndex(): Promise<void>;
 }
 
+export interface iAppRunDependencies extends tCoreRunDependencies {
+  target: iTargetRuntime;
+  logger: EngineLogger;
+  model: ModelRunner;
+  language: LanguageConfiguration;
+}
+
 export interface iAppRuntime {
   engine: Engine;
   target: iTargetRuntime;
   logger: EngineLogger;
   model: ModelRunner;
+  dependencies: iAppRunDependencies;
 }
 
 export interface BootstrapOverrides {
@@ -65,6 +75,11 @@ export class Bootstrap {
     );
     const model = new ModelRunner(adapter, configuration.model);
     const target = overrides.target ?? await this.createTarget(configuration.target, logger);
+    const language: LanguageConfiguration = {
+      project: configuration.language?.project ?? 'en',
+      nodus: configuration.language?.nodus ?? 'en',
+      response: configuration.language?.response ?? 'en',
+    };
 
     const automationRoot = configuration.automation?.root ?? 'automation';
     const automation = await AutomationLoader.load(resolve(automationRoot));
@@ -78,7 +93,8 @@ export class Bootstrap {
       modules: runtime.modules,
     });
 
-    return { engine, target, logger, model };
+    const dependencies: iAppRunDependencies = { target, logger, model, language };
+    return { engine, target, logger, model, dependencies };
   }
 
   public static async createTarget(configuration: sTargetConfig, logger: EngineLogger): Promise<iTargetRuntime> {
