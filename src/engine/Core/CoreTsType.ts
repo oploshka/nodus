@@ -29,13 +29,14 @@ export type tCoreModuleResult =
       schema: sCoreSequence;
     };
 
-export interface iCoreModule {
-  readonly group: string;
-  execute(request: sCoreModuleRequest): Promise<tCoreModuleResult>;
-}
-
 export type tCoreModuleConstructor = new () => iCoreModule;
 export type tCoreModuleDefinition = iCoreModule | tCoreModuleConstructor;
+
+export interface iCoreModule {
+  readonly group: string;
+  readonly dependencies?: Readonly<Record<string, tCoreModuleDefinition>>;
+  execute(request: sCoreModuleRequest): Promise<tCoreModuleResult>;
+}
 
 export interface sCoreGroupSchemaConfig {
   readonly allowedGroups: readonly string[];
