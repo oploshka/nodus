@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { ActionUserInputCli } from '@app/Cli/ActionUserInputCli.js';
-import { runCli } from '@app/Cli/Cli.js';
+import { CLI_EXIT, runCli } from '@app/Cli/Cli.js';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import { CompositeLogger, ConsoleLogger, FileLogger } from '@app/Logging/Logger.js';
 import { createModel } from '@app/Model/Model.js';
@@ -27,6 +27,7 @@ interface sAutomationRuntimePackage {
 
 const ACTION_USER_INPUT_CLI = 'ActionUserInputCli';
 const PLANNER = 'Planner';
+const CLI_GROUP = 'cli';
 
 async function main(args: string[]): Promise<void> {
   const options = parseStartupOptions(args);
@@ -68,7 +69,14 @@ async function main(args: string[]): Promise<void> {
   }
 
   const engine = new Engine({
-    groups: automation.groups,
+    groups: {
+      ...automation.groups,
+      [CLI_GROUP]: {
+        schema: {
+          allowedGroups: ['planner'],
+        },
+      },
+    },
     modules: {
       ...automation.modules,
       [ACTION_USER_INPUT_CLI]: new ActionUserInputCli(),
@@ -78,31 +86,25 @@ async function main(args: string[]): Promise<void> {
 
   await runCli({
     projectId: target.id,
-    onInput: async (value) => {
-      const result = await engine.run(createCliSchema(value), dependencies);
+    onRun: async () => {
+      const result = await engine.run(createCliSchema(), dependencies);
       if (result.status === 'FAILURE') {
         throw new Error(result.reason ?? 'Execution failed.');
       }
+      if (result.output.value === CLI_EXIT) return false;
       if (result.output.value !== undefined) console.log(result.output.value);
+      return true;
     },
   });
 
   logger.info('app.exit');
 }
 
-function createCliSchema(input: string): EngineSchema {
+function createCliSchema(): EngineSchema {
   return new EngineSchema([
     {
       type: ENGINE_STEP.SEQUENCE,
       module: ACTION_USER_INPUT_CLI,
-      task: input,
-      steps: null,
-    },
-    {
-      type: ENGINE_STEP.SEQUENCE,
-      module: PLANNER,
-      task: input,
-      input: { context: { previous: true } },
       steps: null,
     },
   ]);
