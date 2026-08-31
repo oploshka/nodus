@@ -2,46 +2,38 @@ import {
   CORE_STEP,
   type sCoreModuleStep,
   type sCoreSequence,
+  type tCoreStep,
 } from '@engine/Core/CoreSchema.js';
+import type { tCoreModuleDefinition } from '@engine/Core/CoreTsType.js';
 import { WorkerSchema } from '@engine/Step/Worker/Contract/WorkerSchema.js';
 import type { sWorkerRequest, sWorkerSchema } from '@engine/Step/Worker/Contract/WorkerTsType.js';
+import type { ChangeCodeAction } from '../../Action/ActionChangeCode.js';
+import type { FindFileAction } from '../../Action/ActionFindFile.js';
+import type { ReadFileAction } from '../../Action/ActionReadFile.js';
+import type { ResearchAction } from '../../Action/ActionResearch.js';
+import type { ApplyEditAction } from '../../Action/ActionApplyEdit.js';
 import {
   readActionCoreResult,
   type sActionCoreRequest,
-  type tActionCoreResult,
 } from '../../Action/ActionCoreResult.js';
+import { previousStepNumbers, previousSteps } from './WorkerCodeSequence.js';
+
+export type sWorkerCodeDependencies = Readonly<{
+  ActionCodeChange: ChangeCodeAction;
+  ActionFileFind: FindFileAction;
+  ActionFileRead: ReadFileAction;
+  ActionResearch: ResearchAction;
+  ActionEditApply: ApplyEditAction;
+}> & Readonly<Record<string, tCoreModuleDefinition>>;
 
 export interface sWorkerCodeConfig {
-  modules?: Partial<{
-    change: string;
-    findFile: string;
-    readFile: string;
-    research: string;
-    applyEdit: string;
-  }>;
-  limits?: Partial<{
+  readonly dependencies: sWorkerCodeDependencies;
+  readonly limits?: Partial<{
     attempts: number;
     findFile: number;
     readFile: number;
     research: number;
   }>;
-}
-
-interface sWorkerCodeState {
-  attempts: number;
-  findFile: number;
-  readFile: number;
-  research: number;
-  contextSteps: number[];
-  seenRequests: Set<string>;
-}
-
-interface sWorkerCodeModules {
-  change: string;
-  findFile: string;
-  readFile: string;
-  research: string;
-  applyEdit: string;
 }
 
 interface sWorkerCodeLimits {
@@ -51,13 +43,13 @@ interface sWorkerCodeLimits {
   research: number;
 }
 
-const DEFAULT_MODULES: sWorkerCodeModules = {
-  change: 'ChangeCodeAction',
-  findFile: 'FindFileAction',
-  readFile: 'ReadFileAction',
-  research: 'ResearchAction',
-  applyEdit: 'ApplyEditAction',
-};
+const MODULE = {
+  change: 'WorkerCode::ActionCodeChange',
+  findFile: 'WorkerCode::ActionFileFind',
+  readFile: 'WorkerCode::ActionFileRead',
+  research: 'WorkerCode::ActionResearch',
+  applyEdit: 'WorkerCode::ActionEditApply',
+} as const;
 
 const DEFAULT_LIMITS: sWorkerCodeLimits = {
   attempts: 5,
@@ -66,61 +58,52 @@ const DEFAULT_LIMITS: sWorkerCodeLimits = {
   research: 2,
 };
 
-/**
- * Code Worker orchestration is schema, not a second runtime.
- * Core executes the attempts, retrieval/research calls, context projection and final edit application.
- */
+/** WorkerCode owns its concrete capabilities while Core executes the returned schema. */
 export default class WorkerCode extends WorkerSchema {
-  private readonly modules: sWorkerCodeModules;
+  public readonly dependencies: sWorkerCodeDependencies;
   private readonly limits: sWorkerCodeLimits;
 
-  public constructor(config: sWorkerCodeConfig = {}) {
+  public constructor(config: sWorkerCodeConfig) {
     super();
-    this.modules = { ...DEFAULT_MODULES, ...config.modules };
+    this.dependencies = config.dependencies;
     this.limits = { ...DEFAULT_LIMITS, ...config.limits };
   }
 
   public getSchema(request: sWorkerRequest): sWorkerSchema {
-    const state: sWorkerCodeState = {
-      attempts: 1,
-      findFile: 0,
-      readFile: 0,
-      research: 0,
-      contextSteps: [],
-      seenRequests: new Set<string>(),
-    };
-
     return {
       type: CORE_STEP.SEQUENCE,
       task: request.task,
-      steps: [this.changeStep(request.task, state)],
+      steps: [this.changeStep(request.task, [])],
     };
   }
 
-  private changeStep(task: unknown, state: sWorkerCodeState): sCoreModuleStep {
-    const contextSteps = [...state.contextSteps];
+  private changeStep(task: unknown, contextSteps: readonly number[]): sCoreModuleStep {
     return {
-      module: this.modules.change,
+      module: MODULE.change,
       task,
-      ...(contextSteps.length > 0 ? { input: { context: { steps: contextSteps } } } : {}),
-      transition: (sequence, stepNumber) => this.transitionChange(sequence, stepNumber, task, state),
+      input: {
+        context: {
+          parent: true,
+          ...(contextSteps.length > 0 ? { steps: contextSteps } : {}),
+        },
+      },
+      transition: (sequence, stepNumber) => this.transitionChange(sequence, stepNumber),
     };
   }
 
-  private transitionChange(
-    sequence: sCoreSequence,
-    stepNumber: number,
-    task: unknown,
-    state: sWorkerCodeState,
-  ): void {
+  private transitionChange(sequence: sCoreSequence, stepNumber: number): void {
     const step = sequence.steps[stepNumber - 1];
-    const result = readActionCoreResult(step?.output);
+    if (!step || !('module' in step)) return;
+
+    const result = readActionCoreResult(step.output);
     if (!result) return;
+
+    const task = step.task ?? sequence.task;
 
     if (result.status === 'completed') {
       if (hasEdit(result.data)) {
         this.replaceTail(sequence, stepNumber, [{
-          module: this.modules.applyEdit,
+          module: MODULE.applyEdit,
           task,
           input: { context: { previous: true } },
         }]);
@@ -129,73 +112,80 @@ export default class WorkerCode extends WorkerSchema {
     }
 
     if (result.status === 'failed' || !result.canContinue) return;
-    if (state.attempts >= this.limits.attempts) return;
+    if (this.countThrough(sequence, stepNumber, MODULE.change) >= this.limits.attempts) return;
 
     if (result.retry) {
-      state.attempts += 1;
-      this.replaceTail(sequence, stepNumber, [this.changeStep(task, state)]);
+      const contextSteps = this.contextSteps(sequence, stepNumber + 1);
+      this.replaceTail(sequence, stepNumber, [this.changeStep(task, contextSteps)]);
       return;
     }
 
     const requests = result.requests ?? [];
     if (requests.length === 0) return;
 
-    const planned = this.planRequests(requests, state);
+    const planned = this.planRequests(sequence, stepNumber, requests);
     if (planned === undefined) return;
 
-    state.attempts += 1;
     const retrievalSteps = planned.map(({ module, input }) => ({ module, task: input }));
-    const firstStepNumber = stepNumber + 1;
-    for (let index = 0; index < retrievalSteps.length; index += 1) {
-      state.contextSteps.push(firstStepNumber + index);
-    }
+    this.replaceTail(sequence, stepNumber, retrievalSteps);
 
-    this.replaceTail(sequence, stepNumber, [
-      ...retrievalSteps,
-      this.changeStep(task, state),
-    ]);
+    const contextSteps = this.contextSteps(sequence, sequence.steps.length + 1);
+    sequence.steps.push(this.changeStep(task, contextSteps));
   }
 
-  /**
-   * undefined means a configured request limit was exceeded and the current failure remains terminal.
-   * An empty array means every requested operation was already performed; Core retries the semantic attempt
-   * with the existing explicit context instead of accumulating a second Worker-side session store.
-   */
   private planRequests(
+    sequence: sCoreSequence,
+    stepNumber: number,
     requests: ReadonlyArray<sActionCoreRequest>,
-    state: sWorkerCodeState,
   ): Array<{ module: string; input: unknown }> | undefined {
     const planned: Array<{ module: string; input: unknown }> = [];
-    const increments = { findFile: 0, readFile: 0, research: 0 };
-    const seen = new Set(state.seenRequests);
 
     for (const request of requests) {
       const route = this.route(request.actionId);
       if (!route) continue;
 
-      const signature = `${request.actionId}:${stableRequest(request.input)}`;
-      if (seen.has(signature)) continue;
+      const candidate = { module: route.module, input: request.input };
+      if (this.wasRequested(sequence, stepNumber, candidate) || planned.some((item) => sameRequest(item, candidate))) {
+        continue;
+      }
 
-      const nextCount = state[route.limit] + increments[route.limit] + 1;
-      if (nextCount > this.limits[route.limit]) return undefined;
+      const existing = this.countThrough(sequence, stepNumber, route.module);
+      const pending = planned.filter((item) => item.module === route.module).length;
+      if (existing + pending >= this.limits[route.limit]) return undefined;
 
-      seen.add(signature);
-      increments[route.limit] += 1;
-      planned.push({ module: route.module, input: request.input });
+      planned.push(candidate);
     }
 
-    state.findFile += increments.findFile;
-    state.readFile += increments.readFile;
-    state.research += increments.research;
-    for (const signature of seen) state.seenRequests.add(signature);
     return planned;
   }
 
   private route(actionId: string): { module: string; limit: 'findFile' | 'readFile' | 'research' } | undefined {
-    if (actionId === 'find-file') return { module: this.modules.findFile, limit: 'findFile' };
-    if (actionId === 'read-file') return { module: this.modules.readFile, limit: 'readFile' };
-    if (actionId === 'research') return { module: this.modules.research, limit: 'research' };
+    if (actionId === 'find-file') return { module: MODULE.findFile, limit: 'findFile' };
+    if (actionId === 'read-file') return { module: MODULE.readFile, limit: 'readFile' };
+    if (actionId === 'research') return { module: MODULE.research, limit: 'research' };
     return undefined;
+  }
+
+  private contextSteps(sequence: sCoreSequence, stepNumber: number): number[] {
+    return previousStepNumbers(sequence, stepNumber, (step) =>
+      isModule(step, MODULE.findFile) ||
+      isModule(step, MODULE.readFile) ||
+      isModule(step, MODULE.research));
+  }
+
+  private countThrough(sequence: sCoreSequence, stepNumber: number, module: string): number {
+    return previousSteps(sequence, stepNumber + 1, (step) => isModule(step, module)).length;
+  }
+
+  private wasRequested(
+    sequence: sCoreSequence,
+    stepNumber: number,
+    candidate: { module: string; input: unknown },
+  ): boolean {
+    return previousSteps(sequence, stepNumber + 1, (step) =>
+      'module' in step &&
+      step.module === candidate.module &&
+      sameValue(step.task, candidate.input)).length > 0;
   }
 
   private replaceTail(sequence: sCoreSequence, stepNumber: number, next: sCoreModuleStep[]): void {
@@ -203,15 +193,30 @@ export default class WorkerCode extends WorkerSchema {
   }
 }
 
+function isModule(step: tCoreStep, module: string): step is sCoreModuleStep {
+  return 'module' in step && step.module === module;
+}
+
 function hasEdit(data: unknown): boolean {
   return typeof data === 'object' && data !== null && 'edit' in data && Boolean((data as { edit?: unknown }).edit);
 }
 
-function stableRequest(input: unknown): string {
-  if (input === undefined) return 'undefined';
+function sameRequest(
+  left: { module: string; input: unknown },
+  right: { module: string; input: unknown },
+): boolean {
+  return left.module === right.module && sameValue(left.input, right.input);
+}
+
+function sameValue(left: unknown, right: unknown): boolean {
+  return stableValue(left) === stableValue(right);
+}
+
+function stableValue(value: unknown): string {
+  if (value === undefined) return 'undefined';
   try {
-    return JSON.stringify(input, Object.keys(input as object).sort());
+    return JSON.stringify(value, Object.keys(value as object).sort());
   } catch {
-    return String(input);
+    return String(value);
   }
 }

@@ -32,12 +32,11 @@ const engine = new Engine({
     PlannerTask,
     WorkerCode,
     WorkerDocumentation,
-    ActionReadFile,
   },
 });
 ```
 
-The object key is the module name visible to Core and schemas. Modules do not need a separate `id`. Registering the same module definition more than once is rejected.
+The object key is the root module name visible to Core and schemas. Modules do not need a separate `id`. Registering the same root module definition more than once is rejected.
 
 `start` is the module definition used for the first step. It must also be present in `modules`. Core does not special-case Planner; today the configured start module is the single Planner, while a future classifier may itself become the start module when several planners need selection.
 
@@ -48,6 +47,7 @@ A module is structural. It does not have to inherit a Nodus base class as long a
 ```ts
 interface iCoreModule {
   readonly group: string;
+  readonly dependencies?: Record<string, Module>;
   execute(request): Promise<OUTPUT | SCHEMA>;
 }
 ```
@@ -55,6 +55,37 @@ interface iCoreModule {
 Nodus-owned modules may inherit their `group` from role-specific base classes. User modules may provide the same shape directly.
 
 `modules` accepts ready executable objects and zero-argument classes. Core resolves the object key into an internal registry during initialization.
+
+### Module dependencies
+
+A module may own concrete module dependencies without exposing them in the root product config. Core expands them during initialization under the owner namespace:
+
+```ts
+class WorkerCode {
+  dependencies = {
+    ActionCodeChange,
+    ActionFileRead,
+  };
+}
+```
+
+The resulting registry contains:
+
+```text
+WorkerCode
+WorkerCode::ActionCodeChange
+WorkerCode::ActionFileRead
+```
+
+A schema still contains only module names:
+
+```ts
+{
+  module: 'WorkerCode::ActionCodeChange',
+}
+```
+
+Dependencies are part of the configured product, not portable data embedded into the schema. The same dependency implementation may be exposed by more than one module namespace or also registered as a root module when useful. Circular dependency chains are rejected.
 
 ## Groups
 
