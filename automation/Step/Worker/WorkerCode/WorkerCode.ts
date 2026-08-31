@@ -6,15 +6,15 @@ import {
 } from '@engine/Core/CoreSchema.js';
 import { WorkerSchema } from '@engine/Step/Worker/Contract/WorkerSchema.js';
 import type { sWorkerRequest, sWorkerSchema } from '@engine/Step/Worker/Contract/WorkerTsType.js';
-import type { ChangeCodeAction as ActionCodeChange } from '#automation/Action/ActionChangeCode.ts';
-import type { FindFileAction as ActionFileFind } from '#automation/Action/ActionFindFile.ts';
-import type { ReadFileAction as ActionFileRead } from '#automation/Action/ActionReadFile.ts';
-import type { ResearchAction as ActionResearch } from '#automation/Action/ActionResearch.ts';
-import type { ApplyEditAction as ActionEditApply } from '#automation/Action/ActionApplyEdit.ts';
+import type { ChangeCodeAction as ActionCodeChange } from '#automation/Step/Action/ActionChangeCode.ts';
+import type { FindFileAction as ActionFileFind } from '#automation/Step/Action/ActionFindFile.ts';
+import type { ReadFileAction as ActionFileRead } from '#automation/Step/Action/ActionReadFile.ts';
+import type { ResearchAction as ActionResearch } from '#automation/Step/Action/ActionResearch.ts';
+import type { ApplyEditAction as ActionEditApply } from '#automation/Step/Action/ActionApplyEdit.ts';
 import {
   readActionCoreResult,
   type sActionCoreRequest,
-} from '#automation/Action/ActionCoreResult.ts';
+} from '#automation/Step/Action/ActionCoreResult.ts';
 import { previousStepNumbers, previousSteps } from './WorkerCodeSequence.js';
 
 const MAX_ATTEMPTS = 5;

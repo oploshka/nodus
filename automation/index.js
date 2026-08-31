@@ -1,11 +1,11 @@
-import { ApplyEditAction as ActionEditApply } from '#automation/Action/ActionApplyEdit.ts';
-import { ChangeCodeAction as ActionCodeChange } from '#automation/Action/ActionChangeCode.ts';
-import { FindFileAction as ActionFileFind } from '#automation/Action/ActionFindFile.ts';
-import { ReadFileAction as ActionFileRead } from '#automation/Action/ActionReadFile.ts';
-import { ResearchAction as ActionResearch } from '#automation/Action/ActionResearch.ts';
-import { PlannerModel } from '#automation/Planner/PlannerModel.ts';
-import PlannerTask from '#automation/Planner/PlannerTask/PlannerTask.js';
-import WorkerCode from '#automation/Worker/WorkerCode/WorkerCode.ts';
+import { ApplyEditAction as ActionEditApply } from '#automation/Step/Action/ActionApplyEdit.ts';
+import { ChangeCodeAction as ActionCodeChange } from '#automation/Step/Action/ActionChangeCode.ts';
+import { FindFileAction as ActionFileFind } from '#automation/Step/Action/ActionFindFile.ts';
+import { ReadFileAction as ActionFileRead } from '#automation/Step/Action/ActionReadFile.ts';
+import { ResearchAction as ActionResearch } from '#automation/Step/Action/ActionResearch.ts';
+import { PlannerModel } from '#automation/Step/Planner/PlannerModel.ts';
+import PlannerTask from '#automation/Step/Planner/PlannerTask/PlannerTask.js';
+import WorkerCode from '#automation/Step/Worker/WorkerCode/WorkerCode.ts';
 
 export default {
   groups: {
