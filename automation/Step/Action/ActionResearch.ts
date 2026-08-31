@@ -1,16 +1,30 @@
+import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import { EngineStep } from '@engine/Core/EngineStep.js';
 import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
 import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import { callModel } from '@model/Runner/ModelCaller.js';
+import type { ModelRunner } from '@model/Runner/ModelRunner.js';
+import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
+import type { ModelRunSettings } from '@model/Request/ModelRun.js';
+import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
+import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import { actionCoreResult } from './ActionCoreResult.js';
-
-interface ResearchRuntime {
-  ask(question: string, options?: unknown): Promise<unknown>;
-}
 
 export interface ResearchActionInput {
   question: string;
-  settings?: unknown;
+  settings?: ModelRunSettings;
 }
+
+interface ResearchResponse {
+  answer: unknown;
+}
+
+const researchResponseSchema: ModelResponseSchema = {
+  description: 'Answer to the requested project research question.',
+  fields: {
+    answer: { type: 'any' },
+  },
+};
 
 export class ResearchAction extends EngineStep {
   public getId(): string {
@@ -30,10 +44,26 @@ export class ResearchAction extends EngineStep {
 
   private async perform(input: ResearchActionInput, dependencies: tEngineRunDependencies) {
     try {
-      const research = dependencies.research as ResearchRuntime | undefined;
-      if (!research) throw new Error('ActionResearch requires runtime research dependency.');
-      const answer = await research.ask(input.question, { settings: input.settings });
-      return { status: 'completed' as const, data: { kind: 'research' as const, value: answer } };
+      const model = dependencies.model as ModelRunner | undefined;
+      const logger = dependencies.logger as EngineLogger | undefined;
+      if (!model || !logger) throw new Error('ActionResearch requires runtime model and logger.');
+
+      const response = await callModel<ResearchResponse>(model, logger, {
+        request: {
+          message: input.question,
+          format: ModelRequestFormat.Text,
+        },
+        response: {
+          format: ModelResponseFormat.Raw,
+          schema: researchResponseSchema,
+        },
+        settings: input.settings,
+      });
+
+      return {
+        status: 'completed' as const,
+        data: { kind: 'research' as const, value: response.answer },
+      };
     } catch (error) {
       return {
         status: 'not-completed' as const,
