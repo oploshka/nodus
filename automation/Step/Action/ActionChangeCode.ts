@@ -8,7 +8,7 @@ import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
-import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
+import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
 import { actionCoreResult, readActionCoreData } from './ActionCoreResult.js';
 
 interface ChangeDecision {

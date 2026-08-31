@@ -8,8 +8,8 @@ import { WorkerSchema } from '@engine/Step/Worker/Contract/WorkerSchema.js';
 import type { sWorkerRequest, sWorkerSchema } from '@engine/Step/Worker/Contract/WorkerTsType.js';
 import {
   readActionCoreResult,
-  type sActionCoreRequest,
-} from '#automation/Step/Action/ActionCoreResult.ts';
+  type sActionCoreRequest
+} from "@automation/Step/Action/ActionCoreResult.js";
 import { previousStepNumbers, previousSteps } from './WorkerCodeSequence.js';
 
 const ACTION_CODE_CHANGE = 'ActionCodeChange';

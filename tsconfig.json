@@ -19,6 +19,7 @@
   },
   "include": [
     "src/**/*.ts",
+//    "automation/**/*.ts",
 //    "test/**/*.ts",
 //    "target/benchmark/**/*.ts",
 //    "target/test-framework/**/*.ts",

@@ -1,4 +1,4 @@
-import type { EditStrategyId } from '@engine/Edit/EditTypes.js';
+import type { EditStrategyId} from "@engine/Process/Edit/EditTypes.js";
 
 export interface PlannerProcessAdaptation {
   /** Шаблон сообщения Planner. Маркер ##message## заменяется исходным сообщением Process. */

@@ -6,9 +6,9 @@ import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { Plan, PlanStepDecompositionType } from '@engine/Planner/Plan.js';
-import type { Planner } from '@engine/Planner/Planner.js';
-import { PlannerPresentation } from '@engine/Presentation/PlannerPresentation.js';
-import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
+import type { Planner} from "@automation/Step/Planner/Planner.js";
+import { PlannerPresentation} from "@engine/Common/Presentation/PlannerPresentation.js";
+import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
 
 interface PlannerModelResponse {
   steps: Array<{
