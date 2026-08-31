@@ -1,6 +1,4 @@
 import type { ModelRunSettings } from '@model/Request/ModelRun.js';
-import type { PlanStep } from '@engine/Planner/Plan.js';
-import type { Task } from '@engine/Task/Task.js';
 
 export type EditStrategyId = 'range-replace' | 'replace' | 'diff' | 'edit';
 
@@ -18,8 +16,8 @@ export interface ProjectEditRequest {
 }
 
 export interface EditPreparationContext {
-  task: Task;
-  step: PlanStep;
+  task: unknown;
+  step: unknown;
   edit: ProjectEditIntent;
   source: string;
   settings?: ModelRunSettings;

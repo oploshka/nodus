@@ -3,8 +3,6 @@ import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import { EditPresentation} from "@engine/Common/Presentation/EditPresentation.js";
 import type { EditStrategy} from "@engine/Process/Edit/EditStrategy.js";
 import type { EditStrategyId, PreparedProjectChange, ProjectEditRequest, EditPrepareResult, EditPreparationContext} from "@engine/Process/Edit/EditTypes.js";
-import type { PlanStep } from '@engine/Planner/Plan.js';
-import type { Task } from '@engine/Task/Task.js';
 import { EditValidator, type EditCandidate, type EditValidationResult} from "@engine/Process/Edit/Validation/EditValidator.js";
 
 export type ProjectEditResult =
@@ -72,7 +70,7 @@ export class ProjectEditor {
     this.files.set(projectPath, { path: projectPath, original, current: content, strategy: 'edit' });
   }
 
-  public async change(task: Task, step: PlanStep, request: ProjectEditRequest): Promise<ProjectEditResult> {
+  public async change(task: unknown, step: unknown, request: ProjectEditRequest): Promise<ProjectEditResult> {
     if (request.edits.length === 0) return { status: 'completed', files: 0, operations: 0, strategy: request.strategy, paths: [] };
     if (!this.strategies.has(request.strategy)) return { status: 'not-completed', reason: `Unknown edit strategy: ${request.strategy}` };
 
@@ -203,4 +201,4 @@ export class ProjectEditor {
   }
 }
 
-export type { PreparedProjectChange } from '@engine/Edit/EditTypes.js';
+export type { PreparedProjectChange } from '@engine/Process/Edit/EditTypes.js';
