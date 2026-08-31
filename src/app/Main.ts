@@ -10,7 +10,7 @@ import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
 import { EngineSchema } from '@engine/Core/EngineSchema.js';
 import { ENGINE_STEP } from '@engine/Core/EngineSchemaTsType.js';
 import type { sEngineGroupConfig } from '@engine/Core/EngineRuntimeTsType.js';
-import type { tEngineStepDefinition } from '@engine/Core/EngineStepInterface.js';
+import type { iEngineStep } from '@engine/Core/EngineStepInterface.js';
 import { Engine } from '@engine/Engine.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 
@@ -22,7 +22,7 @@ interface StartupOptions {
 
 interface sAutomationRuntimePackage {
   groups: Readonly<Record<string, sEngineGroupConfig>>;
-  modules: Readonly<Record<string, tEngineStepDefinition>>;
+  modules: Readonly<Record<string, iEngineStep>>;
 }
 
 const ACTION_USER_INPUT_CLI = 'ActionUserInputCli';
@@ -120,7 +120,7 @@ function resolveAutomationRuntime(value: Readonly<Record<string, unknown>>): sAu
 
   return {
     groups: groups as Readonly<Record<string, sEngineGroupConfig>>,
-    modules: modules as Readonly<Record<string, tEngineStepDefinition>>,
+    modules: modules as Readonly<Record<string, iEngineStep>>,
   };
 }
 
