@@ -1,6 +1,6 @@
 import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
 import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
-import { StepPlanner } from '@engine/Step/Planner/StepPlanner.js';
+import { StepPlanner } from '@engine/Step/StepPlanner.js';
 
 /** Minimal Planner used to verify the application -> Engine execution path. */
 export class Planner extends StepPlanner {
