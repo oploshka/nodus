@@ -8,12 +8,35 @@ import PlannerTask from '#automation/Planner/PlannerTask/PlannerTask.js';
 import WorkerCode from '#automation/Worker/WorkerCode/WorkerCode.ts';
 
 export default {
-  PlannerTask,
-  PlannerModel,
-  WorkerCode,
-  ActionCodeChange,
-  ActionFileFind,
-  ActionFileRead,
-  ActionResearch,
-  ActionEditApply,
+  groups: {
+    planner: {
+      schema: {
+        allowedGroups: ['worker', 'research'],
+      },
+    },
+    worker: {
+      schema: {
+        allowedGroups: ['action', 'research'],
+      },
+    },
+    research: {
+      schema: {
+        allowedGroups: ['action'],
+      },
+    },
+    action: {
+      schema: false,
+    },
+  },
+
+  modules: {
+    PlannerTask,
+    PlannerModel,
+    WorkerCode,
+    ActionCodeChange,
+    ActionFileFind,
+    ActionFileRead,
+    ActionResearch,
+    ActionEditApply,
+  },
 };
