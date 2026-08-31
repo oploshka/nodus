@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 describe('AutomationLoader', () => {
-  it('hydrates flat plugin definitions while preserving executable classes', async () => {
+  it('hydrates automation groups and modules while preserving executable classes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'nodus-automation-'));
     temporaryRoots.push(root);
     await mkdir(join(root, 'Planner'), { recursive: true });
@@ -27,20 +27,32 @@ describe('AutomationLoader', () => {
       };
 
       export default {
-        PlannerTask,
-        PlannerModel,
-        WorkerCode,
+        groups: {
+          planner: { schema: { allowedGroups: ['worker'] } },
+          worker: { schema: false }
+        },
+        modules: {
+          PlannerTask,
+          PlannerModel,
+          WorkerCode
+        }
       };
     `, 'utf8');
 
     const automation = await AutomationLoader.load(root);
-    const planner = automation.PlannerTask as { prompt?: unknown; response?: unknown };
+    const groups = automation.groups as Record<string, unknown>;
+    const modules = automation.modules as Record<string, unknown>;
+    const planner = modules.PlannerTask as { prompt?: unknown; response?: unknown };
 
+    expect(groups).toEqual({
+      planner: { schema: { allowedGroups: ['worker'] } },
+      worker: { schema: false },
+    });
     expect(planner.prompt).toBe('# Planner\n\nPlan the task.\n');
     expect(planner.response).toEqual({ id: 'task', format: 'json' });
-    expect(typeof automation.PlannerModel).toBe('function');
+    expect(typeof modules.PlannerModel).toBe('function');
 
-    const WorkerCode = automation.WorkerCode as new () => { run(): string };
+    const WorkerCode = modules.WorkerCode as new () => { run(): string };
     expect(new WorkerCode().run()).toBe('ok');
   });
 });
