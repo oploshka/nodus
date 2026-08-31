@@ -28,12 +28,7 @@ export default class WorkerCode extends StepWorker {
   }
 
   public async run(step: sEngineSchemaStep): Promise<EngineSchema> {
-    const task = step.task;
-    return new EngineSchema({
-      type: ENGINE_STEP.SEQUENCE,
-      task,
-      steps: [this.changeStep(task, [])],
-    });
+    return new EngineSchema([this.changeStep(step.task, [])]);
   }
 
   private changeStep(task: unknown, contextSteps: readonly number[]): sEngineSchemaStep {
@@ -41,20 +36,16 @@ export default class WorkerCode extends StepWorker {
       type: ENGINE_STEP.SEQUENCE,
       module: ACTION_CODE_CHANGE,
       task,
-      input: {
-        context: {
-          parent: true,
-          ...(contextSteps.length > 0 ? { steps: contextSteps } : {}),
-        },
-      },
+      input: contextSteps.length > 0
+        ? { context: { steps: contextSteps } }
+        : undefined,
       transition: (sequence, stepNumber) => this.transitionChange(sequence, stepNumber),
       steps: null,
     };
   }
 
-  private transitionChange(sequence: sEngineSchemaStep, stepNumber: number): void {
-    const steps = sequenceSteps(sequence);
-    const step = steps[stepNumber - 1];
+  private transitionChange(sequence: sEngineSchemaStep[], stepNumber: number): void {
+    const step = sequence[stepNumber - 1];
     if (!step?.module) return;
 
     const result = readActionCoreResult(step.output);
@@ -102,13 +93,13 @@ export default class WorkerCode extends StepWorker {
       })),
     );
 
-    sequenceSteps(sequence).push(
-      this.changeStep(task, this.contextSteps(sequence, sequenceSteps(sequence).length + 1)),
+    sequence.push(
+      this.changeStep(task, this.contextSteps(sequence, sequence.length + 1)),
     );
   }
 
   private planRequests(
-    sequence: sEngineSchemaStep,
+    sequence: sEngineSchemaStep[],
     stepNumber: number,
     requests: ReadonlyArray<sActionCoreRequest>,
   ): Array<{ module: string; input: unknown }> | undefined {
@@ -138,17 +129,17 @@ export default class WorkerCode extends StepWorker {
     return undefined;
   }
 
-  private contextSteps(sequence: sEngineSchemaStep, stepNumber: number): number[] {
+  private contextSteps(sequence: sEngineSchemaStep[], stepNumber: number): number[] {
     const contextModules = new Set([ACTION_FILE_FIND, ACTION_FILE_READ, ACTION_RESEARCH]);
     return previousStepNumbers(sequence, stepNumber, (step) => Boolean(step.module && contextModules.has(step.module)));
   }
 
-  private countThrough(sequence: sEngineSchemaStep, stepNumber: number, module: string): number {
+  private countThrough(sequence: sEngineSchemaStep[], stepNumber: number, module: string): number {
     return previousSteps(sequence, stepNumber + 1, (step) => step.module === module).length;
   }
 
   private wasRequested(
-    sequence: sEngineSchemaStep,
+    sequence: sEngineSchemaStep[],
     stepNumber: number,
     candidate: { module: string; input: unknown },
   ): boolean {
@@ -159,15 +150,9 @@ export default class WorkerCode extends StepWorker {
     ).length > 0;
   }
 
-  private replaceTail(sequence: sEngineSchemaStep, stepNumber: number, next: sEngineSchemaStep[]): void {
-    const steps = sequenceSteps(sequence);
-    steps.splice(stepNumber, steps.length - stepNumber, ...next);
+  private replaceTail(sequence: sEngineSchemaStep[], stepNumber: number, next: sEngineSchemaStep[]): void {
+    sequence.splice(stepNumber, sequence.length - stepNumber, ...next);
   }
-}
-
-function sequenceSteps(sequence: sEngineSchemaStep): sEngineSchemaStep[] {
-  if (sequence.steps === null) throw new Error('WorkerCode expected a schema step chain.');
-  return sequence.steps;
 }
 
 function hasEdit(data: unknown): boolean {
