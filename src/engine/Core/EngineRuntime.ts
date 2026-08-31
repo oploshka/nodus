@@ -1,5 +1,6 @@
 import {
   ENGINE_STEP,
+  isEngineModuleStep,
   isEngineSequence,
   type sEngineModuleStep,
   type sEngineOutput,
@@ -155,7 +156,8 @@ export class EngineRuntime {
       const childInput = step.task ?? this.contextPayload(context);
       return this.executeSequence(step, childInput, path, authorityGroup, dependencies);
     }
-    return this.executeModule(step, context, path, dependencies);
+    if (isEngineModuleStep(step)) return this.executeModule(step, context, path, dependencies);
+    throw new Error(`Invalid Engine schema step at ${path.join('.')}. Expected module or SEQUENCE.`);
   }
 
   private async executeModule(
@@ -178,7 +180,6 @@ export class EngineRuntime {
       const sequence = result.value;
       const group = registered.module.getGroup();
       this.validateReturnedSchema(sequence, group);
-      step.schema = sequence;
       output = await this.executeSequence(
         sequence,
         sequence.task ?? step.task ?? this.contextPayload(context),
@@ -212,6 +213,9 @@ export class EngineRuntime {
       if (isEngineSequence(step)) {
         this.validateSequenceModules(step, ownerGroup, allowed);
         continue;
+      }
+      if (!isEngineModuleStep(step)) {
+        throw new Error(`Schema from group '${ownerGroup}' contains an invalid step.`);
       }
 
       const registered = this.modules.get(step.module);
