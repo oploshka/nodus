@@ -4,6 +4,7 @@ import {
   type sCoreSequence,
   type tCoreStep,
 } from '@engine/Core/CoreSchema.js';
+import type { tCoreModuleDefinition } from '@engine/Core/CoreTsType.js';
 import { WorkerSchema } from '@engine/Step/Worker/Contract/WorkerSchema.js';
 import type { sWorkerRequest, sWorkerSchema } from '@engine/Step/Worker/Contract/WorkerTsType.js';
 import type { ChangeCodeAction } from '../../Action/ActionChangeCode.js';
@@ -17,13 +18,13 @@ import {
 } from '../../Action/ActionCoreResult.js';
 import { previousStepNumbers, previousSteps } from './WorkerCodeSequence.js';
 
-export interface sWorkerCodeDependencies {
-  readonly ActionCodeChange: ChangeCodeAction;
-  readonly ActionFileFind: FindFileAction;
-  readonly ActionFileRead: ReadFileAction;
-  readonly ActionResearch: ResearchAction;
-  readonly ActionEditApply: ApplyEditAction;
-}
+export type sWorkerCodeDependencies = Readonly<{
+  ActionCodeChange: ChangeCodeAction;
+  ActionFileFind: FindFileAction;
+  ActionFileRead: ReadFileAction;
+  ActionResearch: ResearchAction;
+  ActionEditApply: ApplyEditAction;
+}> & Readonly<Record<string, tCoreModuleDefinition>>;
 
 export interface sWorkerCodeConfig {
   readonly dependencies: sWorkerCodeDependencies;
