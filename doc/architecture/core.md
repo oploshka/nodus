@@ -91,4 +91,6 @@ A module may return a nested `SEQUENCE`. Context is explicit and local: a step m
 
 `src/engine/Engine.ts` is the new Core entry point. The previous production coordinator is preserved as `src/engine/Deprecated/EngineOld.ts` so behavior is not lost during migration.
 
-The current application bootstrap still composes `EngineOld` until automation modules are adapted to the new structural Core module contract. Existing `Process/` and `Step/` code remains available during this migration and is not deleted merely because the first Core path does not use it.
+The fixed-`STEP` schema prototype is preserved under `src/engine/Deprecated/Process/` and `src/engine/Deprecated/Step/`. It is no longer part of the active Engine boundary, but remains available as implementation history while automation is migrated.
+
+The current application bootstrap still composes `EngineOld` until automation modules are adapted to the new structural Core module contract. Other old-only lifecycle mechanics should likewise be moved to `Deprecated/` rather than deleted as their ownership becomes clear.
