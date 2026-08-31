@@ -1,9 +1,8 @@
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
-import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineOutput, sEngineSchemaStep, tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import { StepAction } from '@engine/Step/StepAction.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
@@ -28,7 +27,7 @@ interface ChangeCodeRuntime {
   fileSystem: FileSystem;
   fileIndex: iProjectFileIndex;
   model: ModelRunner;
-  logger: EngineLogger;
+  emit: tEngineEmit;
   language: LanguageConfiguration;
 }
 
@@ -64,20 +63,16 @@ const decisionSchema: ModelResponseSchema = {
 };
 
 /** Stateless module definition. Per-run infrastructure is owned by ChangeCodeExecution. */
-export class ChangeCodeAction extends EngineStep {
+export class ChangeCodeAction extends StepAction {
   public getId(): string {
     return 'change-code';
-  }
-
-  public getGroup(): string {
-    return 'action';
   }
 
   public async run(
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const context = (step.computedContext?.steps ?? [])
+    const context = (step.runtime?.context?.steps ?? [])
       .map((contextStep) => readActionCoreData<unknown>(contextStep.output))
       .filter((item) => item !== undefined);
 
@@ -102,7 +97,7 @@ class ChangeCodeExecution {
     context: readonly unknown[],
   ): Promise<tActionCoreResult<ChangeCodeActionData, ChangeCodeRequestInput>> {
     const taskText = describeTask(task);
-    const decision = await callModel<ChangeDecision>(this.runtime.model, this.runtime.logger, {
+    const decision = await callModel<ChangeDecision>(this.runtime.model, this.runtime.emit, {
       request: {
         message: 'Determine the concrete project edits required to complete the assigned task now.',
         data: {
@@ -168,16 +163,16 @@ class ChangeCodeExecution {
 function runtimeDependencies(dependencies: tEngineRunDependencies): ChangeCodeRuntime {
   const target = dependencies.target as { fileSystem?: FileSystem; fileIndex?: iProjectFileIndex } | undefined;
   const model = dependencies.model as ModelRunner | undefined;
-  const logger = dependencies.logger as EngineLogger | undefined;
+  const emit = dependencies.emit as tEngineEmit | undefined;
   const language = dependencies.language as LanguageConfiguration | undefined;
-  if (!target?.fileSystem || !target.fileIndex || !model || !logger) {
-    throw new Error('ActionCodeChange requires runtime target, model and logger.');
+  if (!target?.fileSystem || !target.fileIndex || !model || !emit) {
+    throw new Error('ActionCodeChange requires runtime target, model and emit.');
   }
   return {
     fileSystem: target.fileSystem,
     fileIndex: target.fileIndex,
     model,
-    logger,
+    emit,
     language: language ?? { project: 'en', nodus: 'en', response: 'en' },
   };
 }
