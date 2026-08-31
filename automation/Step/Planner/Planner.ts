@@ -14,7 +14,7 @@ export class Planner extends StepPlanner {
   ): Promise<sEngineOutput> {
     return {
       status: 'SUCCESS',
-      value: step.computedContext?.previous?.output?.value ?? step.data ?? step.computedContext?.parent,
+      value: step.task,
     };
   }
 }
