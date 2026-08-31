@@ -22,7 +22,7 @@ import type {
 export class CoreRuntime {
   private readonly groups: Readonly<Record<string, sCoreGroupConfig>>;
   private readonly modules = new Map<string, sCoreRegisteredModule>();
-  private readonly definitions = new Map<tCoreModuleDefinition, sCoreRegisteredModule>();
+  private readonly rootDefinitions = new Map<tCoreModuleDefinition, sCoreRegisteredModule>();
   private readonly start: sCoreRegisteredModule;
   private trace: sCoreTraceEntry[] = [];
 
@@ -31,10 +31,14 @@ export class CoreRuntime {
     this.validateGroups();
 
     for (const [name, definition] of Object.entries(config.modules)) {
-      this.registerModule(name, definition);
+      if (this.rootDefinitions.has(definition)) {
+        throw new Error(`Engine root module is registered more than once: ${name}`);
+      }
+      const registered = this.registerModule(name, definition);
+      this.rootDefinitions.set(definition, registered);
     }
 
-    const start = this.definitions.get(config.start);
+    const start = this.rootDefinitions.get(config.start);
     if (!start) throw new Error('Engine start module must be registered in config.modules.');
     this.start = start;
   }
@@ -63,11 +67,15 @@ export class CoreRuntime {
     };
   }
 
-  private registerModule(name: string, definition: tCoreModuleDefinition): void {
+  private registerModule(
+    name: string,
+    definition: tCoreModuleDefinition,
+    lineage: readonly tCoreModuleDefinition[] = [],
+  ): sCoreRegisteredModule {
     if (!name.trim()) throw new Error('Engine module name must be non-empty.');
     if (this.modules.has(name)) throw new Error(`Duplicate Engine module name: ${name}`);
-    if (this.definitions.has(definition)) {
-      throw new Error(`Engine module is registered more than once: ${name}`);
+    if (lineage.includes(definition)) {
+      throw new Error(`Circular Engine module dependency: ${name}`);
     }
 
     const module = this.resolveDefinition(definition, name);
@@ -78,7 +86,16 @@ export class CoreRuntime {
 
     const registered = { name, definition, module };
     this.modules.set(name, registered);
-    this.definitions.set(definition, registered);
+
+    const nextLineage = [...lineage, definition];
+    for (const [dependencyName, dependency] of Object.entries(module.dependencies ?? {})) {
+      if (!dependencyName.trim()) {
+        throw new Error(`Engine module '${name}' has an empty dependency name.`);
+      }
+      this.registerModule(`${name}::${dependencyName}`, dependency, nextLineage);
+    }
+
+    return registered;
   }
 
   private resolveDefinition(definition: tCoreModuleDefinition, name: string): iCoreModule {
