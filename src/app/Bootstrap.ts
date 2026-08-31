@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import type { AppConfiguration } from '@app/Config/Configuration.js';
 import { ConsoleLogger } from '@app/Logging/Logger.js';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
@@ -134,19 +135,20 @@ export class Bootstrap {
     const model = new ModelRunner(adapter, configuration.model);
 
     const target = overrides.target ?? await this.createTarget(configuration.target, logger);
-    const automation = await AutomationLoader.load(configuration.automation?.root ?? 'automation');
-    const WorkerCode = resolveAutomationWorker(automation.workers.code, 'code');
-    const WorkerDocumentation = resolveAutomationWorker(automation.workers.documentation, 'documentation');
-    const ChangeCodeAction = resolveAutomationConstructor(automation.actions['change-code'], 'Action', 'change-code');
-    const ReadFileAction = resolveAutomationConstructor(automation.actions['read-file'], 'Action', 'read-file');
-    const FindFileAction = resolveAutomationConstructor(automation.actions['find-file'], 'Action', 'find-file');
-    const ResearchAction = resolveAutomationConstructor(automation.actions.research, 'Action', 'research');
-    const PlannerModel = resolveAutomationConstructor(automation.planners.model, 'Planner', 'model') as tAutomationPlannerConstructor;
-    const DetermineModel = resolveAutomationConstructor(automation.determine.model, 'Determine', 'model') as tAutomationDetermineConstructor;
+    const automationRoot = configuration.automation?.root ?? 'automation';
+    const automation = await AutomationLoader.load(resolve(automationRoot, 'Deprecated'));
+    const WorkerCode = resolveAutomationWorker(automation.WorkerCode, 'WorkerCode');
+    const WorkerDocumentation = resolveAutomationWorker(automation.WorkerDocumentation, 'WorkerDocumentation');
+    const ChangeCodeAction = resolveAutomationConstructor(automation.ChangeCodeAction, 'Action', 'ChangeCodeAction');
+    const ReadFileAction = resolveAutomationConstructor(automation.ReadFileAction, 'Action', 'ReadFileAction');
+    const FindFileAction = resolveAutomationConstructor(automation.FindFileAction, 'Action', 'FindFileAction');
+    const ResearchAction = resolveAutomationConstructor(automation.ResearchAction, 'Action', 'ResearchAction');
+    const PlannerModel = resolveAutomationConstructor(automation.PlannerModel, 'Planner', 'PlannerModel') as tAutomationPlannerConstructor;
+    const DetermineModel = resolveAutomationConstructor(automation.DetermineModel, 'Determine', 'DetermineModel') as tAutomationDetermineConstructor;
     const ResearchBoundedModelResolver = resolveAutomationConstructor(
-      automation.research['bounded-model'],
+      automation.ResearchBoundedModelResolver,
       'Research',
-      'bounded-model',
+      'ResearchBoundedModelResolver',
     ) as tAutomationResearchConstructor;
 
     const researchStore = new ResearchStore(target.fileSystem, logger, configuration.target.researchCachePath);
@@ -194,7 +196,7 @@ export class Bootstrap {
 
     const workers: Worker[] = [codeWorker, documentationWorker];
     if (isAgentModelAdapter(adapter)) {
-      const WorkerAgent = resolveAutomationWorker(automation.workers.agent, 'agent');
+      const WorkerAgent = resolveAutomationWorker(automation.WorkerAgent, 'WorkerAgent');
       const tools = [new FileSystemTool(), new SearchTool(), new TerminalTool(), new GitTool()];
       workers.push(new WorkerAgent(new WorkerAgentRunner(
         new AgentRunner(adapter, configuration.model),
