@@ -3,11 +3,10 @@ import { ChangeCodeAction as ActionCodeChange } from '#automation/Step/Action/Ac
 import { FindFileAction as ActionFileFind } from '#automation/Step/Action/ActionFindFile.ts';
 import { ReadFileAction as ActionFileRead } from '#automation/Step/Action/ActionReadFile.ts';
 import { ResearchAction as ActionResearch } from '#automation/Step/Action/ActionResearch.ts';
+import { Planner } from '#automation/Step/Planner/Planner.ts';
 import WorkerCode from '#automation/Step/Worker/WorkerCode/WorkerCode.ts';
 
 export default {
-  start: 'WorkerCode',
-
   groups: {
     planner: {
       schema: {
@@ -30,6 +29,7 @@ export default {
   },
 
   modules: {
+    Planner: new Planner(),
     WorkerCode: new WorkerCode(),
     ActionCodeChange: new ActionCodeChange(),
     ActionFileFind: new ActionFileFind(),
