@@ -9,16 +9,16 @@
         "src/engine/Deprecated/Process/*"
       ],
       "@engine/Step/*": [
-        "src/engine/Deprecated/Step/*"
+        "src/engine/Step/*"
       ],
       "@engine/Planner/*": [
         "src/engine/Deprecated/Planner/*"
       ],
       "@engine/Determine/*": [
-        "src/engine/Process/Determine/*"
+        "src/engine/Deprecated/Determine/*"
       ],
       "@engine/Action/*": [
-        "src/engine/Deprecated/Step/Action/*"
+        "src/engine/Step/Action/*"
       ],
       "@engine/Worker/Action/*": [
         "src/engine/Process/Worker/Deprecated/Action/*"

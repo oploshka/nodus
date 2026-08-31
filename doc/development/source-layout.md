@@ -14,20 +14,31 @@ src/engine/
     CoreSchema.ts
     CoreTsType.ts
 
+  Step/
+    Planner/
+    Worker/
+    Qualifier/
+    Research/
+    Action/
+    Determine/
+
   Deprecated/
     EngineOld.ts
     Process/
     Step/
     Planner/
+    Determine/
     EngineTest/
     Task/
 ```
 
 `Engine.ts` is the public facade. `Core/` owns only generic orchestration mechanics: module registration, group policy, `SEQUENCE`, explicit context projection, transitions and `OUTPUT | SCHEMA` execution.
 
-Semantic groups such as Planner, Worker, Research, Action or Test are not directories required by Core and are not a fixed Core enum. Their names and authority come from initialization config.
+`Step/` contains only small Nodus-owned convenience contracts for semantic module groups. It does not own execution runners. User modules remain structural and do not need to inherit these classes.
 
-The earlier fixed-`STEP` schema runtime is preserved under `Deprecated/Process/` and `Deprecated/Step/`. The old Plan/Planner contracts, Engine-owned test lifecycle and Task/TaskRun model are also preserved under `Deprecated/`. New Core code must not depend on them.
+The earlier fixed-`STEP` schema runtime is preserved under `Deprecated/Process/` and `Deprecated/Step/`. The old Plan/Planner, Determine, Engine-owned test lifecycle and Task/TaskRun models are also preserved under `Deprecated/`. New Core code must not depend on them.
+
+`Process/Edit` and `Process/Research` remain in place while the new execution path is still establishing their eventual ownership.
 
 ## Entity directories
 
@@ -49,13 +60,13 @@ The lowercase type prefixes remain unchanged inside TypeScript: `s` for structur
 
 Concrete executable behavior belongs in `automation/` when it is replaceable user/versioned behavior. Core must not gain special execution logic for a new semantic group merely because the default automation contains one.
 
-A module may inherit convenience behavior from Nodus-owned role classes, but Core accepts it structurally. User modules do not need to inherit a Nodus interface or base class if their executable shape matches the Core contract.
+A module may inherit convenience behavior from Nodus-owned Step classes, but Core accepts it structurally. User modules do not need to inherit a Nodus interface or base class if their executable shape matches the Core contract.
 
 ## Deprecated directories
 
 During architectural migration, incompatible legacy implementations are quarantined under `Deprecated/` instead of distorting the new contract.
 
-The previous production coordinator is `src/engine/Deprecated/EngineOld.ts`. The previous fixed semantic Step runtime is `src/engine/Deprecated/Process/` plus `src/engine/Deprecated/Step/`. Legacy `Planner`, `EngineTest`, and `Task` families are likewise kept there because their contracts are tied directly to the previous Engine lifecycle.
+The previous production coordinator is `src/engine/Deprecated/EngineOld.ts`. The previous fixed semantic Step runtime is `src/engine/Deprecated/Process/` plus `src/engine/Deprecated/Step/`. Legacy `Planner`, `Determine`, `EngineTest`, and `Task` families are likewise kept there because their contracts are tied to previous execution models.
 
 Other old-only mechanics should be moved into Deprecated when the new execution path proves they belong only to the previous lifecycle. Preserve them instead of deleting them while the migration is still discovering lost responsibilities.
 

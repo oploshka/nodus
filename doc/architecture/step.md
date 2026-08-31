@@ -1,36 +1,46 @@
-# Process Step prototype
+# Step
 
-The first Nodus 0.5 schema prototype modeled semantic roles through a fixed `STEP` enum and role-specific runners. That implementation is now preserved under `src/engine/Deprecated/Process/` and `src/engine/Deprecated/Step/`; it is no longer the intended configuration boundary of the Engine Core.
+`src/engine/Step/` is the active convenience layer for Nodus-owned semantic module groups. It is not an execution runtime.
 
-## Current direction
+Core owns module lookup, context projection, `SEQUENCE`, transitions and `OUTPUT | SCHEMA` execution. Step classes only provide small reusable contracts for built-in roles. User modules do not need to inherit them; matching the Core module shape is enough.
 
-The new Core owns only structural orchestration. `SEQUENCE` remains a reserved Core primitive, while semantic execution groups are declared by Engine initialization config.
+## Active contracts
 
-A schema step names a registered module rather than selecting from a fixed semantic enum. Group authority is configured separately from module implementations and Core validates returned schemas against those policies.
+```text
+src/engine/Step/
+  Planner/Contract/
+    PlannerMethod.ts
+    PlannerSchema.ts
+    PlannerTsType.ts
+  Worker/Contract/
+    WorkerMethod.ts
+    WorkerSchema.ts
+    WorkerTsType.ts
+  Qualifier/Contract/
+  Research/Contract/
+  Action/Contract/
+  Determine/README.md
+```
+
+`*Method` wraps an imperative `run()` result as Core `OUTPUT`. `*Schema` wraps `getSchema()` as Core `SCHEMA`. Each base class supplies only its group name and the structural Core adapter.
+
+There are deliberately no role-specific runners. A `WorkerRunner`, `PlannerRunner` or equivalent would duplicate Core execution mechanics.
+
+`*TsType` files are intentionally thin extension points today. Role-specific request/output/schema types should only grow when a real semantic difference appears.
+
+## Determine
+
+`Determine` is not active as a separate group. Its previous bounded option-selection contract is preserved under `src/engine/Deprecated/Determine/`; the active `Step/Determine/README.md` records that the responsibility is currently treated as qualification/classification.
 
 ## Preserved prototype
 
-The previous fixed-role implementation remains available only as deprecated migration history:
+The earlier fixed-`STEP` implementation remains under:
 
 ```text
 src/engine/Deprecated/Process/
-  ProcessRuntime.ts
-  ProcessSchema.ts
-  ProcessStepMethod.ts
-  ProcessStepSchema.ts
-  ProcessStepRunner.ts
-  ProcessStepResolver.ts
-  ...
-
 src/engine/Deprecated/Step/
-  Worker/
-  Planner/
-  Qualifier/
-  Determine/
-  Research/
-  Action/
 ```
 
-The compatibility aliases continue to resolve these deprecated paths while active Core code does not depend on them.
+Those files preserve the old `STEP` enum, `ProcessStepRunner`, role runners and related contracts as migration history. New Core and active Step code must not depend on them.
 
-See `doc/architecture/core.md` for the current Engine/Core boundary.
+See `doc/architecture/core.md` for the Engine/Core boundary.
