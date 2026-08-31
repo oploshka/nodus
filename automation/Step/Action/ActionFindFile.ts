@@ -1,7 +1,7 @@
 import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
 import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
-import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { actionCoreResult } from './ActionCoreResult.js';
 
 export interface sFindFileActionInput {
@@ -20,10 +20,11 @@ export class FindFileAction extends EngineStep {
   }
 
   public async run(
-    request: sEngineStepRequest,
+    step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    return actionCoreResult(await this.perform(request.task as sFindFileActionInput, dependencies));
+    const input = (step.data ?? step.computedContext?.parent) as sFindFileActionInput;
+    return actionCoreResult(await this.perform(input, dependencies));
   }
 
   private async perform(input: sFindFileActionInput, dependencies: tEngineRunDependencies) {

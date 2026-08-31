@@ -18,17 +18,25 @@ export interface sEngineStepInput {
   context?: sEngineContextConfig;
 }
 
+export interface sEngineComputedContext {
+  parent?: unknown;
+  previous?: sEngineSchemaStep;
+  steps: readonly sEngineSchemaStep[];
+}
+
 /**
  * One uniform node of an Engine execution schema.
  *
  * `module` describes the Step handler for this node.
  * `steps` describes the following local chain; `null` explicitly means that
  * this node has no child chain.
+ * `computedContext` is runtime state resolved from `input.context` by EngineSchema.
  */
 export interface sEngineSchemaStep {
   type: ENGINE_STEP.SEQUENCE;
   data?: unknown;
   input?: sEngineStepInput;
+  computedContext?: sEngineComputedContext;
   output?: sEngineOutput;
   transition?: tEngineTransition;
   module?: string;

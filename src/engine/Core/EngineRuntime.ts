@@ -1,15 +1,13 @@
 import {
   ENGINE_STEP,
+  type sEngineComputedContext,
   type sEngineOutput,
   type sEngineSchemaStep,
 } from './EngineSchemaTsType.js';
 import { EngineSchema } from './EngineSchema.js';
 import type {
   iEngineStep,
-  sEngineExecutionContext,
-  sEngineStepRef,
   tEngineRunDependencies,
-  tEngineStepDefinition,
 } from './EngineStepInterface.js';
 import type {
   sEngineGroupConfig,
@@ -22,26 +20,26 @@ import type { sEngineConfig } from '../EngineConfigTsType.js';
 export class EngineRuntime {
   private readonly groups: Readonly<Record<string, sEngineGroupConfig>>;
   private readonly modules = new Map<string, sEngineRegisteredModule>();
-  private readonly rootDefinitions = new Map<tEngineStepDefinition, sEngineRegisteredModule>();
+  private readonly rootModules = new Set<iEngineStep>();
   private trace: sEngineTraceEntry[] = [];
 
   public constructor(config: sEngineConfig) {
     this.groups = config.groups;
     this.validateGroups();
 
-    for (const [name, definition] of Object.entries(config.modules)) {
-      if (this.rootDefinitions.has(definition)) {
+    for (const [name, module] of Object.entries(config.modules)) {
+      if (this.rootModules.has(module)) {
         throw new Error(`Engine root module is registered more than once: ${name}`);
       }
-      const registered = this.registerModule(name, definition);
-      this.rootDefinitions.set(definition, registered);
+      this.registerModule(name, module);
+      this.rootModules.add(module);
     }
   }
 
   public async run(schema: EngineSchema, dependencies: tEngineRunDependencies = {}): Promise<sEngineRunResult> {
     this.trace = [];
     const root = schema.value;
-    const output = await this.executeSequence(root, root.data, [], undefined, dependencies);
+    const output = await this.executeSequence(schema, root, root.data, [], undefined, dependencies);
     return {
       status: output.status,
       output,
@@ -53,40 +51,34 @@ export class EngineRuntime {
 
   private registerModule(
     name: string,
-    definition: tEngineStepDefinition,
-    lineage: readonly tEngineStepDefinition[] = [],
+    module: iEngineStep,
+    lineage: readonly iEngineStep[] = [],
   ): sEngineRegisteredModule {
     if (!name.trim()) throw new Error('Engine module name must be non-empty.');
     if (this.modules.has(name)) throw new Error(`Duplicate Engine module name: ${name}`);
-    if (lineage.includes(definition)) throw new Error(`Circular Engine module dependency: ${name}`);
+    if (lineage.includes(module)) throw new Error(`Circular Engine module dependency: ${name}`);
+    if (!module || typeof module !== 'object') {
+      throw new Error(`Engine module '${name}' must be an executable object.`);
+    }
+    if (typeof module.getGroup !== 'function') throw new Error(`Engine module '${name}' must expose getGroup().`);
+    if (typeof module.getId !== 'function') throw new Error(`Engine module '${name}' must expose getId().`);
+    if (typeof module.getDependencies !== 'function') throw new Error(`Engine module '${name}' must expose getDependencies().`);
+    if (typeof module.run !== 'function') throw new Error(`Engine module '${name}' must expose run(step, dependencies).`);
 
-    const module = this.resolveDefinition(definition, name);
     const group = module.getGroup();
     if (!group.trim()) throw new Error(`Engine module '${name}' must declare a non-empty group.`);
     if (!this.groups[group]) throw new Error(`Engine module '${name}' references unknown group '${group}'.`);
 
-    const registered = { name, definition, module };
+    const registered = { name, module };
     this.modules.set(name, registered);
 
-    const nextLineage = [...lineage, definition];
-    for (const [dependencyName, dependency] of Object.entries(module.getDependencies() ?? {})) {
+    const nextLineage = [...lineage, module];
+    for (const [dependencyName, dependency] of Object.entries(module.getDependencies())) {
       if (!dependencyName.trim()) throw new Error(`Engine module '${name}' has an empty dependency name.`);
       this.registerModule(`${name}::${dependencyName}`, dependency, nextLineage);
     }
 
     return registered;
-  }
-
-  private resolveDefinition(definition: tEngineStepDefinition, name: string): iEngineStep {
-    const module = typeof definition === 'function' ? new definition() : definition;
-    if (!module || typeof module !== 'object') {
-      throw new Error(`Engine module '${name}' must be an executable object or zero-argument class.`);
-    }
-    if (typeof module.getGroup !== 'function') throw new Error(`Engine module '${name}' must expose getGroup().`);
-    if (typeof module.getId !== 'function') throw new Error(`Engine module '${name}' must expose getId().`);
-    if (typeof module.getDependencies !== 'function') throw new Error(`Engine module '${name}' must expose getDependencies().`);
-    if (typeof module.run !== 'function') throw new Error(`Engine module '${name}' must expose run(request, dependencies).`);
-    return module;
   }
 
   private validateGroups(): void {
@@ -100,6 +92,7 @@ export class EngineRuntime {
   }
 
   private async executeSequence(
+    schema: EngineSchema,
     sequence: sEngineSchemaStep,
     parentInput: unknown,
     path: number[],
@@ -115,8 +108,8 @@ export class EngineRuntime {
       const step = steps[index];
       if (!step) throw new Error(`Missing step ${stepNumber}.`);
 
-      const context = this.buildContext(sequence, index, parentInput, [...path, stepNumber]);
-      const output = await this.executeStep(step, context, [...path, stepNumber], authorityGroup, dependencies);
+      schema.computeContext(sequence, index, parentInput);
+      const output = await this.executeStep(schema, step, sequence, [...path, stepNumber], authorityGroup, dependencies);
       step.output = output;
 
       const transition = step.transition;
@@ -145,23 +138,24 @@ export class EngineRuntime {
   }
 
   private async executeStep(
+    schema: EngineSchema,
     step: sEngineSchemaStep,
-    context: sEngineExecutionContext,
+    parentSequence: sEngineSchemaStep,
     path: number[],
     authorityGroup: string | undefined,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
     this.validateStepShape(step, path);
 
-    if (step.module) return this.executeModule(step, context, path, dependencies);
+    if (step.module) return this.executeModule(step, parentSequence, path, dependencies);
 
-    const childInput = step.data ?? this.contextPayload(context);
-    return this.executeSequence(step, childInput, path, authorityGroup, dependencies);
+    const childInput = step.data ?? this.contextPayload(parentSequence, step.computedContext);
+    return this.executeSequence(schema, step, childInput, path, authorityGroup, dependencies);
   }
 
   private async executeModule(
     step: sEngineSchemaStep,
-    context: sEngineExecutionContext,
+    parentSequence: sEngineSchemaStep,
     path: number[],
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
@@ -172,10 +166,7 @@ export class EngineRuntime {
     if (!registered) throw new Error(`Unknown Engine module: ${moduleName}`);
 
     this.trace.push({ path: [...path], module: registered.name, status: 'STARTED' });
-    const result = await registered.module.run({
-      task: step.data ?? context.parent,
-      context,
-    }, dependencies);
+    const result = await registered.module.run(step, dependencies);
 
     let output: sEngineOutput;
     if (result instanceof EngineSchema) {
@@ -183,8 +174,9 @@ export class EngineRuntime {
       const group = registered.module.getGroup();
       this.validateReturnedSchema(sequence, group);
       output = await this.executeSequence(
+        result,
         sequence,
-        sequence.data ?? step.data ?? this.contextPayload(context),
+        sequence.data ?? step.data ?? this.contextPayload(parentSequence, step.computedContext),
         path,
         group,
         dependencies,
@@ -235,41 +227,21 @@ export class EngineRuntime {
     }
   }
 
-  private buildContext(
+  private contextPayload(
     sequence: sEngineSchemaStep,
-    index: number,
-    parentInput: unknown,
-    path: number[],
-  ): sEngineExecutionContext {
-    const steps = this.requireSteps(sequence, path.slice(0, -1));
-    const config = steps[index]?.input?.context;
-    const selectedSteps: sEngineStepRef[] = [];
+    context: sEngineComputedContext | undefined,
+  ): unknown {
+    if (!context) return undefined;
+    const steps = this.requireSteps(sequence, []);
 
-    for (const stepNumber of config?.steps ?? []) {
-      if (!Number.isInteger(stepNumber) || stepNumber < 1 || stepNumber > index) {
-        throw new Error(`Step ${index + 1} cannot read unavailable local step ${stepNumber}.`);
-      }
-      const target = steps[stepNumber - 1];
-      if (!target?.output) throw new Error(`Local step ${stepNumber} has no output.`);
-      selectedSteps.push({ number: stepNumber, output: target.output });
-    }
-
-    const previous = config?.previous && index > 0 ? steps[index - 1]?.output : undefined;
-
-    return {
-      parent: config?.parent ? parentInput : undefined,
-      previous,
-      steps: selectedSteps,
-      step: index + 1,
-      path,
-    };
-  }
-
-  private contextPayload(context: sEngineExecutionContext): unknown {
     return {
       parent: context.parent,
-      previous: context.previous,
-      steps: Object.fromEntries(context.steps.map((ref) => [ref.number, ref.output])),
+      previous: context.previous?.output,
+      steps: Object.fromEntries(context.steps.map((step) => {
+        const index = steps.indexOf(step);
+        if (index < 0) throw new Error('Computed context references a step outside its local chain.');
+        return [index + 1, step.output];
+      })),
     };
   }
 

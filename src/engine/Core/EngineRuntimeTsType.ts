@@ -1,6 +1,6 @@
 import { ENGINE_STEP, type sEngineOutput } from './EngineSchemaTsType.js';
 import type { EngineSchema } from './EngineSchema.js';
-import type { iEngineStep, tEngineStepDefinition } from './EngineStepInterface.js';
+import type { iEngineStep } from './EngineStepInterface.js';
 
 export interface sEngineGroupSchemaConfig {
   readonly allowedGroups: readonly string[];
@@ -27,6 +27,5 @@ export interface sEngineRunResult {
 
 export interface sEngineRegisteredModule {
   name: string;
-  definition: tEngineStepDefinition;
   module: iEngineStep;
 }
