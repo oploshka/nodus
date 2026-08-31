@@ -12,7 +12,7 @@
         "src/engine/Deprecated/Step/*"
       ],
       "@engine/Planner/*": [
-        "src/engine/Process/Planner/Deprecated/*"
+        "src/engine/Deprecated/Planner/*"
       ],
       "@engine/Determine/*": [
         "src/engine/Process/Determine/*"
@@ -33,10 +33,10 @@
         "src/engine/Process/Edit/*"
       ],
       "@engine/EngineTest/*": [
-        "src/engine/Process/EngineTest/*"
+        "src/engine/Deprecated/EngineTest/*"
       ],
       "@engine/Task/*": [
-        "src/engine/Common/Task/*"
+        "src/engine/Deprecated/Task/*"
       ],
       "@engine/Project/*": [
         "src/engine/Project/*"

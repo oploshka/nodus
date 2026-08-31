@@ -18,13 +18,16 @@ src/engine/
     EngineOld.ts
     Process/
     Step/
+    Planner/
+    EngineTest/
+    Task/
 ```
 
 `Engine.ts` is the public facade. `Core/` owns only generic orchestration mechanics: module registration, group policy, `SEQUENCE`, explicit context projection, transitions and `OUTPUT | SCHEMA` execution.
 
 Semantic groups such as Planner, Worker, Research, Action or Test are not directories required by Core and are not a fixed Core enum. Their names and authority come from initialization config.
 
-The earlier fixed-`STEP` schema runtime is preserved under `Deprecated/Process/` and `Deprecated/Step/`. New Core code must not depend on it.
+The earlier fixed-`STEP` schema runtime is preserved under `Deprecated/Process/` and `Deprecated/Step/`. The old Plan/Planner contracts, Engine-owned test lifecycle and Task/TaskRun model are also preserved under `Deprecated/`. New Core code must not depend on them.
 
 ## Entity directories
 
@@ -52,7 +55,7 @@ A module may inherit convenience behavior from Nodus-owned role classes, but Cor
 
 During architectural migration, incompatible legacy implementations are quarantined under `Deprecated/` instead of distorting the new contract.
 
-The previous production coordinator is `src/engine/Deprecated/EngineOld.ts`. The previous fixed semantic Step runtime is `src/engine/Deprecated/Process/` plus `src/engine/Deprecated/Step/`.
+The previous production coordinator is `src/engine/Deprecated/EngineOld.ts`. The previous fixed semantic Step runtime is `src/engine/Deprecated/Process/` plus `src/engine/Deprecated/Step/`. Legacy `Planner`, `EngineTest`, and `Task` families are likewise kept there because their contracts are tied directly to the previous Engine lifecycle.
 
 Other old-only mechanics should be moved into Deprecated when the new execution path proves they belong only to the previous lifecycle. Preserve them instead of deleting them while the migration is still discovering lost responsibilities.
 
