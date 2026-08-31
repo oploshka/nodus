@@ -1,10 +1,9 @@
-import { PatchApplicator} from "@engine/Process/Edit/Applicator/PatchApplicator.js";
-import type { EditStrategy} from "@engine/Process/Edit/EditStrategy.js";
-import type { EditPreparationContext, EditPrepareResult} from "@engine/Process/Edit/EditTypes.js";
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import { PatchApplicator } from '@engine/Process/Edit/Applicator/PatchApplicator.js';
+import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
+import type { EditPreparationContext, EditPrepareResult } from '@engine/Process/Edit/EditTypes.js';
 import { callDiffFile } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
-import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
+import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 
@@ -12,7 +11,6 @@ export class DiffEditStrategy implements EditStrategy {
   public readonly id = 'diff' as const;
   public constructor(
     private readonly model: ModelRunner,
-    private readonly logger: EngineLogger,
     private readonly language: LanguageConfiguration,
     private readonly guidance: string,
     private readonly maxEditAttempts = 3,
@@ -24,7 +22,7 @@ export class DiffEditStrategy implements EditStrategy {
     let lastError: string | undefined;
     for (let attempt = 1; attempt <= this.maxEditAttempts; attempt += 1) {
       try {
-        const response = await callDiffFile(this.model, this.editModelLogger(), {
+        const response = await callDiffFile(this.model, context.emit, {
           path,
           request: {
             message: attempt === 1 ? 'Apply this concrete project edit using unified diff.' : 'Repair the failed unified-diff edit against the current authoritative file.',
@@ -42,21 +40,19 @@ export class DiffEditStrategy implements EditStrategy {
           },
         });
         const content = this.applicator.apply(context.source, response.hunks, path);
-        if (attempt > 1) this.logger.info('engine.edit.recovered', { strategy: this.id, path, editAttempt: attempt });
+        if (attempt > 1) {
+          context.emit({ type: 'edit.strategy.recovered', data: { strategy: this.id, path, editAttempt: attempt } });
+        }
         return { status: 'completed', path, content, operations: response.hunks.length };
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
-        this.logger.warn('engine.edit.error', { strategy: this.id, path, editAttempt: attempt, maxEditAttempts: this.maxEditAttempts, error: lastError });
+        context.emit({
+          type: 'edit.strategy.retry',
+          level: 'warning',
+          data: { strategy: this.id, path, editAttempt: attempt, maxEditAttempts: this.maxEditAttempts, error: lastError },
+        });
       }
     }
     return { status: 'not-completed', reason: `Diff edit recovery limit reached (${this.maxEditAttempts}) for ${path}. Last error: ${lastError ?? 'unknown edit error'}` };
-  }
-
-  private editModelLogger(): EngineLogger {
-    return {
-      info: (event, data) => this.logger.info(`engine.edit.model.${event}`, data),
-      warn: (event, data) => this.logger.warn(`engine.edit.model.${event}`, data),
-      error: (event, data) => this.logger.error(`engine.edit.model.${event}`, data),
-    };
   }
 }
