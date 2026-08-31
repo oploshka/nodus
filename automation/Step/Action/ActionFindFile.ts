@@ -23,8 +23,7 @@ export class FindFileAction extends EngineStep {
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const input = (step.data ?? step.computedContext?.parent) as sFindFileActionInput;
-    return actionCoreResult(await this.perform(input, dependencies));
+    return actionCoreResult(await this.perform(step.task as sFindFileActionInput, dependencies));
   }
 
   private async perform(input: sFindFileActionInput, dependencies: tEngineRunDependencies) {
