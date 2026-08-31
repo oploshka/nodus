@@ -19,10 +19,10 @@
   },
   "include": [
     "src/**/*.ts",
-    "test/**/*.ts",
-    "target/benchmark/**/*.ts",
-    "target/test-framework/**/*.ts",
-    "target/mock/**/*.ts"
+//    "test/**/*.ts",
+//    "target/benchmark/**/*.ts",
+//    "target/test-framework/**/*.ts",
+//    "target/mock/**/*.ts"
   ],
   "exclude": [
     "dist",

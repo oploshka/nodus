@@ -2,59 +2,11 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@automation/*": [
+        "automation/*"
+      ],
       "@app/*": [
         "src/app/*"
-      ],
-      "@engine/Process/*": [
-        "src/engine/Deprecated/Process/*"
-      ],
-      "@engine/Step/*": [
-        "src/engine/Step/*"
-      ],
-      "@engine/Planner/Deprecated/*": [
-        "src/engine/Deprecated/Planner/*"
-      ],
-      "@engine/Planner/*": [
-        "src/engine/Deprecated/Planner/*"
-      ],
-      "@engine/Determine/*": [
-        "src/engine/Deprecated/Determine/*"
-      ],
-      "@engine/Action/*": [
-        "src/engine/Step/Action/*"
-      ],
-      "@engine/Worker/Deprecated/*": [
-        "src/engine/Deprecated/Worker/*"
-      ],
-      "@engine/Worker/Action/*": [
-        "src/engine/Deprecated/Worker/Action/*"
-      ],
-      "@engine/Worker/*": [
-        "src/engine/Deprecated/Worker/*"
-      ],
-      "@engine/Research/*": [
-        "src/engine/Process/Research/*"
-      ],
-      "@engine/Edit/*": [
-        "src/engine/Process/Edit/*"
-      ],
-      "@engine/EngineTest/*": [
-        "src/engine/Deprecated/EngineTest/*"
-      ],
-      "@engine/Task/*": [
-        "src/engine/Deprecated/Task/*"
-      ],
-      "@engine/Project/*": [
-        "src/engine/Project/*"
-      ],
-      "@engine/Presentation/*": [
-        "src/engine/Common/Presentation/*"
-      ],
-      "@engine/Language/*": [
-        "src/engine/Common/Language/*"
-      ],
-      "@engine/Metrics/*": [
-        "src/engine/Common/Metrics/*"
       ],
       "@engine/*": [
         "src/engine/*"
