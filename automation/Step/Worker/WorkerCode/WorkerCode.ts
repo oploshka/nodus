@@ -3,7 +3,6 @@ import {
   type sEngineSchemaStep,
 } from '@engine/Core/EngineSchemaTsType.js';
 import { EngineSchema } from '@engine/Core/EngineSchema.js';
-import type { sEngineStepRequest } from '@engine/Core/EngineStepInterface.js';
 import { StepWorker } from '@engine/Step/StepWorker.js';
 import {
   readActionCoreResult,
@@ -28,11 +27,12 @@ export default class WorkerCode extends StepWorker {
     return 'WorkerCode';
   }
 
-  public run(request: sEngineStepRequest): EngineSchema {
+  public async run(step: sEngineSchemaStep): Promise<EngineSchema> {
+    const data = step.data ?? step.computedContext?.parent;
     return new EngineSchema({
       type: ENGINE_STEP.SEQUENCE,
-      data: request.task,
-      steps: [this.changeStep(request.task, [])],
+      data,
+      steps: [this.changeStep(data, [])],
     });
   }
 
