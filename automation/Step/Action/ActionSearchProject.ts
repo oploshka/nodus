@@ -1,5 +1,5 @@
-import { FindFileAction } from './FindFileAction.js';
-import type { sFindFileActionInput } from './FindFileAction.js';
+import { FindFileAction } from './ActionFindFile.js';
+import type { sFindFileActionInput } from './ActionFindFile.js';
 
 /** @deprecated Use FindFileAction. SearchProjectAction is kept only for compatibility with older harnesses. */
 export class SearchProjectAction extends FindFileAction {}

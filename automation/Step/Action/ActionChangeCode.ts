@@ -10,6 +10,7 @@ import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
 import { actionCoreResult, readActionCoreData } from './ActionCoreResult.js';
+import type { tActionCoreResult } from './ActionCoreResult.js';
 
 interface ChangeDecision {
   outcome: 'ready' | 'missing-information' | 'already-completed' | 'failed';
@@ -34,6 +35,20 @@ interface ChangeCodeRuntime {
   logger: EngineLogger;
   language: LanguageConfiguration;
 }
+
+interface ChangeCodeActionData {
+  summary: string;
+  edit?: {
+    strategy: 'range-replace';
+    edits: Array<{ path: string; instruction: string }>;
+    settings?: Readonly<Record<string, unknown>>;
+  };
+}
+
+type ChangeCodeRequestInput =
+  | { query: string }
+  | { path: string }
+  | { question: string };
 
 const decisionSchema: ModelResponseSchema = {
   description: 'One bounded attempt to determine the semantic project changes needed for the assigned step.',
@@ -91,7 +106,10 @@ export class ChangeCodeAction {
 class ChangeCodeExecution {
   public constructor(private readonly runtime: ChangeCodeRuntime) {}
 
-  public async run(assignment: ChangeAssignment, context: readonly unknown[]) {
+  public async run(
+    assignment: ChangeAssignment,
+    context: readonly unknown[],
+  ): Promise<tActionCoreResult<ChangeCodeActionData, ChangeCodeRequestInput>> {
     const task = assignment.task?.description ?? '';
     const step = assignment.step?.goal ?? '';
     const decision = await callModel<ChangeDecision>(this.runtime.model, this.runtime.logger, {
@@ -120,29 +138,29 @@ class ChangeCodeExecution {
     });
 
     if (decision.outcome === 'already-completed') {
-      return { status: 'completed' as const, data: { summary: decision.summary ?? 'Requested outcome is already present.' } };
+      return { status: 'completed', data: { summary: decision.summary ?? 'Requested outcome is already present.' } };
     }
     if (decision.outcome === 'failed') {
-      return { status: 'failed' as const, reason: decision.reason ?? 'The task cannot be completed.', canContinue: false as const };
+      return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed.', canContinue: false };
     }
     if (decision.outcome === 'missing-information') {
-      const requests = [
+      const requests: Array<{ actionId: string; input: ChangeCodeRequestInput }> = [
         ...(decision.findFiles ?? []).map((query) => ({ actionId: 'find-file', input: { query: query.trim() } })),
         ...(decision.readFiles ?? []).map((path) => ({ actionId: 'read-file', input: { path: path.trim() } })),
         ...(decision.questions ?? []).map((question) => ({ actionId: 'research', input: { question: question.trim() } })),
       ].filter((request) => Object.values(request.input)[0]).slice(0, 3);
       if (requests.length === 0) throw new Error('Missing-information result has no concrete request.');
-      return { status: 'not-completed' as const, reason: decision.reason ?? 'Additional project context is required.', canContinue: true as const, requests };
+      return { status: 'not-completed', reason: decision.reason ?? 'Additional project context is required.', canContinue: true, requests };
     }
 
     const edits = (decision.edits ?? []).slice(0, 6);
     if (edits.length === 0) throw new Error('Ready result contains no edits.');
-    const normalized = [];
+    const normalized: Array<{ path: string; instruction: string }> = [];
     for (const edit of edits) {
       normalized.push({ path: await this.runtime.fileSystem.resolvePath(edit.path), instruction: edit.instruction.trim() });
     }
     return {
-      status: 'completed' as const,
+      status: 'completed',
       data: {
         summary: decision.summary ?? `Prepared ${normalized.length} project edit intent(s).`,
         edit: { strategy: 'range-replace', edits: normalized, settings: assignment.settings },

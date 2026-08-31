@@ -54,7 +54,7 @@ export class ApplyEditAction {
     if (result.status === 'not-completed') {
       return actionCoreResult({
         status: 'not-completed',
-        reason: result.reason,
+        reason: result.reason ?? 'Edit could not be completed.',
         canContinue: true,
       });
     }
