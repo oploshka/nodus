@@ -19,6 +19,9 @@ export interface sCoreModuleRequest {
   context: sCoreExecutionContext;
 }
 
+/** Runtime-only application dependencies. They are never written into schema/context. */
+export type tCoreRunDependencies = Readonly<Record<string, unknown>>;
+
 export type tCoreModuleResult =
   | {
       type: CORE_MODULE_RESULT.OUTPUT;
@@ -36,7 +39,7 @@ export interface iCoreModule {
   readonly id?: string;
   readonly group: string;
   readonly dependencies?: Readonly<Record<string, tCoreModuleDefinition>>;
-  execute(request: sCoreModuleRequest): Promise<tCoreModuleResult>;
+  execute(request: sCoreModuleRequest, dependencies: tCoreRunDependencies): Promise<tCoreModuleResult>;
 }
 
 export interface sCoreGroupSchemaConfig {
