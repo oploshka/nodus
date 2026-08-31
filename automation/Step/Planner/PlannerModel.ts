@@ -1,4 +1,4 @@
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
@@ -6,9 +6,8 @@ import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { Task } from '@engine/Task/Task.js';
 import type { Plan, PlanStepDecompositionType } from '@engine/Planner/Plan.js';
-import type { Planner} from "@automation/Step/Planner/Planner.js";
-import { PlannerPresentation} from "@engine/Common/Presentation/PlannerPresentation.js";
-import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
+import type { Planner } from '@automation/Step/Planner/Planner.js';
+import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
 
 interface PlannerModelResponse {
   steps: Array<{
@@ -58,10 +57,9 @@ const plannerSchema: ModelResponseSchema = {
 
 /** Legacy-compatible model Planner behavior owned by automation during the 0.5 migration. */
 export class PlannerModel implements Planner {
-  public readonly presentation = new PlannerPresentation();
   public constructor(
     private readonly model: ModelRunner,
-    private readonly logger: EngineLogger,
+    private readonly emit: tEngineEmit,
     private readonly nodusLanguage = 'en',
     private readonly messageTemplate = '##message##',
   ) {}
@@ -71,7 +69,7 @@ export class PlannerModel implements Planner {
       this.messageTemplate,
       'Determine the independently valuable outcomes requested by the user and return the minimum number of PlanSteps needed to represent them.',
     );
-    const response = await callModel<PlannerModelResponse>(this.model, this.logger, {
+    const response = await callModel<PlannerModelResponse>(this.model, this.emit, {
       request: {
         message,
         data: task.description,
