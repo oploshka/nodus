@@ -15,7 +15,9 @@ import { ModelLanguagePolicy } from '@engine/Language/ModelLanguagePolicy.js';
 import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import type { EditStrategyId, ProjectEditRequest } from '@engine/Edit/EditTypes.js';
 import type { tWorkerContextItem } from '@engine/Worker/WorkerContext.js';
+import type { sCoreModuleRequest, tCoreModuleResult } from '@engine/Core/CoreTsType.js';
 import type { sFindFileActionInput } from './ActionFindFile.js';
+import { actionCoreResult, readActionCoreData } from './ActionCoreResult.js';
 
 interface ChangeDecision {
   outcome: 'ready' | 'missing-information' | 'already-completed' | 'failed';
@@ -72,6 +74,7 @@ export type tChangeCodeActionRequest = ResearchActionRequest | ReadActionRequest
 
 /** Worker-side change intent producer. Technical edit serialization belongs to Engine/Edit. */
 export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, ChangeCodeActionData, tChangeCodeActionRequest> {
+  public readonly group = 'action';
   public readonly id = 'change-code';
   public readonly presentation: ActionPresentation;
   public readonly name: string;
@@ -91,6 +94,41 @@ export class ChangeCodeAction implements WorkerAction<ChangeCodeActionInput, Cha
     this.presentation = new ActionPresentation({ name: { en: 'Project change', ru: 'Изменение проекта' }, detail: strategyLabel(profile.strategy) });
     this.name = this.presentation.name();
     this.method = this.presentation.detail();
+  }
+
+  public async execute(request: sCoreModuleRequest): Promise<tCoreModuleResult> {
+    const assignment = request.task as {
+      task?: Task;
+      step?: PlanStep;
+      settings?: ChangeCodeActionInput['settings'];
+    };
+    if (!assignment?.task || !assignment?.step) {
+      return actionCoreResult<ChangeCodeActionData, tChangeCodeActionRequest>({
+        status: 'failed',
+        reason: 'ChangeCodeAction Core task must contain task and step.',
+        canContinue: false,
+      });
+    }
+
+    const context = request.context.steps
+      .map((ref) => readActionCoreData<tWorkerContextItem>(ref.output))
+      .filter((item): item is tWorkerContextItem => item !== undefined);
+
+    try {
+      return actionCoreResult(await this.run({
+        task: assignment.task,
+        step: assignment.step,
+        context,
+        settings: assignment.settings,
+      }));
+    } catch (error) {
+      return actionCoreResult<ChangeCodeActionData, tChangeCodeActionRequest>({
+        status: 'not-completed',
+        reason: error instanceof Error ? error.message : String(error),
+        canContinue: true,
+        retry: true,
+      });
+    }
   }
 
   public async run(context: ChangeCodeActionInput): Promise<ActionResult<ChangeCodeActionData, tChangeCodeActionRequest>> {

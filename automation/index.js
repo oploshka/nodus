@@ -8,7 +8,7 @@ import PlannerTask from '#automation/Planner/PlannerTask/PlannerTask.js';
 import QualifierTask from '#automation/Qualifier/QualifierTask/QualifierTask.js';
 import { ResearchBoundedModelResolver } from '#automation/Research/ResearchBoundedModelResolver.ts';
 import WorkerAgent from '#automation/Worker/WorkerAgent/WorkerAgent.js';
-import WorkerCode from '#automation/Worker/WorkerCode/WorkerCode.js';
+import WorkerCode from '#automation/Deprecated/Worker/WorkerCode/WorkerCode.js';
 import WorkerDocumentation from '#automation/Worker/WorkerDocumentation/WorkerDocumentation.js';
 
 export default {
