@@ -43,6 +43,7 @@ async function main(args: string[]): Promise<void> {
 
   await runCli({
     engine: runtime.engine,
+    dependencies: runtime.dependencies,
     projectId: runtime.target.id,
     scanProject: () => scanProject(runtime.target.scan),
   });
