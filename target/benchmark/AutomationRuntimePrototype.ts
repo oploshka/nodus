@@ -119,12 +119,13 @@ const task = process.argv
   .join(' ') || 'Выбрать подходящий формат конфигурации приложения.';
 
 const automation = await AutomationLoader.load(resolve('automation'));
-const plannerDefinition = automation.PlannerTask as { schema?: unknown };
+const modules = automation.modules as Record<string, unknown>;
+const plannerDefinition = modules.PlannerTask as { schema?: unknown };
 const schema = plannerDefinition.schema;
 if (!schema || typeof schema !== 'object' || (schema as { type?: unknown }).type !== STEP.SEQUENCE) {
   throw new Error('automation PlannerTask schema is not registered');
 }
-if (typeof automation.WorkerCode !== 'function') {
+if (typeof modules.WorkerCode !== 'function') {
   throw new Error('automation WorkerCode class is not registered');
 }
 
