@@ -1,4 +1,6 @@
-import type { sCoreModuleRequest, tCoreModuleResult, tCoreRunDependencies } from '@engine/Core/CoreTsType.js';
+import { EngineStep } from '@engine/Core/EngineStep.js';
+import type { sEngineOutput } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineStepRequest, tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { actionCoreResult } from './ActionCoreResult.js';
 
 interface ResearchRuntime {
@@ -10,18 +12,23 @@ export interface ResearchActionInput {
   settings?: unknown;
 }
 
-export class ResearchAction {
-  public readonly group = 'action';
-  public readonly id = 'research';
-
-  public async execute(
-    request: sCoreModuleRequest,
-    dependencies: tCoreRunDependencies,
-  ): Promise<tCoreModuleResult> {
-    return actionCoreResult(await this.run(request.task as ResearchActionInput, dependencies));
+export class ResearchAction extends EngineStep {
+  public getId(): string {
+    return 'research';
   }
 
-  public async run(input: ResearchActionInput, dependencies: tCoreRunDependencies) {
+  public getGroup(): string {
+    return 'action';
+  }
+
+  public async run(
+    request: sEngineStepRequest,
+    dependencies: tEngineRunDependencies,
+  ): Promise<sEngineOutput> {
+    return actionCoreResult(await this.perform(request.task as ResearchActionInput, dependencies));
+  }
+
+  private async perform(input: ResearchActionInput, dependencies: tEngineRunDependencies) {
     try {
       const research = dependencies.research as ResearchRuntime | undefined;
       if (!research) throw new Error('ActionResearch requires runtime research dependency.');
