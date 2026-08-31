@@ -84,7 +84,7 @@ export class ChangeCodeAction extends EngineStep {
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const assignment = (step.data ?? step.computedContext?.parent) as ChangeAssignment;
+    const assignment = step.task as ChangeAssignment;
     if (!assignment?.task || !assignment?.step) {
       return actionCoreResult({
         status: 'failed',

@@ -1,6 +1,5 @@
 import {
   ENGINE_STEP,
-  type sEngineComputedContext,
   type sEngineOutput,
   type sEngineSchemaStep,
 } from './EngineSchemaTsType.js';
@@ -39,7 +38,7 @@ export class EngineRuntime {
   public async run(schema: EngineSchema, dependencies: tEngineRunDependencies = {}): Promise<sEngineRunResult> {
     this.trace = [];
     const root = schema.value;
-    const output = await this.executeSequence(schema, root, root.data, [], undefined, dependencies);
+    const output = await this.executeSequence(schema, root, root.task, [], undefined, dependencies);
     return {
       status: output.status,
       output,
@@ -109,7 +108,7 @@ export class EngineRuntime {
       if (!step) throw new Error(`Missing step ${stepNumber}.`);
 
       schema.computeContext(sequence, index, parentInput);
-      const output = await this.executeStep(schema, step, sequence, [...path, stepNumber], authorityGroup, dependencies);
+      const output = await this.executeStep(schema, step, [...path, stepNumber], authorityGroup, dependencies);
       step.output = output;
 
       const transition = step.transition;
@@ -140,22 +139,19 @@ export class EngineRuntime {
   private async executeStep(
     schema: EngineSchema,
     step: sEngineSchemaStep,
-    parentSequence: sEngineSchemaStep,
     path: number[],
     authorityGroup: string | undefined,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
     this.validateStepShape(step, path);
 
-    if (step.module) return this.executeModule(step, parentSequence, path, dependencies);
+    if (step.module) return this.executeModule(step, path, dependencies);
 
-    const childInput = step.data ?? this.contextPayload(parentSequence, step.computedContext);
-    return this.executeSequence(schema, step, childInput, path, authorityGroup, dependencies);
+    return this.executeSequence(schema, step, step.task, path, authorityGroup, dependencies);
   }
 
   private async executeModule(
     step: sEngineSchemaStep,
-    parentSequence: sEngineSchemaStep,
     path: number[],
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
@@ -176,7 +172,7 @@ export class EngineRuntime {
       output = await this.executeSequence(
         result,
         sequence,
-        sequence.data ?? step.data ?? this.contextPayload(parentSequence, step.computedContext),
+        sequence.task,
         path,
         group,
         dependencies,
@@ -225,24 +221,6 @@ export class EngineRuntime {
         throw new Error(`Schema from group '${ownerGroup}' cannot call group '${targetGroup}' via module '${step.module}'.`);
       }
     }
-  }
-
-  private contextPayload(
-    sequence: sEngineSchemaStep,
-    context: sEngineComputedContext | undefined,
-  ): unknown {
-    if (!context) return undefined;
-    const steps = this.requireSteps(sequence, []);
-
-    return {
-      parent: context.parent,
-      previous: context.previous?.output,
-      steps: Object.fromEntries(context.steps.map((step) => {
-        const index = steps.indexOf(step);
-        if (index < 0) throw new Error('Computed context references a step outside its local chain.');
-        return [index + 1, step.output];
-      })),
-    };
   }
 
   private applyTransition(

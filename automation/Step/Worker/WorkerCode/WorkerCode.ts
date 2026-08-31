@@ -28,19 +28,19 @@ export default class WorkerCode extends StepWorker {
   }
 
   public async run(step: sEngineSchemaStep): Promise<EngineSchema> {
-    const data = step.data ?? step.computedContext?.parent;
+    const task = step.task;
     return new EngineSchema({
       type: ENGINE_STEP.SEQUENCE,
-      data,
-      steps: [this.changeStep(data, [])],
+      task,
+      steps: [this.changeStep(task, [])],
     });
   }
 
-  private changeStep(data: unknown, contextSteps: readonly number[]): sEngineSchemaStep {
+  private changeStep(task: unknown, contextSteps: readonly number[]): sEngineSchemaStep {
     return {
       type: ENGINE_STEP.SEQUENCE,
       module: ACTION_CODE_CHANGE,
-      data,
+      task,
       input: {
         context: {
           parent: true,
@@ -60,14 +60,14 @@ export default class WorkerCode extends StepWorker {
     const result = readActionCoreResult(step.output);
     if (!result) return;
 
-    const data = step.data ?? sequence.data;
+    const task = step.task;
 
     if (result.status === 'completed') {
       if (hasEdit(result.data)) {
         this.replaceTail(sequence, stepNumber, [{
           type: ENGINE_STEP.SEQUENCE,
           module: ACTION_EDIT_APPLY,
-          data,
+          task,
           input: { context: { previous: true } },
           steps: null,
         }]);
@@ -80,7 +80,7 @@ export default class WorkerCode extends StepWorker {
 
     if (result.retry) {
       this.replaceTail(sequence, stepNumber, [
-        this.changeStep(data, this.contextSteps(sequence, stepNumber + 1)),
+        this.changeStep(task, this.contextSteps(sequence, stepNumber + 1)),
       ]);
       return;
     }
@@ -97,13 +97,13 @@ export default class WorkerCode extends StepWorker {
       planned.map(({ module, input }) => ({
         type: ENGINE_STEP.SEQUENCE,
         module,
-        data: input,
+        task: input,
         steps: null,
       })),
     );
 
     sequenceSteps(sequence).push(
-      this.changeStep(data, this.contextSteps(sequence, sequenceSteps(sequence).length + 1)),
+      this.changeStep(task, this.contextSteps(sequence, sequenceSteps(sequence).length + 1)),
     );
   }
 
@@ -155,7 +155,7 @@ export default class WorkerCode extends StepWorker {
     return previousSteps(
       sequence,
       stepNumber + 1,
-      (step) => step.module === candidate.module && sameValue(step.data, candidate.input),
+      (step) => step.module === candidate.module && sameValue(step.task, candidate.input),
     ).length > 0;
   }
 

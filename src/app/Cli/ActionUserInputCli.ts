@@ -17,7 +17,7 @@ export class ActionUserInputCli extends EngineStep {
   ): Promise<sEngineOutput> {
     return {
       status: 'SUCCESS',
-      value: step.data ?? step.computedContext?.parent,
+      value: step.task,
     };
   }
 }

@@ -93,17 +93,19 @@ async function main(args: string[]): Promise<void> {
 function createCliSchema(input: string): EngineSchema {
   return new EngineSchema({
     type: ENGINE_STEP.SEQUENCE,
-    data: input,
+    task: input,
     steps: [
       {
         type: ENGINE_STEP.SEQUENCE,
         module: ACTION_USER_INPUT_CLI,
+        task: input,
         input: { context: { parent: true } },
         steps: null,
       },
       {
         type: ENGINE_STEP.SEQUENCE,
         module: PLANNER,
+        task: input,
         input: { context: { previous: true } },
         steps: null,
       },

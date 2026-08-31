@@ -22,8 +22,7 @@ export class ReadFileAction extends EngineStep {
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const input = (step.data ?? step.computedContext?.parent) as sReadFileActionInput;
-    return actionCoreResult(await this.perform(input, dependencies));
+    return actionCoreResult(await this.perform(step.task as sReadFileActionInput, dependencies));
   }
 
   private async perform(input: sReadFileActionInput, dependencies: tEngineRunDependencies) {

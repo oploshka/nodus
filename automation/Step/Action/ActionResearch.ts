@@ -25,8 +25,7 @@ export class ResearchAction extends EngineStep {
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const input = (step.data ?? step.computedContext?.parent) as ResearchActionInput;
-    return actionCoreResult(await this.perform(input, dependencies));
+    return actionCoreResult(await this.perform(step.task as ResearchActionInput, dependencies));
   }
 
   private async perform(input: ResearchActionInput, dependencies: tEngineRunDependencies) {
