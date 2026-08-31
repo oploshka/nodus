@@ -19,43 +19,20 @@ export interface sEngineStepInput {
 }
 
 /**
- * Common description of one node in an Engine schema.
+ * One uniform node of an Engine execution schema.
  *
- * A node is either a concrete module step (`module`) or a structural
- * `SEQUENCE` (`type` + `steps`). Runtime result handling does not add another
- * schema shape: a Step may return data or a new EngineSchema independently.
+ * `module` describes the Step handler for this node.
+ * `steps` describes the following local chain; `null` explicitly means that
+ * this node has no child chain.
  */
 export interface sEngineSchemaStep {
-  task?: unknown;
+  type: ENGINE_STEP.SEQUENCE;
+  data?: unknown;
   input?: sEngineStepInput;
   output?: sEngineOutput;
   transition?: tEngineTransition;
   module?: string;
-  type?: ENGINE_STEP.SEQUENCE;
-  steps?: sEngineSchemaStep[];
+  steps: sEngineSchemaStep[] | null;
 }
 
-/** Runtime narrowing for a concrete module step. */
-export type sEngineModuleStep = sEngineSchemaStep & {
-  module: string;
-  type?: never;
-  steps?: never;
-};
-
-/** Runtime narrowing for the structural SEQUENCE primitive. */
-export type sEngineSequence = sEngineSchemaStep & {
-  type: ENGINE_STEP.SEQUENCE;
-  module?: never;
-  steps: sEngineSchemaStep[];
-};
-
-export type tEngineSchemaStep = sEngineSchemaStep;
-export type tEngineTransition = (sequence: sEngineSequence, stepNumber: number) => void;
-
-export function isEngineSequence(step: sEngineSchemaStep): step is sEngineSequence {
-  return step.type === ENGINE_STEP.SEQUENCE;
-}
-
-export function isEngineModuleStep(step: sEngineSchemaStep): step is sEngineModuleStep {
-  return typeof step.module === 'string' && step.module.length > 0;
-}
+export type tEngineTransition = (sequence: sEngineSchemaStep, stepNumber: number) => void;
