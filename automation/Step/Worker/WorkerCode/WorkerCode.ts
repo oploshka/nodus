@@ -60,7 +60,7 @@ export default class WorkerCode extends StepWorker {
     const result = readActionCoreResult(step.output);
     if (!result) return;
 
-    const task = step.task ?? sequence.task;
+    const task = step.task;
 
     if (result.status === 'completed') {
       if (hasEdit(result.data)) {
