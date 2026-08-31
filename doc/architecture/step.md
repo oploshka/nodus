@@ -28,6 +28,12 @@ There are deliberately no role-specific runners. A `WorkerRunner`, `PlannerRunne
 
 `*TsType` files are intentionally thin extension points today. Role-specific request/output/schema types should only grow when a real semantic difference appears.
 
+## Worker schema
+
+`automation/Worker/WorkerCode/WorkerCode.ts` is the first migration of a legacy Worker lifecycle into schema. Retry attempts, retrieval/research routing, request limits, explicit accumulated context and edit application are represented by the returned `SEQUENCE` and its transitions. Core executes that schema; there is no active Worker-specific runtime loop.
+
+The old `WorkerIterativeRunner` remains under `src/engine/Deprecated/Worker/` only for `EngineOld` compatibility while the remaining automation is migrated.
+
 ## Determine
 
 `Determine` is not active as a separate group. Its previous bounded option-selection contract is preserved under `src/engine/Deprecated/Determine/`; the active `Step/Determine/README.md` records that the responsibility is currently treated as qualification/classification.

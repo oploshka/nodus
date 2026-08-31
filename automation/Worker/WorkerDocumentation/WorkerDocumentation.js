@@ -1,4 +1,4 @@
-import { WorkerIterativeRunner } from '../../../src/engine/Process/Worker/Deprecated/WorkerIterativeRunner.ts';
+import { WorkerIterativeRunner } from '../../../src/engine/Deprecated/Worker/WorkerIterativeRunner.ts';
 import { WorkerPresentation } from '../../../src/engine/Common/Presentation/WorkerPresentation.ts';
 
 /** Legacy production Documentation Worker. New Process Worker implementations use Worker/Contract. */

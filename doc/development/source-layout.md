@@ -27,6 +27,7 @@ src/engine/
     Process/
     Step/
     Planner/
+    Worker/
     Determine/
     EngineTest/
     Task/
@@ -36,7 +37,7 @@ src/engine/
 
 `Step/` contains only small Nodus-owned convenience contracts for semantic module groups. It does not own execution runners. User modules remain structural and do not need to inherit these classes.
 
-The earlier fixed-`STEP` schema runtime is preserved under `Deprecated/Process/` and `Deprecated/Step/`. The old Plan/Planner, Determine, Engine-owned test lifecycle and Task/TaskRun models are also preserved under `Deprecated/`. New Core code must not depend on them.
+The earlier fixed-`STEP` schema runtime is preserved under `Deprecated/Process/` and `Deprecated/Step/`. The old Plan/Planner, Worker runtime, Determine, Engine-owned test lifecycle and Task/TaskRun models are also preserved under `Deprecated/`. New Core code must not depend on them.
 
 `Process/Edit` and `Process/Research` remain in place while the new execution path is still establishing their eventual ownership.
 
@@ -62,11 +63,13 @@ Concrete executable behavior belongs in `automation/` when it is replaceable use
 
 A module may inherit convenience behavior from Nodus-owned Step classes, but Core accepts it structurally. User modules do not need to inherit a Nodus interface or base class if their executable shape matches the Core contract.
 
+Worker orchestration belongs in the Worker schema. The active `automation/Worker/WorkerCode/WorkerCode.ts` expresses its retry/retrieval/edit lifecycle as `SEQUENCE` transitions; the old imperative Worker implementation is kept under automation and engine `Deprecated/` paths only for `EngineOld` compatibility.
+
 ## Deprecated directories
 
 During architectural migration, incompatible legacy implementations are quarantined under `Deprecated/` instead of distorting the new contract.
 
-The previous production coordinator is `src/engine/Deprecated/EngineOld.ts`. The previous fixed semantic Step runtime is `src/engine/Deprecated/Process/` plus `src/engine/Deprecated/Step/`. Legacy `Planner`, `Determine`, `EngineTest`, and `Task` families are likewise kept there because their contracts are tied to previous execution models.
+The previous production coordinator is `src/engine/Deprecated/EngineOld.ts`. The previous fixed semantic Step runtime is `src/engine/Deprecated/Process/` plus `src/engine/Deprecated/Step/`. Legacy `Planner`, `Worker`, `Determine`, `EngineTest`, and `Task` families are likewise kept there because their contracts are tied to previous execution models.
 
 Other old-only mechanics should be moved into Deprecated when the new execution path proves they belong only to the previous lifecycle. Preserve them instead of deleting them while the migration is still discovering lost responsibilities.
 

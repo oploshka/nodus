@@ -11,6 +11,9 @@
       "@engine/Step/*": [
         "src/engine/Step/*"
       ],
+      "@engine/Planner/Deprecated/*": [
+        "src/engine/Deprecated/Planner/*"
+      ],
       "@engine/Planner/*": [
         "src/engine/Deprecated/Planner/*"
       ],
@@ -20,11 +23,14 @@
       "@engine/Action/*": [
         "src/engine/Step/Action/*"
       ],
+      "@engine/Worker/Deprecated/*": [
+        "src/engine/Deprecated/Worker/*"
+      ],
       "@engine/Worker/Action/*": [
-        "src/engine/Process/Worker/Deprecated/Action/*"
+        "src/engine/Deprecated/Worker/Action/*"
       ],
       "@engine/Worker/*": [
-        "src/engine/Process/Worker/Deprecated/*"
+        "src/engine/Deprecated/Worker/*"
       ],
       "@engine/Research/*": [
         "src/engine/Process/Research/*"

@@ -2,6 +2,8 @@ import { ActionPresentation } from '@engine/Presentation/ActionPresentation.js';
 import type { iProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import type { WorkerAction } from '@engine/Worker/Action/WorkerAction.js';
 import type { sWorkerSearchContext } from '@engine/Worker/WorkerContext.js';
+import type { sCoreModuleRequest, tCoreModuleResult } from '@engine/Core/CoreTsType.js';
+import { actionCoreResult } from './ActionCoreResult.js';
 
 export interface sFindFileActionInput {
   query: string;
@@ -10,12 +12,17 @@ export interface sFindFileActionInput {
 
 /** Cheap bounded lookup that locates project file paths without reading file content. */
 export class FindFileAction implements WorkerAction<sFindFileActionInput, sWorkerSearchContext> {
+  public readonly group = 'action';
   public readonly id = 'find-file';
   public readonly presentation = new ActionPresentation({ name: { en: 'Find file', ru: 'Поиск файла' } });
   public readonly name = this.presentation.name();
   public readonly description = 'Locate likely project file paths without reading file contents or model analysis.';
 
   public constructor(private readonly index: iProjectFileIndex, private readonly maxResults = 12) {}
+
+  public async execute(request: sCoreModuleRequest): Promise<tCoreModuleResult> {
+    return actionCoreResult(await this.run(request.task as sFindFileActionInput));
+  }
 
   public async run(input: sFindFileActionInput) {
     const query = input.query.trim();
