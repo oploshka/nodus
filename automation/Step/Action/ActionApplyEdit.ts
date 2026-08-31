@@ -33,7 +33,7 @@ export class ApplyEditAction extends EngineStep {
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const assignment = (step.data ?? step.computedContext?.parent) as { task?: unknown; step?: unknown };
+    const assignment = step.task as { task?: unknown; step?: unknown };
     if (!assignment?.task || !assignment?.step) {
       return actionCoreResult({
         status: 'failed',
