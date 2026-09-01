@@ -1,34 +1,23 @@
-import type { EngineModule } from './EngineModule.js';
+import type { EnginePoint } from './EnginePoint.js';
+import type { iEngineStep } from './EngineStepInterface.js';
 
-export type tEngineDslDecision =
-  | { type: 'run'; module: EngineModule; input?: unknown }
-  | { type: 'end'; output?: unknown }
-  | { type: 'fail'; reason: string };
+type tRunStep = (step: iEngineStep, input?: unknown) => Promise<unknown>;
+type tRunPoint = (point: EnginePoint, input?: unknown) => Promise<unknown>;
 
-/** Response-scoped DSL. It records one decision; EngineRuntime applies it. */
+/** Runtime-bound API available while a parent Step handles a Point result. */
 export class EngineDsl {
-  private decision?: tEngineDslDecision;
+  public constructor(
+    private readonly executeStep: tRunStep,
+    private readonly executePoint: tRunPoint,
+  ) {}
 
-  public run(module: EngineModule, input?: unknown): void {
-    this.set({ type: 'run', module, input });
+  /** Runs another Step as a child execution and returns its completed value. */
+  public runStep(step: iEngineStep, input?: unknown): Promise<unknown> {
+    return this.executeStep(step, input);
   }
 
-  public end(output?: unknown): void {
-    this.set({ type: 'end', output });
-  }
-
-  public fail(reason: string): void {
-    this.set({ type: 'fail', reason });
-  }
-
-  public take(): tEngineDslDecision | undefined {
-    const decision = this.decision;
-    this.decision = undefined;
-    return decision;
-  }
-
-  private set(decision: tEngineDslDecision): void {
-    if (this.decision) throw new Error('Engine DSL response produced more than one decision.');
-    this.decision = decision;
+  /** Continues the current parent Step through another declared Point. */
+  public runPoint(point: EnginePoint, input?: unknown): Promise<unknown> {
+    return this.executePoint(point, input);
   }
 }
