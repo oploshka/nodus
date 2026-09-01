@@ -6,7 +6,7 @@ export type tEnginePointContext = Record<string, unknown>;
 export type tEnginePointResponse = (
   result: unknown,
   dsl: EngineDsl,
-) => unknown | Promise<unknown>;
+) => Promise<unknown>;
 
 export interface sEnginePointConfig {
   step: iEngineStep;
