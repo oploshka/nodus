@@ -46,4 +46,27 @@ describe('ConsoleEventSubscriber', () => {
     expect(output).toContain('⚠ Замена не применена · уточняю · попытка 1');
     expect(output).toContain('✓ Подготовлено · 2 операций');
   });
+
+  it('does not present a Step FAILURE result as a terminal console error', () => {
+    const lines: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((value?: unknown) => lines.push(String(value ?? '')));
+    vi.spyOn(console, 'error').mockImplementation((value?: unknown) => lines.push(String(value ?? '')));
+
+    const consoleEvents = new ConsoleEventSubscriber('ru');
+    const step = new TestAction();
+    const base = { path: [1, 1, 1] as const, module: 'ActionCodeChange', step };
+
+    consoleEvents.handle({ ...base, event: { type: 'step.start' } });
+    consoleEvents.handle({
+      ...base,
+      event: {
+        type: 'step.finish',
+        data: { status: 'FAILURE', reason: 'Additional project context is required.' },
+      },
+    });
+
+    expect(lines.join('\n')).toContain('[Action] change-code');
+    expect(lines.join('\n')).not.toContain('Additional project context is required.');
+    expect(lines.join('\n')).not.toContain('✗');
+  });
 });
