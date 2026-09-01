@@ -16,7 +16,7 @@ export interface RangeReplaceOperation {
  * large surrounding block. Line numbers are hints; `expected` is the guard.
  * All operations are resolved against one snapshot and applied bottom-up.
  */
-export class RangeReplaceApplicator {
+export class EditApplicatorRangeReplace {
   public apply(content: string, operations: RangeReplaceOperation[], path: string): string {
     if (operations.length === 0) return content;
 

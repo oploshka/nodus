@@ -13,7 +13,7 @@ export interface ReplaceOperation {
  * source snapshot, then applies them from bottom to top so earlier edits cannot
  * shift later locations.
  */
-export class ReplaceApplicator {
+export class EditApplicatorReplace {
   public apply(content: string, operations: ReplaceOperation[], path: string): string {
     if (operations.length === 0) return content;
 

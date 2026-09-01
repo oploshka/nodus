@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ReplaceApplicator } from '@engine/Edit/Applicator/ReplaceApplicator.js';
+import { ReplaceApplicator } from '@engine/Edit/Applicator/EditApplicatorReplace.js';
 
-describe('ReplaceApplicator', () => {
+describe('EditApplicatorReplace', () => {
   it('uses line as a hint and validates the exact before block', () => {
     const source = ['one', 'two', 'three', 'four', ''].join('\n');
     const result = new ReplaceApplicator().apply(source, [{

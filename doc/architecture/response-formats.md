@@ -127,7 +127,7 @@ Format handler занимается только JSON parsing. Все ожида
 
 ```text
 model -> unified diff -> DiffResponseFormatHandler -> JS object -> schema
-engine -> PatchApplicator -> file
+engine -> EditApplicatorPatch -> file
 ```
 
 ## Не создавать mini-language на каждую операцию

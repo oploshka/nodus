@@ -1,7 +1,7 @@
 import type { EditValidationCheck, EditValidationResult} from "@engine/Process/Edit/Validation/EditValidator.js";
 
 /** Strict JSON parse is informational for now: JSON-like example/config files may intentionally contain comments. */
-export class JsonEditValidationCheck implements EditValidationCheck {
+export class EditValidationJsonCheck implements EditValidationCheck {
   public readonly id = 'json';
 
   public async validate(change: { path: string; content: string }): Promise<EditValidationResult | undefined> {

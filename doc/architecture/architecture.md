@@ -81,7 +81,7 @@ Edit принадлежит Engine и живёт в пределах одной 
 7. физически записывает выбранное состояние через `apply()`;
 8. при ошибке записи выполняет best-effort rollback.
 
-`JsonEditValidationCheck` сейчас выдаёт warning при strict JSON parse failure и не блокирует изменение.
+`EditValidationJsonCheck` сейчас выдаёт warning при strict JSON parse failure и не блокирует изменение.
 
 ## Research
 

@@ -1,6 +1,6 @@
 import type { UnifiedDiffHunk } from '@model/Response/Format/DiffResponseFormatHandler.js';
 
-export class PatchApplicator {
+export class EditApplicatorPatch {
   public apply(content: string, hunks: UnifiedDiffHunk[], path: string): string {
     const eol = content.includes('\r\n') ? '\r\n' : '\n';
     const normalized = content.replace(/\r\n/g, '\n');

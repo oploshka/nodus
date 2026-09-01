@@ -56,7 +56,7 @@ Research, вызванный из `IterativeWorker`, читает source content
 
 `EditValidator` получает подготовленный batch до его добавления в накопленное состояние. Checks возвращают результаты `passed / warning / failed`.
 
-Первый check — `JsonEditValidationCheck`. Он делает strict `JSON.parse`, но parse failure пока является только `warning`: example/config файлы могут намеренно содержать JSON-like syntax, комментарии или другие отклонения от strict JSON.
+Первый check — `EditValidationJsonCheck`. Он делает strict `JSON.parse`, но parse failure пока является только `warning`: example/config файлы могут намеренно содержать JSON-like syntax, комментарии или другие отклонения от strict JSON.
 
 Blocking `failed` зарезервирован для проверок, при которых prepared batch действительно нельзя принимать. При наличии такого результата `change()` не меняет накопленное состояние.
 

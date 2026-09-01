@@ -12,7 +12,7 @@ import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js
 interface EditFileResponse { path: string; content: string }
 const schema: ModelResponseSchema = { description: 'Complete resulting content for one authoritative file.', fields: { path: { type: 'string' }, content: { type: 'string' } } };
 
-export class FullFileEditStrategy implements EditStrategy {
+export class EditStrategyFullFile implements EditStrategy {
   public readonly id = 'edit' as const;
   public constructor(
     private readonly fileSystem: FileSystem,

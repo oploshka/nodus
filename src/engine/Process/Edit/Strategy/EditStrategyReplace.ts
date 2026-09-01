@@ -1,4 +1,4 @@
-import { ReplaceApplicator, type ReplaceOperation } from '@engine/Process/Edit/Applicator/ReplaceApplicator.js';
+import { EditApplicatorReplace, type ReplaceOperation } from '@engine/Process/Edit/Applicator/EditApplicatorReplace.js';
 import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
 import type { EditPreparationContext, EditPrepareResult } from '@engine/Process/Edit/EditTypes.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
@@ -13,7 +13,7 @@ import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js
 interface ReplaceFileResponse { path: string; operations: ReplaceOperation[] }
 const schema: ModelResponseSchema = { description: 'Exact guarded replacements for one authoritative file.', fields: { path: { type: 'string' }, operations: { type: 'array', items: { type: 'object', fields: { line: { type: 'number' }, before: { type: 'string' }, after: { type: 'string' } } } } } };
 
-export class ReplaceEditStrategy implements EditStrategy {
+export class EditStrategyReplace implements EditStrategy {
   public readonly id = 'replace' as const;
   public constructor(
     private readonly fileSystem: FileSystem,
@@ -21,7 +21,7 @@ export class ReplaceEditStrategy implements EditStrategy {
     private readonly language: LanguageConfiguration,
     private readonly guidance: string,
     private readonly maxEditAttempts = 2,
-    private readonly applicator = new ReplaceApplicator(),
+    private readonly applicator = new EditApplicatorReplace(),
   ) {}
 
   public async prepare(context: EditPreparationContext): Promise<EditPrepareResult> {

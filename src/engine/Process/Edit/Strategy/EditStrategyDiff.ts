@@ -1,4 +1,4 @@
-import { PatchApplicator } from '@engine/Process/Edit/Applicator/PatchApplicator.js';
+import { EditApplicatorPatch } from '@engine/Process/Edit/Applicator/EditApplicatorPatch.js';
 import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
 import type { EditPreparationContext, EditPrepareResult } from '@engine/Process/Edit/EditTypes.js';
 import { callDiffFile } from '@model/Runner/ModelCaller.js';
@@ -7,14 +7,14 @@ import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 
-export class DiffEditStrategy implements EditStrategy {
+export class EditStrategyDiff implements EditStrategy {
   public readonly id = 'diff' as const;
   public constructor(
     private readonly model: ModelRunner,
     private readonly language: LanguageConfiguration,
     private readonly guidance: string,
     private readonly maxEditAttempts = 3,
-    private readonly applicator = new PatchApplicator(),
+    private readonly applicator = new EditApplicatorPatch(),
   ) {}
 
   public async prepare(context: EditPreparationContext): Promise<EditPrepareResult> {

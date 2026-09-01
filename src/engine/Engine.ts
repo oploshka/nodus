@@ -6,8 +6,8 @@ import type { sEngineRunResult } from './Core/EngineRuntimeTsType.js';
 import type { tEngineEventListener, tEngineRunDependencies } from './Core/EngineStepInterface.js';
 import type { sEngineConfig } from './EngineConfigTsType.js';
 import { ProjectEditor } from './Process/Edit/ProjectEditor.js';
-import { DiffEditStrategy } from './Process/Edit/Strategy/DiffEditStrategy.js';
-import { RangeReplaceEditStrategy } from './Process/Edit/Strategy/RangeReplaceEditStrategy.js';
+import { EditStrategyDiff } from './Process/Edit/Strategy/EditStrategyDiff.js';
+import { EditStrategyRangeReplace } from './Process/Edit/Strategy/EditStrategyRangeReplace.js';
 import type { LanguageConfiguration } from './Type/LanguageConfiguration.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 
@@ -49,8 +49,8 @@ function createRunEdit(dependencies: tEngineRunDependencies): ProjectEditor | un
   if (!target?.fileSystem || !model || !language) return undefined;
 
   return new ProjectEditor(target.fileSystem, [
-    new RangeReplaceEditStrategy(target.fileSystem, model, language, EDIT_GUIDANCE),
-    new DiffEditStrategy(model, language, EDIT_GUIDANCE),
+    new EditStrategyRangeReplace(target.fileSystem, model, language, EDIT_GUIDANCE),
+    new EditStrategyDiff(model, language, EDIT_GUIDANCE),
   ]);
 }
 

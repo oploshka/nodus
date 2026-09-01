@@ -1,4 +1,4 @@
-import { RangeReplaceApplicator, type RangeReplaceOperation } from '@engine/Process/Edit/Applicator/RangeReplaceApplicator.js';
+import { EditApplicatorRangeReplace, type RangeReplaceOperation } from '@engine/Process/Edit/Applicator/EditApplicatorRangeReplace.js';
 import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
 import type { EditPreparationContext, EditPrepareResult } from '@engine/Process/Edit/EditTypes.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
@@ -22,7 +22,7 @@ const schema: ModelResponseSchema = {
   },
 };
 
-export class RangeReplaceEditStrategy implements EditStrategy {
+export class EditStrategyRangeReplace implements EditStrategy {
   public readonly id = 'range-replace' as const;
   public constructor(
     private readonly fileSystem: FileSystem,
@@ -30,7 +30,7 @@ export class RangeReplaceEditStrategy implements EditStrategy {
     private readonly language: LanguageConfiguration,
     private readonly guidance: string,
     private readonly maxEditAttempts = 2,
-    private readonly applicator = new RangeReplaceApplicator(),
+    private readonly applicator = new EditApplicatorRangeReplace(),
   ) {}
 
   public async prepare(context: EditPreparationContext): Promise<EditPrepareResult> {

@@ -119,7 +119,7 @@ Research, вызванный из `WorkerIterativeRunner`, может читат
 
 Technical recovery/fallback остаётся внутри Edit. Последующие изменения одного файла работают относительно уже накопленного content.
 
-`EditValidator` проверяет подготовленный batch до попадания в task-local state. `JsonEditValidationCheck` сейчас трактует strict JSON parse failure как warning, а не blocking failure.
+`EditValidator` проверяет подготовленный batch до попадания в task-local state. `EditValidationJsonCheck` сейчас трактует strict JSON parse failure как warning, а не blocking failure.
 
 `WorkerAgent` использует generic Core `WorkerAgentRunner`, который подключает `file-system read/write` к Edit. Search/Terminal/Git пока продолжают видеть физический Project. Create/delete/move в task-local Edit пока не поддержаны.
 
