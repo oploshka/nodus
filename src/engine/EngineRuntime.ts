@@ -1,8 +1,8 @@
 import { EngineDsl } from './EngineDsl.js';
-import { EngineModule } from './EngineModule.js';
+import { EnginePoint } from './EnginePoint.js';
 import type { iEngineStep, tEngineRunDependencies } from './EngineStepInterface.js';
 
-/** Minimal DSL-first runtime. Schema/history integration is intentionally absent for now. */
+/** Minimal point-based runtime. Schema/history integration remains intentionally absent. */
 export class EngineRuntime {
   public async run(
     step: iEngineStep,
@@ -18,30 +18,25 @@ export class EngineRuntime {
     dependencies: tEngineRunDependencies,
   ): Promise<unknown> {
     const result = await step.run(input, dependencies);
-    if (result instanceof EngineModule) {
-      return this.executeModule(result, input, dependencies);
+    if (result instanceof EnginePoint) {
+      return this.executePoint(result, input, dependencies);
     }
     return result;
   }
 
-  private async executeModule(
-    module: EngineModule,
+  private async executePoint(
+    point: EnginePoint,
     input: unknown,
     dependencies: tEngineRunDependencies,
   ): Promise<unknown> {
-    const result = await this.executeStep(module.dependency, input, dependencies);
-    if (!module.response) return result;
+    const result = await this.executeStep(point.step, input, dependencies);
+    if (!point.response) return result;
 
-    const dsl = new EngineDsl();
-    await module.response(result, dsl);
-    const decision = dsl.take();
-    if (!decision) return result;
+    const dsl = new EngineDsl(
+      (step, childInput) => this.executeStep(step, childInput, dependencies),
+      (nextPoint, nextInput) => this.executePoint(nextPoint, nextInput, dependencies),
+    );
 
-    if (decision.type === 'run') {
-      return this.executeModule(decision.module, decision.input, dependencies);
-    }
-    if (decision.type === 'end') return decision.output;
-
-    throw new Error(decision.reason);
+    return point.response(result, dsl);
   }
 }
