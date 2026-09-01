@@ -1,183 +1,236 @@
 # Текущее состояние / handoff
 
-Этот документ — короткая точка восстановления контекста. Он описывает текущее состояние Nodus 0.5, а не историю всех архитектурных решений.
+Этот документ — короткая точка восстановления контекста. Он описывает фактический active path Nodus 0.5 на `develop`, а не историю всех архитектурных решений и не целевую идеальную архитектуру.
+
+Если специализированный architecture-документ противоречит этому handoff в области текущей миграции 0.5, сначала проверять active code. Часть Planner/Worker/Research/EngineTest документации ещё содержит полезное описание 0.4 boundaries и требует постепенного обновления.
 
 ## Архитектурная модель
 
 Верхние слои:
 
-- `app` — startup, composition, CLI и concrete logging;
-- `engine` — task lifecycle, Process runtime, Planner, Worker, Research, Edit и EngineTest;
-- `model` — граница с LLM/provider transport, response formats/schema, `ModelRunner`/`ModelCaller` и model capabilities.
+- `app` — startup/composition, CLI, concrete event subscribers и project/model wiring;
+- `engine` — schema execution Core, Step contracts, task-level Edit и Project mechanics;
+- `model` — LLM/provider transport, request/response formats, `ModelRunner`/`ModelCaller` и model capabilities;
+- `automation` — конкретная versioned поставка Planner/Worker/Action behavior поверх Engine contracts.
 
-Версия 0.5 фиксирует переход к schema-driven Process runtime. Core определяет фиксированные `STEP`, исполняет `SEQUENCE`, хранит local context/output и разрешает controlled transition хвоста. Planner и Worker могут вернуть Core локальную schema; automation определяет конкретное versioned поведение, но не исполняет schema самостоятельно.
+Nodus 0.5 перешёл от старого fixed Planner/Worker production loop к schema-driven execution Core. Основной active runtime находится в `src/engine/Core/`.
 
-Новый Process contract уже существует рядом с production Engine path. Полная миграция Engine lifecycle на Process ещё не завершена, поэтому часть 0.4 mechanics пока остаётся compatibility path.
+## Core / EngineSchema
 
-## Process / automation
+Активный Core состоит вокруг:
 
-`src/engine/Process/` содержит execution mechanics. `src/engine/Automation/` содержит только loader versioned automation package.
+- `EngineRuntime` — регистрация modules, проверка group boundaries и исполнение working schema;
+- `EngineSchema` — mutable working execution schema и context resolution;
+- `EngineStep` / `iEngineStep` — единый module contract;
+- `AutomationLoader` — загрузка versioned `automation` package.
 
-Основная граница:
+Текущий schema node имеет один structural type `SEQUENCE`. Узел может:
+
+- ссылаться на module через `module`;
+- содержать вложенную local chain через `steps`;
+- иметь semantic `task`;
+- запросить context через `input.context`;
+- хранить `output`;
+- изменить невыполненный хвост через `transition`.
+
+Module Step возвращает либо `sEngineOutput`, либо новую `EngineSchema`. Если возвращена schema, Core:
+
+1. сохраняет её chain в `step.runtime.schema`;
+2. проверяет разрешённые group/module boundaries;
+3. исполняет её как вложенную sequence;
+4. возвращает итоговый output родительскому Step.
+
+`transition` разрешено менять только ещё не выполненный хвост sequence. Завершённые Steps являются immutable execution history.
+
+## Context и runtime state
+
+`input.context` сейчас поддерживает:
+
+- `parent`;
+- `previous`;
+- explicit `steps`.
+
+Разрешённый Core context сохраняется в `step.runtime.context`.
+
+`runtime` — execution-only state, которое можно удалить и восстановить/пересчитать из working schema и текущего выполнения. Сейчас там находятся:
+
+- resolved `context`;
+- локальные `events` Step;
+- `schema`, возвращённая module во время исполнения.
+
+`output` намеренно остаётся вне `runtime`: это фактический результат Step и часть working schema, которую могут читать последующие Steps.
+
+Сложная invalidation/recompute policy для `runtime.context` после структурных изменений schema пока не реализуется заранее; текущую семантику следует усложнять только по реальному failure case.
+
+## Step contract
+
+Для active modules используется один `iEngineStep` interface:
 
 ```text
-automation module
-  -> OUTPUT | SCHEMA / implementation description
-  -> ProcessRuntime
-  -> Core validates and executes
+getId()
+getGroup()
+getMetadata()
+getDependencies()
+run(step, dependencies)
 ```
 
-Concrete `WorkerCode`, `WorkerDocumentation` и `WorkerAgent` находятся в `automation/Worker/`. Core определяет Worker contracts и shared mechanics.
+Runtime/application dependencies передаются только в `run()` и не записываются в schema/context.
 
-Для Process Worker поддерживаются два implementation type:
+`getDependencies()` позволяет module объявить concrete child modules. Core разворачивает их при регистрации в namespace:
 
-- `SCHEMA` — Worker предоставляет локальную Process schema;
-- `METHOD` — Worker предоставляет custom `run(request)`.
-
-`WorkerRunner` является adapter `STEP.WORKER -> Worker implementation`, а не base class конкретного Worker.
-
-## Текущая production Engine логика
-
-```ts
-Engine(task) {
-  const edit = createEdit()
-
-  // несколько PlanStep используют один task-local Edit
-  Worker.run(step1, edit)
-  checkpoint = edit.state()
-
-  Worker.run(step2, edit)
-
-  if (step2.failed)
-    edit.restore(checkpoint)
-
-  // ...
-
-  edit.apply()
-  EngineTest.run()
-}
+```text
+RootModule::Dependency
 ```
 
-Engine не управляет внутренними attempts Worker и не должен понимать конкретные Research-вопросы. Он владеет task-level Edit, checkpoints и моментом физического apply.
+Один и тот же dependency implementation может быть доступен в разных module namespaces. Schema существует внутри конкретной конфигурации продукта; переносимость между несовместимыми automation packages не является обязанностью Core.
+
+`src/engine/Step/` содержит thin role classes для `Planner`, `Worker`, `Action`, `Research`, `Qualifier`. Они в основном задают group/metadata defaults поверх общего Engine Step contract; отдельной runtime-механики Runner для каждой группы сейчас нет.
+
+## Active automation
+
+`automation/index.js` сейчас регистрирует:
+
+- `Planner`;
+- `WorkerCode`;
+- `ActionCodeChange`;
+- `ActionFileFind`;
+- `ActionFileRead`;
+- `ActionResearch`;
+- `ActionEditApply`.
+
+Group config отдельно задаёт, какие группы могут возвращать schema, а `modules` содержит concrete instances.
+
+Текущая рабочая вертикаль:
+
+```text
+ActionUserInputCli
+  -> Planner
+  -> WorkerCode
+  -> ActionCodeChange
+       -> при необходимости ActionFileFind / ActionFileRead / ActionResearch
+       -> повторный ActionCodeChange
+       -> ActionEditApply
+```
+
+Она уже проходит end-to-end на простых code-edit задачах.
 
 ## Planner
 
-Production Planner пока строит небольшой semantic plan. `PlanStep` описывает outcome, explicit constraints и причину декомпозиции.
+Active `automation/Step/Planner/Planner.ts` сейчас намеренно минимален: получает task и возвращает `EngineSchema` с одним `WorkerCode(task)`.
 
-Используются фиксированные decomposition types:
+Это bootstrap implementation, а не законченный Planner 0.5.
 
-- `coherent-outcome`;
-- `independent-outcome`;
-- `dependency`;
-- `separate-deliverable`.
+В `automation/Step/Planner/PlannerTask/` уже существуют prompt/response assets и часть semantic planning policy, но `PlannerTask` не является зарегистрированным active module и содержит переходные зависимости от старого мира. Его не следует считать current Planner contract.
 
-Файлы, слои, Research, Edit validation и EngineTest сами по себе не являются причиной создавать отдельный `PlanStep`.
+Следующий Planner должен быть собран из полезных частей текущего `automation/Step/Planner`, не восстанавливая весь 0.4 lifecycle автоматически.
 
-В Process 0.5 Planner может вернуть локальную schema, а transition/replan меняет только невыполненный хвост текущей `SEQUENCE`.
+Отдельно запланирован functional snapshot 0.4, чтобы понять, какие Planner/Qualifier/Determine и другие свойства действительно были ценны: [`../research/0.4-functional-snapshot.md`](../research/0.4-functional-snapshot.md).
 
-## Worker / Actions
+## WorkerCode / Actions
 
-Core Worker API и concrete automation Workers разделены.
+`WorkerCode` — главный текущий schema-orchestration module code-edit vertical.
 
-Schema-driven Worker наследует `WorkerSchema` и предоставляет `getSchema()`. Custom Worker наследует `WorkerMethod` и предоставляет `run()`. `getImplementation()` сообщает Core, какой путь использовать.
+Он:
 
-Production code/documentation flow пока использует Core `WorkerIterativeRunner`; concrete классы вынесены в `automation/Worker/`. Это временный compatibility path до появления подтверждённой Worker schema для code execution.
+- запускает `ActionCodeChange`;
+- интерпретирует semantic result;
+- при missing context добавляет `find-file / read-file / research` Steps;
+- передаёт выбранный previous context следующей попытке;
+- ограничивает attempts и retrieval requests;
+- выполняет dedupe уже запрошенного context;
+- при готовом edit добавляет `ActionEditApply`.
 
-`ChangeCodeAction` определяет semantic edit intent. `WorkerIterativeRunner` передаёт intent в `Edit.change()`, а Research при необходимости читает файлы через `Edit.read()`.
+Эта логика выражена через working sequence + `transition`; отдельный старый `WorkerIterativeRunner` больше не является active runtime contract.
 
-Worker возвращает production Engine:
+Главный незакрытый Worker refactor: `ActionCodeChange` всё ещё возвращает общий `ActionCoreResult` (`completed / not-completed / failed`, `canContinue`, `requests`, `retry`). Из-за этого `WorkerCode.transitionChange()` содержит лишнюю generic interpretation logic.
 
-- `completed`;
-- `not-completed` + возможность будущего continuation;
-- `failed`.
+Следующий шаг — сделать предметный ChangeCode result и оставить ясное разделение:
 
-Engine не должен знать, какие Actions Worker счёл необходимыми. Настоящий resume того же Worker instance пока не реализован.
-
-## Research
-
-Research — bounded service с persistent cache. Cache entry хранит source files и hashes; `not-found` не кешируется.
-
-Research, вызванный из `WorkerIterativeRunner`, может читать source content через текущий Edit, поэтому следующий step способен увидеть накопленные изменения предыдущего. Cache/hash semantics пока остаются основанными на физическом Project и могут не учитывать task-local content.
+```text
+Action -> сообщает semantic result / need
+WorkerCode -> строит следующий execution path
+Core -> исполняет schema
+```
 
 ## Engine-owned Edit
 
-`ProjectEditor` создаётся отдельно для Task и хранит map существующих изменённых файлов: original content + current task-local content.
+`Engine.run()` создаёт один `ProjectEditor` на конкретный run, если доступны `target.fileSystem`, `model` и `language`, и передаёт его module-ам как runtime dependency `edit`.
 
-Основные операции:
-
-- `read(path)` — task-local content, затем Project;
-- `change(...)` — materialize semantic intent через EditStrategy, проверить batch через `EditValidator` и только потом накопить результат;
-- `state()` / `restore()` — step-level checkpoint;
-- `apply(state?)` — физически записать накопленное состояние.
-
-Текущие стратегии:
+`ProjectEditor` хранит task-local accumulated changes до физического commit. Active Engine wiring сейчас использует стратегии:
 
 - `range-replace`;
-- exact `replace`;
-- unified `diff`;
-- full-file `edit`.
+- unified `diff`.
 
-Technical recovery/fallback остаётся внутри Edit. Последующие изменения одного файла работают относительно уже накопленного content.
+Другие Edit strategies/validators могут существовать в кодовой базе, но не все являются частью текущего default Engine wiring.
 
-`EditValidator` проверяет подготовленный batch до попадания в task-local state. `EditValidationJsonCheck` сейчас трактует strict JSON parse failure как warning, а не blocking failure.
+После успешного завершения `EngineRuntime` текущий `Engine` вызывает `edit.apply()` один раз. Если apply неуспешен, итоговый Engine result становится `FAILURE`.
 
-`WorkerAgent` использует generic Core `WorkerAgentRunner`, который подключает `file-system read/write` к Edit. Search/Terminal/Git пока продолжают видеть физический Project. Create/delete/move в task-local Edit пока не поддержаны.
+Старый production lifecycle с явным PlanStep checkpoint/restore и обязательным `EngineTest.run()` после apply больше не является фактическим active path 0.5. Эти механизмы следует рассматривать как исторический опыт и возвращать только при подтверждённой необходимости.
 
-## EngineTest
+## Events / logging
 
-После успешного `Edit.apply()` Engine запускает `EngineTest` — общую project-level проверку результата Task.
+Новая event-модель уже является active path, но пока остаётся переходной и требует отдельного cleanup после WorkerCode/Planner.
 
-Текущие реализации:
+Перед каждым module run `EngineRuntime` создаёт scoped `emit`, привязанный к конкретному schema path. Событие:
 
-- `ResolveEngineTest` — явный no-op success;
-- `TypecheckEngineTest` — configured typecheck command;
-- `UnitEngineTest` — configured unit-test command;
-- `CompositeEngineTest` — последовательный запуск нескольких EngineTest.
+- сохраняется в `step.runtime.events`;
+- передаётся внешнему listener в envelope с `path`, `module`, `schemaStep` и concrete `step`;
+- не содержит Presentation object.
 
-Конкретные команды задаются конфигурацией. Старый общий слой `Validation` больше не является runtime boundary: его обязанности разделены между `EditValidator` и `EngineTest`.
+Core автоматически генерирует:
 
-## Project paths и internal storage
+- `step.start`;
+- `step.finish`;
+- `step.error` для thrown exception.
 
-Внутри engine используются canonical project-root-relative paths. Model-provided paths считаются untrusted input и проходят через `ProjectPathResolver`.
+Model/Edit/Project и другие подсистемы могут публиковать собственные events через тот же `emit`, например `model.start / model.finish / model.error` и `edit.*`.
 
-Hard-protected paths и project excludes участвуют в write policy. Разделение Nodus-owned internal storage (`.nodus`) и model-editable project paths остаётся отдельной незакрытой задачей.
+`Step.getMetadata()` хранит стабильную presentation identity Step (`code`, `title`, `description`, `color`). Console/File находятся в `app` и являются subscribers event stream.
 
-## Языковая policy
+Текущий `ConsoleEventSubscriber` всё ещё hard-code'ит конкретные event names и специальные правила отображения. Например `step.finish` обычно скрывается, handled `FAILURE` output не показывается как terminal error, а thrown exception приходит как `step.error`.
 
-Конфиг разделяет:
+Это рабочая, но не окончательная event/logging semantics. После стабилизации WorkerCode и Planner нужно отдельно проверить ownership lifecycle events, failure semantics и границу между generic event data и console rendering.
 
-- `language.project` — human-authored текст внутри проекта;
-- `language.nodus` — machine-facing данные Nodus;
-- `language.response` — user-facing текст.
+## CLI / composition
 
-Общая machine-facing policy централизована в `ModelLanguagePolicy`; конкретные Planner/Worker/Research prompts сохраняют только собственную semantic guidance. Идентификаторы, пути и code symbols не переводятся.
+`Main.ts`:
 
-## CLI / logs
+1. загружает config;
+2. создаёт model и Project;
+3. загружает `automation/{groups, modules}`;
+4. добавляет app-owned `ActionUserInputCli` и group `cli`;
+5. создаёт `Engine`;
+6. запускает root schema с одним `ActionUserInputCli`.
 
-Multiline input:
+`ActionUserInputCli.run()` ожидает пользовательский input и возвращает вложенную `EngineSchema([Planner(task)])`. Поэтому CLI input является реальным первым Step процесса, а Planner запускается как возвращённая schema, без искусственного дублирования task через соседний Step.
 
-- `Enter` — новая строка;
-- `Ctrl+Enter` или `Ctrl+D` — submit;
-- `Ctrl+C` — cancel; на пустом input — exit;
-- `/exit` — явный выход.
+## Project Understanding
 
-Console показывает человекочитаемый progress. Полный model exchange и diagnostic payload пишутся в `.nodus/logs/*-nodus.log`.
+`src/engine/Project/` остаётся отдельной линией развития. Не следует создавать один универсальный `ProjectState` или расширять Project Understanding в RAG/Graph/Tree только ради полноты.
 
-## Tests и benchmark
+Новые representations должны появляться под конкретный use case и иметь собственный lifecycle/ownership.
 
-Vitest projects: `unit`, `integration`, `model`, `e2e`.
+## Что сейчас не считать active contract
 
-Deterministic Process tests фиксируют schema execution, local context, transitions и module boundaries. Отдельные benchmark'и используются для model/edit capability и raw-agent comparison.
+Следующие идеи могут оставаться в старых docs/history/code, но не должны автоматически направлять новый refactor:
 
-## Ближайшие направления
+- fixed production `Planner -> Determine -> Worker` loop 0.4;
+- старый `PlanStep` lifecycle;
+- `WorkerIterativeRunner` как обязательный Worker runtime;
+- bounded Research service/cache как текущая обязательная implementation;
+- обязательный `EngineTest` после каждого successful apply;
+- старый Presentation/Logger object wiring;
+- прежние `WorkerSchema / WorkerMethod` dual contracts, если они отсутствуют в active Step interface.
 
-1. продолжить миграцию production lifecycle на Process 0.5 без дублирования Planner/Worker semantics;
-2. проверить Worker `SCHEMA / METHOD` boundary и перевести `WorkerCode` на schema только после реального сценария;
-3. стабилизировать task-local Edit mechanics и чтение накопленного состояния;
-4. определить partial apply / user decision при незавершённой Task;
-5. Research v2 и task-local cache/hash semantics при реальной необходимости;
-6. проверить replanning/transition на реальных failure cases;
-7. model capability measurements;
-8. language policy live-run verification;
-9. task statistics v2 и console dogfooding;
-10. internal storage boundary, Worker continuation и user interaction/control points — отдельные отложенные runtime-задачи.
+Их функциональную ценность нужно оценивать отдельно от старой формы реализации.
+
+## Ближайший порядок работы
+
+1. стабилизировать предметный contract `WorkerCode <-> ActionCodeChange`;
+2. сделать настоящий Planner, скрестив полезные active assets из `automation/Step/Planner`;
+3. отдельным проходом пересмотреть events/logging (`step.*`, `model.*`, handled failure vs error, console contract);
+4. проверить multi-step Planner lifecycle через один task-local Edit;
+5. только после реальных сценариев решать checkpoint/replan/verification/partial apply;
+6. отдельно провести functional snapshot Nodus 0.4 и вернуть в roadmap только подтверждённо полезное поведение.
+
+Подробный порядок: [`../development/roadmap.md`](../development/roadmap.md).
