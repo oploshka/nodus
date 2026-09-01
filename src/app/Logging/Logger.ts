@@ -85,10 +85,9 @@ export class ConsoleEventSubscriber implements EngineEventSubscriber {
       return `${' '.repeat(stepIndent)}${this.label(metadata.title, metadata.color)}${code}${description}`;
     }
 
-    if (event.type === 'step.finish') {
-      if (data.status !== 'FAILURE') return '';
-      return this.detail(stringValue(data.reason) || (this.russian ? 'Шаг завершился ошибкой' : 'Step failed'), stepIndent, 'failure');
-    }
+    // A Step may return FAILURE as part of normal schema control flow. The runtime
+    // trace/file event keeps the result; the console only renders thrown step errors.
+    if (event.type === 'step.finish') return '';
 
     if (event.type === 'step.error') {
       return this.detail(stringValue(data.reason), stepIndent, 'failure');
