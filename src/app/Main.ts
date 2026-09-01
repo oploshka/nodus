@@ -10,7 +10,7 @@ import {
 } from '@app/Logging/Logger.js';
 import { createModel } from '@app/Model/Model.js';
 import { clearProjectIndex, createProject } from '@app/Project/Project.js';
-import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
+import { AutomationLoader } from '@engine/Core/Automation/AutomationLoader.js';
 import { EngineSchema } from '@engine/Core/EngineSchema.js';
 import { ENGINE_STEP, type tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { sEngineGroupConfig } from '@engine/Core/EngineRuntimeTsType.js';
