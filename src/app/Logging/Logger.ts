@@ -1,9 +1,12 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { Presentation, PresentationColor, PresentedMessage } from '@engine/Common/Presentation/Presentation.js';
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import type {
+  sEngineEventEnvelope,
+  tEngineEventListener,
+  tEngineStepColor,
+} from '@engine/Core/EngineStepInterface.js';
 
-const ANSI: Record<PresentationColor, string> = {
+const ANSI: Record<tEngineStepColor, string> = {
   gray: '\x1b[90m',
   white: '\x1b[1;37m',
   cyan: '\x1b[36m',
@@ -18,165 +21,165 @@ const ANSI: Record<PresentationColor, string> = {
 };
 const RESET = '\x1b[0m';
 
-export class ConsoleLogger implements EngineLogger {
+interface EngineEventSubscriber {
+  handle(envelope: sEngineEventEnvelope): void;
+}
+
+export class CompositeEventSubscriber {
+  public constructor(private readonly subscribers: readonly EngineEventSubscriber[]) {}
+
+  public readonly listener: tEngineEventListener = (event) => {
+    for (const subscriber of this.subscribers) subscriber.handle(event);
+  };
+}
+
+export class ConsoleEventSubscriber implements EngineEventSubscriber {
   private readonly russian: boolean;
-  private readonly responseLanguage: string;
   private readonly colorsEnabled = Boolean(process.stdout.isTTY) && !('NO_COLOR' in process.env);
-  private modelIndent = 4;
 
   public constructor(responseLanguage = 'en') {
-    this.responseLanguage = responseLanguage;
     this.russian = responseLanguage.toLowerCase().startsWith('ru');
   }
 
-  public info(event: string, data?: unknown): void { this.print('info', event, data); }
-  public warn(event: string, data?: unknown): void { this.print('warn', event, data); }
-  public error(event: string, data?: unknown): void { this.print('error', event, data); }
-
-  private print(level: 'info' | 'warn' | 'error', event: string, data?: unknown): void {
-    const text = this.format(event, data);
+  public handle(envelope: sEngineEventEnvelope): void {
+    const text = this.format(envelope);
     if (!text) return;
-    if (level === 'error') console.error(text);
-    else if (level === 'warn') console.warn(text);
+
+    if (envelope.event.level === 'error') console.error(text);
+    else if (envelope.event.level === 'warning') console.warn(text);
     else console.log(text);
   }
 
-  private format(event: string, data: unknown): string {
-    const record = isRecord(data) ? data : {};
+  private format(envelope: sEngineEventEnvelope): string {
+    const { event } = envelope;
+    const data = isRecord(event.data) ? event.data : {};
 
-    if (event === 'app.startup') {
-      const project = stringValue(record.projectId);
-      const logPath = stringValue(record.logPath);
+    if (event.type === 'app.startup') {
+      const project = stringValue(data.projectId);
+      const logPath = stringValue(data.logPath);
       const app = this.label('App', 'gray');
       return this.russian
         ? `${app} Проект: ${project}${logPath ? `\n  Лог: ${logPath}` : ''}`
         : `${app} Project: ${project}${logPath ? `\n  Log: ${logPath}` : ''}`;
     }
 
-    if (event === 'app.exit') return this.russian ? `${this.label('App', 'gray')} Завершено.` : `${this.label('App', 'gray')} Exited.`;
+    if (event.type === 'app.exit') {
+      return this.russian ? `${this.label('App', 'gray')} Завершено.` : `${this.label('App', 'gray')} Exited.`;
+    }
 
-    if (event === 'project.scan') {
-      const files = numberValue(record.files);
+    if (event.type === 'project.scan') {
+      const files = numberValue(data.files);
       return this.russian
         ? `${this.label('Project', 'cyan')} Проиндексировано файлов: ${files}`
         : `${this.label('Project', 'cyan')} Indexed files: ${files}`;
     }
 
-    if (event.endsWith('model.run.start')) {
-      this.modelIndent = event.startsWith('engine.edit.') ? 6 : 4;
-      const presentation = this.presentation(record.presentation);
-      const message = presentation.format({ type: 'start' }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, this.modelIndent) : '';
+    const metadata = envelope.step?.getMetadata();
+    const stepIndent = Math.max(0, envelope.path.length - 1) * 2;
+    const innerIndent = stepIndent + 2;
+
+    if (event.type === 'step.start' && metadata) {
+      if (metadata.code === 'ActionUserInputCli') return '';
+      const code = metadata.code === metadata.title ? '' : ` ${metadata.code}`;
+      const description = metadata.description ? ` · ${metadata.description}` : '';
+      return `${' '.repeat(stepIndent)}${this.label(metadata.title, metadata.color)}${code}${description}`;
     }
 
-    if (event.endsWith('model.run') || event.endsWith('model.run.error')) {
-      const presentation = this.presentation(record.presentation);
-      const meta = isRecord(record.meta) ? record.meta : undefined;
-      const message = presentation.format({ type: 'finish', meta }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, this.modelIndent) : '';
+    if (event.type === 'step.finish') {
+      if (data.status !== 'FAILURE') return '';
+      return this.detail(stringValue(data.reason) || (this.russian ? 'Шаг завершился ошибкой' : 'Step failed'), stepIndent, 'failure');
     }
 
-    if (event === 'engine.edit.prepare.start') {
-      const presentation = this.presentation(record.presentation);
-      const files = numberValue(record.files) || numberValue(record.edits);
-      const message = presentation.format({ type: 'change-set-prepare', files }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, 2) : '';
+    if (event.type === 'step.error') {
+      return this.detail(stringValue(data.reason), stepIndent, 'failure');
     }
 
-    if (event === 'engine.edit.file.start') {
-      this.modelIndent = 6;
-      const presentation = this.presentation(record.presentation);
-      const message = presentation.format({ type: 'file-prepare', path: stringValue(record.path) }, this.responseLanguage);
-      return message ? this.detail(message.text, 4) : '';
+    if (event.type === 'model.start') {
+      return `${' '.repeat(innerIndent)}${this.label('Model', 'blue')} ${this.russian ? 'Обрабатываю...' : 'Processing...'}`;
     }
 
-    if (event === 'engine.edit.file.finish') {
-      const presentation = this.presentation(record.presentation);
-      const message = presentation.format({
-        type: 'file-prepared',
-        path: stringValue(record.path),
-        operations: numberValue(record.operations),
-      }, this.responseLanguage);
-      return message ? this.detail(message.text, 4, 'success') : '';
+    if (event.type === 'model.finish') {
+      const meta = isRecord(data.meta) ? data.meta : {};
+      const prompt = numberValue(meta.promptTokens);
+      const completion = numberValue(meta.completionTokens);
+      const total = numberValue(meta.totalTokens) || prompt + completion;
+      const durationMs = numberValue(meta.durationMs);
+      const duration = durationMs > 0 ? ` · ${(durationMs / 1000).toFixed(1)}s` : '';
+      const tokens = total > 0 ? ` · ${prompt} → ${completion} = ${total} tok` : '';
+      return `${' '.repeat(innerIndent)}${this.label('Model', 'blue')} ${this.russian ? 'Ответ получен' : 'Response received'}${tokens}${duration}`;
     }
 
-    if (event === 'engine.edit.file.failed') {
-      const presentation = this.presentation(record.presentation);
-      const message = presentation.format({
-        type: 'file-failed',
-        path: stringValue(record.path),
-        reason: stringValue(record.reason),
-      }, this.responseLanguage);
-      return message ? this.detail(message.text, 4, 'failure') : '';
+    if (event.type === 'model.error') {
+      const error = isRecord(data.error) ? data.error : {};
+      return this.detail(stringValue(error.message) || (this.russian ? 'Ошибка модели' : 'Model error'), innerIndent, 'failure');
     }
 
-    if (event === 'engine.edit.strategy.retry') {
-      const presentation = this.presentation(record.presentation);
-      const message = presentation.format({
-        type: 'strategy-retry',
-        path: stringValue(record.path),
-        strategy: stringValue(record.strategy),
-        attempt: numberValue(record.editAttempt),
-        max: numberValue(record.maxEditAttempts),
-        reason: stringValue(record.error),
-      }, this.responseLanguage);
-      return message ? this.detail(message.text, 4, 'warning') : '';
+    if (event.type === 'edit.prepare.start') {
+      const files = numberValue(data.edits);
+      const text = this.russian ? `Подготавливаю набор изменений · файлов: ${files}` : `Preparing change set · files: ${files}`;
+      return `${' '.repeat(innerIndent)}${this.label('Edit', 'brightCyan')} ${text}`;
     }
 
-    if (event === 'engine.edit.strategy.recovered') {
-      const presentation = this.presentation(record.presentation);
-      const message = presentation.format({
-        type: 'strategy-recovered',
-        path: stringValue(record.path),
-        strategy: stringValue(record.strategy),
-        attempt: numberValue(record.editAttempt),
-      }, this.responseLanguage);
-      return message ? this.detail(message.text, 4, 'success') : '';
+    if (event.type === 'edit.file.start') {
+      return this.muted(`${' '.repeat(innerIndent + 2)}${stringValue(data.path)}`);
     }
 
-    if (event === 'engine.edit.strategy.fallback') {
-      const presentation = this.presentation(record.presentation);
-      const message = presentation.format({
-        type: 'strategy-fallback',
-        path: stringValue(record.path),
-        fromStrategy: stringValue(record.fromStrategy),
-        toStrategy: stringValue(record.toStrategy),
-        reason: stringValue(record.reason),
-      }, this.responseLanguage);
-      return message ? this.detail(message.text, 4, 'warning') : '';
+    if (event.type === 'edit.file.finish') {
+      const operations = numberValue(data.operations);
+      const text = this.russian ? `Подготовлено · ${operations} операций` : `Prepared · ${operations} operations`;
+      return this.detail(text, innerIndent + 2, 'success');
     }
 
-    if (event === 'engine.edit.commit.start' || event === 'engine.edit.commit.finish') {
-      const presentation = this.presentation(record.presentation);
-      const message = presentation.format({
-        type: event.endsWith('.start') ? 'commit-start' : 'commit-finish',
-        files: numberValue(record.files),
-      }, this.responseLanguage);
-      return message ? this.renderPresentation(presentation, message, 2) : '';
+    if (event.type === 'edit.file.failed') {
+      return this.detail(stringValue(data.reason), innerIndent + 2, 'failure');
+    }
+
+    if (event.type === 'edit.strategy.retry') {
+      const attempt = numberValue(data.editAttempt);
+      const text = this.russian
+        ? `Замена не применена · уточняю · попытка ${attempt}`
+        : `Edit did not apply · retrying · attempt ${attempt}`;
+      return this.detail(text, innerIndent + 2, 'warning');
+    }
+
+    if (event.type === 'edit.strategy.recovered') {
+      const attempt = numberValue(data.editAttempt);
+      const text = this.russian ? `Изменение уточнено · попытка ${attempt}` : `Edit recovered · attempt ${attempt}`;
+      return this.detail(text, innerIndent + 2, 'success');
+    }
+
+    if (event.type === 'edit.strategy.fallback') {
+      const from = stringValue(data.fromStrategy);
+      const to = stringValue(data.toStrategy);
+      const text = this.russian ? `Стратегия ${from} → ${to}` : `Strategy ${from} → ${to}`;
+      return this.detail(text, innerIndent + 2, 'warning');
+    }
+
+    if (event.type === 'edit.validation.warning' || event.type === 'edit.validation.failed') {
+      return this.detail(stringValue(data.reason), innerIndent + 2, 'warning');
+    }
+
+    if (event.type === 'edit.commit.start' || event.type === 'edit.commit.finish') {
+      const files = numberValue(data.files);
+      const start = event.type.endsWith('.start');
+      const text = this.russian
+        ? `${start ? 'Применяю' : 'Набор изменений применён'} · файлов: ${files}`
+        : `${start ? 'Applying change set' : 'Change set applied'} · files: ${files}`;
+      return `${' '.repeat(envelope.path.length === 0 ? 2 : innerIndent)}${this.label('Edit', 'brightCyan')} ${text}`;
+    }
+
+    if (event.type === 'edit.rollback.failed') {
+      return this.detail(stringValue(data.error), innerIndent, 'failure');
+    }
+
+    if (event.level === 'warning' || event.level === 'error') {
+      return this.detail(event.type, innerIndent, event.level === 'error' ? 'failure' : 'warning');
     }
 
     return '';
   }
 
-  private presentation(value: unknown): Presentation<unknown> {
-    if (!value || typeof value !== 'object') throw new Error('Console event is missing a valid presentation');
-    const candidate = value as Partial<Presentation<unknown>>;
-    if (typeof candidate.role !== 'string' || typeof candidate.color !== 'string' || typeof candidate.format !== 'function') {
-      throw new Error('Console event contains an invalid presentation');
-    }
-    return candidate as Presentation<unknown>;
-  }
-
-  private renderPresentation(presentation: Presentation<unknown>, message: PresentedMessage, indent: number): string {
-    const prefix = ' '.repeat(indent);
-    const details = message.details ?? [];
-    return [
-      `${prefix}${this.label(presentation.role, presentation.color)} ${message.text}`,
-      ...details.map((detail) => this.muted(`${' '.repeat(indent + 2)}${detail}`)),
-    ].join('\n');
-  }
-
-  private label(name: string, color: PresentationColor): string {
+  private label(name: string, color: tEngineStepColor): string {
     const label = `[${name}]`;
     return this.colorsEnabled ? `${ANSI[color]}${label}${RESET}` : label;
   }
@@ -185,48 +188,29 @@ export class ConsoleLogger implements EngineLogger {
     return this.colorsEnabled ? `${ANSI.gray}${text}${RESET}` : text;
   }
 
-  private detail(text: string, indent: number, marker?: 'success' | 'failure' | 'warning'): string {
-    const prefix = ' '.repeat(indent);
-    if (!marker) return this.muted(`${prefix}${text}`);
+  private detail(text: string, indent: number, marker: 'success' | 'failure' | 'warning'): string {
     const rendered = marker === 'success' ? `✓ ${text}` : marker === 'failure' ? `✗ ${text}` : `⚠ ${text}`;
-    if (!this.colorsEnabled) return `${prefix}${rendered}`;
+    if (!this.colorsEnabled) return `${' '.repeat(indent)}${rendered}`;
     const color = marker === 'success' ? ANSI.green : marker === 'failure' ? ANSI.red : ANSI.yellow;
-    return `${prefix}${color}${rendered}${RESET}`;
+    return `${' '.repeat(indent)}${color}${rendered}${RESET}`;
   }
 }
 
-export class FileLogger implements EngineLogger {
+export class FileEventSubscriber implements EngineEventSubscriber {
   public constructor(private readonly path: string) {
     mkdirSync(dirname(path), { recursive: true });
   }
 
-  public info(event: string, data?: unknown): void { this.write('info', event, data); }
-  public warn(event: string, data?: unknown): void { this.write('warn', event, data); }
-  public error(event: string, data?: unknown): void { this.write('error', event, data); }
-
-  private write(level: string, event: string, data?: unknown): void {
+  public handle(envelope: sEngineEventEnvelope): void {
     appendFileSync(this.path, `${JSON.stringify({
       at: new Date().toISOString(),
-      level,
-      event,
-      data: serialize(data),
+      path: envelope.path,
+      module: envelope.module,
+      step: envelope.step?.getMetadata(),
+      event: envelope.event.type,
+      level: envelope.event.level ?? 'info',
+      data: serialize(envelope.event.data),
     })}\n`, 'utf8');
-  }
-}
-
-export class CompositeLogger implements EngineLogger {
-  public constructor(private readonly loggers: readonly EngineLogger[]) {}
-
-  public info(event: string, data?: unknown): void {
-    for (const logger of this.loggers) logger.info(event, data);
-  }
-
-  public warn(event: string, data?: unknown): void {
-    for (const logger of this.loggers) logger.warn(event, data);
-  }
-
-  public error(event: string, data?: unknown): void {
-    for (const logger of this.loggers) logger.error(event, data);
   }
 }
 

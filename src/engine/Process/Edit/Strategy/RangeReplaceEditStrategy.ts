@@ -1,16 +1,14 @@
-import { RangeReplaceApplicator, type RangeReplaceOperation} from "@engine/Process/Edit/Applicator/RangeReplaceApplicator.js";
-import type { EditStrategy} from "@engine/Process/Edit/EditStrategy.js";
-import type { EditPreparationContext, EditPrepareResult} from "@engine/Process/Edit/EditTypes.js";
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import { RangeReplaceApplicator, type RangeReplaceOperation } from '@engine/Process/Edit/Applicator/RangeReplaceApplicator.js';
+import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
+import type { EditPreparationContext, EditPrepareResult } from '@engine/Process/Edit/EditTypes.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
-import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
+import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
-import { EditPresentation} from "@engine/Common/Presentation/EditPresentation.js";
 
 interface RangeReplaceFileResponse { path: string; operations: RangeReplaceOperation[] }
 
@@ -26,11 +24,9 @@ const schema: ModelResponseSchema = {
 
 export class RangeReplaceEditStrategy implements EditStrategy {
   public readonly id = 'range-replace' as const;
-  private readonly presentation = new EditPresentation();
   public constructor(
     private readonly fileSystem: FileSystem,
     private readonly model: ModelRunner,
-    private readonly logger: EngineLogger,
     private readonly language: LanguageConfiguration,
     private readonly guidance: string,
     private readonly maxEditAttempts = 2,
@@ -44,7 +40,7 @@ export class RangeReplaceEditStrategy implements EditStrategy {
 
     for (let attempt = 1; attempt <= this.maxEditAttempts; attempt += 1) {
       try {
-        const response = await callModel<RangeReplaceFileResponse>(this.model, this.editModelLogger(), {
+        const response = await callModel<RangeReplaceFileResponse>(this.model, context.emit, {
           request: {
             message: attempt === 1
               ? 'Prepare minimal guarded line-range replacements for this project edit.'
@@ -81,22 +77,22 @@ export class RangeReplaceEditStrategy implements EditStrategy {
         if (responsePath !== path) throw new Error(`Range replace path mismatch: expected ${path}, received ${responsePath}`);
         if (response.operations.length === 0) throw new Error(`Range replace returned no operations for ${path}`);
         const content = this.applicator.apply(context.source, response.operations, path);
-        if (attempt > 1) this.logger.info('engine.edit.strategy.recovered', { strategy: this.id, path, editAttempt: attempt, presentation: this.presentation });
+        if (attempt > 1) {
+          context.emit({ type: 'edit.strategy.recovered', data: { strategy: this.id, path, editAttempt: attempt } });
+        }
         return { status: 'completed', path, content, operations: response.operations.length };
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
-        if (attempt < this.maxEditAttempts) this.logger.warn('engine.edit.strategy.retry', { strategy: this.id, path, editAttempt: attempt, maxEditAttempts: this.maxEditAttempts, error: lastError, presentation: this.presentation });
+        if (attempt < this.maxEditAttempts) {
+          context.emit({
+            type: 'edit.strategy.retry',
+            level: 'warning',
+            data: { strategy: this.id, path, editAttempt: attempt, maxEditAttempts: this.maxEditAttempts, error: lastError },
+          });
+        }
       }
     }
 
     return { status: 'not-completed', reason: `Range replace recovery limit reached (${this.maxEditAttempts}) for ${path}. Last error: ${lastError ?? 'unknown edit error'}` };
-  }
-
-  private editModelLogger(): EngineLogger {
-    return {
-      info: (event, data) => this.logger.info(`engine.edit.model.${event}`, data),
-      warn: (event, data) => this.logger.warn(`engine.edit.model.${event}`, data),
-      error: (event, data) => this.logger.error(`engine.edit.model.${event}`, data),
-    };
   }
 }

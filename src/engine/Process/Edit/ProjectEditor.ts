@@ -1,9 +1,8 @@
+import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
-import { EditPresentation} from "@engine/Common/Presentation/EditPresentation.js";
-import type { EditStrategy} from "@engine/Process/Edit/EditStrategy.js";
-import type { EditStrategyId, PreparedProjectChange, ProjectEditRequest, EditPrepareResult, EditPreparationContext} from "@engine/Process/Edit/EditTypes.js";
-import { EditValidator, type EditCandidate, type EditValidationResult} from "@engine/Process/Edit/Validation/EditValidator.js";
+import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
+import type { EditStrategyId, PreparedProjectChange, ProjectEditRequest, EditPrepareResult, EditPreparationContext } from '@engine/Process/Edit/EditTypes.js';
+import { EditValidator, type EditCandidate, type EditValidationResult } from '@engine/Process/Edit/Validation/EditValidator.js';
 
 export type ProjectEditResult =
   | { status: 'completed'; files: number; operations: number; strategy: EditStrategyId; paths: string[] }
@@ -31,15 +30,15 @@ const DEFAULT_FALLBACKS: Readonly<Record<EditStrategyId, ReadonlyArray<EditStrat
   edit: [],
 };
 
+const noopEmit: tEngineEmit = () => undefined;
+
 /** Engine-owned task-local edit state over physical file access. */
 export class ProjectEditor {
-  public readonly presentation = new EditPresentation();
   private readonly strategies = new Map<EditStrategyId, EditStrategy>();
   private files = new Map<string, BufferedFile>();
 
   public constructor(
     private readonly fileSystem: FileSystem,
-    private readonly logger: EngineLogger,
     strategies: ReadonlyArray<EditStrategy>,
     private readonly validator: EditValidator = new EditValidator(),
     private readonly fallbacks: Readonly<Record<EditStrategyId, ReadonlyArray<EditStrategyId>>> = DEFAULT_FALLBACKS,
@@ -55,7 +54,6 @@ export class ProjectEditor {
   public async write(path: string, content: string): Promise<void> {
     const projectPath = await this.fileSystem.resolvePath(path);
     const validation = await this.validator.validate([{ path: projectPath, content }]);
-    this.logValidation(validation);
     const failed = validation.filter((result) => result.status === 'failed');
     if (failed.length > 0) throw new Error(this.validationFailureReason(failed));
 
@@ -70,7 +68,12 @@ export class ProjectEditor {
     this.files.set(projectPath, { path: projectPath, original, current: content, strategy: 'edit' });
   }
 
-  public async change(task: unknown, step: unknown, request: ProjectEditRequest): Promise<ProjectEditResult> {
+  public async change(
+    task: unknown,
+    step: unknown,
+    request: ProjectEditRequest,
+    emit: tEngineEmit,
+  ): Promise<ProjectEditResult> {
     if (!task || typeof task !== 'object' || typeof (task as { description?: unknown }).description !== 'string') {
       return { status: 'not-completed', reason: 'Edit task must contain description.' };
     }
@@ -81,7 +84,7 @@ export class ProjectEditor {
     const draft = this.cloneFiles(this.files);
     const touched = new Set<string>();
     let operations = 0;
-    this.logger.info('engine.edit.prepare.start', { strategy: request.strategy, edits: request.edits.length, bufferedFiles: this.files.size, presentation: this.presentation });
+    emit({ type: 'edit.prepare.start', data: { strategy: request.strategy, edits: request.edits.length, bufferedFiles: this.files.size } });
 
     for (const edit of request.edits) {
       const path = await this.fileSystem.resolvePath(edit.path);
@@ -93,11 +96,18 @@ export class ProjectEditor {
         draft.set(path, file);
       }
 
-      this.logger.info('engine.edit.file.start', { strategy: request.strategy, path, presentation: this.presentation });
-      const context: EditPreparationContext = { task: editTask, step, edit: { ...edit, path }, source: file.current, settings: request.settings };
+      emit({ type: 'edit.file.start', data: { strategy: request.strategy, path } });
+      const context: EditPreparationContext = {
+        task: editTask,
+        step,
+        edit: { ...edit, path },
+        source: file.current,
+        emit,
+        settings: request.settings,
+      };
       const prepared = await this.prepareWithFallback(request.strategy, context);
       if (prepared.status === 'not-completed') {
-        this.logger.warn('engine.edit.file.failed', { strategy: request.strategy, path, reason: prepared.reason, presentation: this.presentation });
+        emit({ type: 'edit.file.failed', level: 'warning', data: { strategy: request.strategy, path, reason: prepared.reason } });
         return prepared;
       }
       if (prepared.result.path !== path) return { status: 'not-completed', reason: `Prepared edit path mismatch: expected ${path}, received ${prepared.result.path}` };
@@ -105,7 +115,15 @@ export class ProjectEditor {
       file.current = prepared.result.content;
       file.strategy = prepared.strategy.id;
       operations += prepared.result.operations ?? 1;
-      this.logger.info('engine.edit.file.finish', { strategy: prepared.strategy.id, requestedStrategy: request.strategy, path, operations: prepared.result.operations, presentation: this.presentation });
+      emit({
+        type: 'edit.file.finish',
+        data: {
+          strategy: prepared.strategy.id,
+          requestedStrategy: request.strategy,
+          path,
+          operations: prepared.result.operations,
+        },
+      });
     }
 
     const candidates: EditCandidate[] = [...touched]
@@ -115,25 +133,34 @@ export class ProjectEditor {
     if (candidates.length === 0) return { status: 'not-completed', reason: 'Edit preparation produced no project changes.' };
 
     const validation = await this.validator.validate(candidates);
-    this.logValidation(validation);
+    this.emitValidation(validation, emit);
     const failed = validation.filter((result) => result.status === 'failed');
     if (failed.length > 0) return { status: 'not-completed', reason: this.validationFailureReason(failed) };
 
     this.files = draft;
-    this.logger.info('engine.edit.prepare.finish', { strategy: request.strategy, files: candidates.length, operations, bufferedFiles: this.files.size, warnings: validation.filter((result) => result.status === 'warning').length, presentation: this.presentation });
+    emit({
+      type: 'edit.prepare.finish',
+      data: {
+        strategy: request.strategy,
+        files: candidates.length,
+        operations,
+        bufferedFiles: this.files.size,
+        warnings: validation.filter((result) => result.status === 'warning').length,
+      },
+    });
     return { status: 'completed', files: candidates.length, operations, strategy: request.strategy, paths: candidates.map((candidate) => candidate.path) };
   }
 
   public state(): EditState { return this.cloneFiles(this.files); }
   public restore(state: EditState): void { this.files = this.cloneFiles(state); }
 
-  public async apply(state: EditState = this.state()): Promise<ProjectEditResult> {
+  public async apply(state: EditState = this.state(), emit: tEngineEmit = noopEmit): Promise<ProjectEditResult> {
     const changes: PreparedProjectChange[] = [...state.values()]
       .filter((file) => file.current !== file.original)
       .map((file) => ({ path: file.path, expected: file.original, content: file.current, strategy: file.strategy }));
     if (changes.length === 0) return { status: 'completed', files: 0, operations: 0, strategy: 'edit', paths: [] };
 
-    const commit = await this.commit(changes);
+    const commit = await this.commit(changes, emit);
     if (commit.status === 'not-completed') return commit;
     return { status: 'completed', files: changes.length, operations: changes.length, strategy: changes.at(-1)?.strategy ?? 'edit', paths: commit.paths };
   }
@@ -142,10 +169,10 @@ export class ProjectEditor {
     return new Map([...state.entries()].map(([path, file]) => [path, { ...file }]));
   }
 
-  private logValidation(results: ReadonlyArray<EditValidationResult>): void {
+  private emitValidation(results: ReadonlyArray<EditValidationResult>, emit: tEngineEmit): void {
     for (const result of results) {
-      if (result.status === 'warning') this.logger.warn('engine.edit.validation.warning', { checkId: result.checkId, path: result.path, reason: result.reason, presentation: this.presentation });
-      else if (result.status === 'failed') this.logger.warn('engine.edit.validation.failed', { checkId: result.checkId, path: result.path, reason: result.reason, presentation: this.presentation });
+      if (result.status === 'warning') emit({ type: 'edit.validation.warning', level: 'warning', data: { checkId: result.checkId, path: result.path, reason: result.reason } });
+      else if (result.status === 'failed') emit({ type: 'edit.validation.failed', level: 'warning', data: { checkId: result.checkId, path: result.path, reason: result.reason } });
     }
   }
 
@@ -166,12 +193,21 @@ export class ProjectEditor {
       if (result.status === 'completed') return { status: 'completed', result, strategy };
       lastReason = result.reason;
       const nextStrategyId = candidates.slice(index + 1).find((candidate) => this.strategies.has(candidate));
-      if (nextStrategyId) this.logger.warn('engine.edit.strategy.fallback', { path: context.edit.path, fromStrategy: strategy.id, toStrategy: nextStrategyId, reason: result.reason, presentation: this.presentation });
+      if (nextStrategyId) {
+        context.emit({
+          type: 'edit.strategy.fallback',
+          level: 'warning',
+          data: { path: context.edit.path, fromStrategy: strategy.id, toStrategy: nextStrategyId, reason: result.reason },
+        });
+      }
     }
     return { status: 'not-completed', reason: lastReason };
   }
 
-  private async commit(changes: ReadonlyArray<PreparedProjectChange>): Promise<{ status: 'completed'; files: number; paths: string[] } | { status: 'not-completed'; reason: string }> {
+  private async commit(
+    changes: ReadonlyArray<PreparedProjectChange>,
+    emit: tEngineEmit,
+  ): Promise<{ status: 'completed'; files: number; paths: string[] } | { status: 'not-completed'; reason: string }> {
     const unique = new Map<string, PreparedProjectChange>();
     for (const change of changes) {
       const path = await this.fileSystem.resolvePath(change.path);
@@ -185,7 +221,7 @@ export class ProjectEditor {
       if (current !== change.expected) return { status: 'not-completed', reason: `Prepared change is stale for ${change.path}; project content changed before commit.` };
     }
 
-    this.logger.info('engine.edit.commit.start', { files: unique.size, presentation: this.presentation });
+    emit({ type: 'edit.commit.start', data: { files: unique.size } });
     const written: PreparedProjectChange[] = [];
     try {
       for (const change of unique.values()) {
@@ -195,12 +231,18 @@ export class ProjectEditor {
     } catch (error) {
       for (const change of written.reverse()) {
         try { await this.fileSystem.write(change.path, change.expected); }
-        catch (rollbackError) { this.logger.error('engine.edit.rollback.failed', { path: change.path, error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError) }); }
+        catch (rollbackError) {
+          emit({
+            type: 'edit.rollback.failed',
+            level: 'error',
+            data: { path: change.path, error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError) },
+          });
+        }
       }
       return { status: 'not-completed', reason: error instanceof Error ? error.message : String(error) };
     }
 
-    this.logger.info('engine.edit.commit.finish', { files: unique.size, presentation: this.presentation });
+    emit({ type: 'edit.commit.finish', data: { files: unique.size } });
     return { status: 'completed', files: unique.size, paths: [...unique.keys()] };
   }
 }

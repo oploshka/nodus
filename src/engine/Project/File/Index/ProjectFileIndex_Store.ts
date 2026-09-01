@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import type { sProjectFileIndexState } from './ProjectFileIndex.js';
 
@@ -13,7 +13,7 @@ export class ProjectFileIndex_Store {
   public constructor(
     private readonly root: string,
     private readonly projectId: string,
-    private readonly logger: EngineLogger,
+    private readonly emit: tEngineEmit,
     private readonly cachePath = DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH,
   ) {
     this.pathResolver = new PathResolver(root);
@@ -25,7 +25,9 @@ export class ProjectFileIndex_Store {
       const parsed = JSON.parse(await readFile(this.absolute(this.cachePath), 'utf8')) as sProjectFileIndexState;
       return parsed.version === 1 && parsed.projectId === this.projectId ? parsed : undefined;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') this.logger.warn('project.index.load.failed', String(error));
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        this.emit({ type: 'project.index.load.failed', level: 'warning', data: { error: String(error) } });
+      }
       return undefined;
     }
   }

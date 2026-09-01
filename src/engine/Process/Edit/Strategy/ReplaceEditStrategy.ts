@@ -1,11 +1,10 @@
-import { ReplaceApplicator, type ReplaceOperation} from "@engine/Process/Edit/Applicator/ReplaceApplicator.js";
-import type { EditStrategy} from "@engine/Process/Edit/EditStrategy.js";
-import type { EditPreparationContext, EditPrepareResult} from "@engine/Process/Edit/EditTypes.js";
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import { ReplaceApplicator, type ReplaceOperation } from '@engine/Process/Edit/Applicator/ReplaceApplicator.js';
+import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
+import type { EditPreparationContext, EditPrepareResult } from '@engine/Process/Edit/EditTypes.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { callModel } from '@model/Runner/ModelCaller.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
-import { ModelLanguagePolicy} from "@engine/Common/Language/ModelLanguagePolicy.js";
+import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
@@ -19,7 +18,6 @@ export class ReplaceEditStrategy implements EditStrategy {
   public constructor(
     private readonly fileSystem: FileSystem,
     private readonly model: ModelRunner,
-    private readonly logger: EngineLogger,
     private readonly language: LanguageConfiguration,
     private readonly guidance: string,
     private readonly maxEditAttempts = 2,
@@ -31,7 +29,7 @@ export class ReplaceEditStrategy implements EditStrategy {
     let lastError: string | undefined;
     for (let attempt = 1; attempt <= this.maxEditAttempts; attempt += 1) {
       try {
-        const response = await callModel<ReplaceFileResponse>(this.model, this.editModelLogger(), {
+        const response = await callModel<ReplaceFileResponse>(this.model, context.emit, {
           request: {
             message: attempt === 1 ? 'Apply this concrete project edit using exact replacements.' : 'Repair the failed replacement against the current authoritative file.',
             data: { task: context.task.description, step: context.step, instruction: context.edit.instruction, authoritativeSource: { path, content: context.source }, recovery: attempt === 1 ? undefined : { attempt, previousError: lastError } },
@@ -56,16 +54,15 @@ export class ReplaceEditStrategy implements EditStrategy {
         return { status: 'completed', path, content: this.applicator.apply(context.source, response.operations, path), operations: response.operations.length };
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
+        if (attempt < this.maxEditAttempts) {
+          context.emit({
+            type: 'edit.strategy.retry',
+            level: 'warning',
+            data: { strategy: this.id, path, editAttempt: attempt, maxEditAttempts: this.maxEditAttempts, error: lastError },
+          });
+        }
       }
     }
     return { status: 'not-completed', reason: `Replace edit recovery limit reached (${this.maxEditAttempts}) for ${path}. Last error: ${lastError ?? 'unknown edit error'}` };
-  }
-
-  private editModelLogger(): EngineLogger {
-    return {
-      info: (event, data) => this.logger.info(`engine.edit.model.${event}`, data),
-      warn: (event, data) => this.logger.warn(`engine.edit.model.${event}`, data),
-      error: (event, data) => this.logger.error(`engine.edit.model.${event}`, data),
-    };
   }
 }

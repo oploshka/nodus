@@ -1,6 +1,7 @@
 import type { sEngineSchemaStep } from './EngineSchemaTsType.js';
 import type {
   iEngineStep,
+  sEngineStepMetadata,
   tEngineRunDependencies,
   tEngineStepRunResult,
 } from './EngineStepInterface.js';
@@ -9,6 +10,11 @@ import type {
 export abstract class EngineStep implements iEngineStep {
   public abstract getId(): string | undefined;
   public abstract getGroup(): string;
+
+  public getMetadata(): sEngineStepMetadata {
+    const code = this.getId() ?? this.constructor.name;
+    return { code, title: code, color: 'white' };
+  }
 
   public getDependencies(): Readonly<Record<string, iEngineStep>> {
     return {};

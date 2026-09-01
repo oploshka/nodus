@@ -3,12 +3,16 @@ import { resolve } from 'node:path';
 import { ActionUserInputCli } from '@app/Cli/ActionUserInputCli.js';
 import { CLI_EXIT, runCli } from '@app/Cli/Cli.js';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
-import { CompositeLogger, ConsoleLogger, FileLogger } from '@app/Logging/Logger.js';
+import {
+  CompositeEventSubscriber,
+  ConsoleEventSubscriber,
+  FileEventSubscriber,
+} from '@app/Logging/Logger.js';
 import { createModel } from '@app/Model/Model.js';
 import { clearProjectIndex, createProject } from '@app/Project/Project.js';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
 import { EngineSchema } from '@engine/Core/EngineSchema.js';
-import { ENGINE_STEP } from '@engine/Core/EngineSchemaTsType.js';
+import { ENGINE_STEP, type tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { sEngineGroupConfig } from '@engine/Core/EngineRuntimeTsType.js';
 import type { iEngineStep } from '@engine/Core/EngineStepInterface.js';
 import { Engine } from '@engine/Engine.js';
@@ -37,22 +41,26 @@ async function main(args: string[]): Promise<void> {
   if (options.clearLogs) await rm(logDirectory, { recursive: true, force: true });
 
   const logPath = resolve(logDirectory, `${fileTimestamp()}-nodus.log`);
-  const logger = new CompositeLogger([
-    new ConsoleLogger(configuration.language?.response),
-    new FileLogger(logPath),
+  const events = new CompositeEventSubscriber([
+    new ConsoleEventSubscriber(configuration.language?.response),
+    new FileEventSubscriber(logPath),
   ]);
+  const emit: tEngineEmit = (event) => events.listener({ event, path: [] });
 
-  logger.info('app.startup', {
-    projectId: configuration.target.id,
-    clearCache: options.clearCache,
-    clearLogs: options.clearLogs,
-    logPath,
+  emit({
+    type: 'app.startup',
+    data: {
+      projectId: configuration.target.id,
+      clearCache: options.clearCache,
+      clearLogs: options.clearLogs,
+      logPath,
+    },
   });
 
   if (options.clearCache) await clearProjectIndex(configuration.target);
 
   const model = createModel(configuration.model);
-  const target = await createProject(configuration.target, logger);
+  const target = await createProject(configuration.target, emit);
   const language: LanguageConfiguration = {
     project: configuration.language?.project ?? 'en',
     nodus: configuration.language?.nodus ?? 'en',
@@ -82,7 +90,7 @@ async function main(args: string[]): Promise<void> {
       [ACTION_USER_INPUT_CLI]: new ActionUserInputCli(),
     },
   });
-  const dependencies = { target, logger, model, language };
+  const dependencies = { target, model, language, onEvent: events.listener };
 
   await runCli({
     projectId: target.id,
@@ -97,7 +105,7 @@ async function main(args: string[]): Promise<void> {
     },
   });
 
-  logger.info('app.exit');
+  emit({ type: 'app.exit' });
 }
 
 function createCliSchema(): EngineSchema {

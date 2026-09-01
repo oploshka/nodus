@@ -1,11 +1,14 @@
 import {
   ENGINE_STEP,
+  type sEngineEvent,
   type sEngineOutput,
   type sEngineSchemaStep,
+  type tEngineEmit,
 } from './EngineSchemaTsType.js';
 import { EngineSchema } from './EngineSchema.js';
 import type {
   iEngineStep,
+  tEngineEventListener,
   tEngineRunDependencies,
 } from './EngineStepInterface.js';
 import type {
@@ -60,6 +63,7 @@ export class EngineRuntime {
     }
     if (typeof module.getGroup !== 'function') throw new Error(`Engine module '${name}' must expose getGroup().`);
     if (typeof module.getId !== 'function') throw new Error(`Engine module '${name}' must expose getId().`);
+    if (typeof module.getMetadata !== 'function') throw new Error(`Engine module '${name}' must expose getMetadata().`);
     if (typeof module.getDependencies !== 'function') throw new Error(`Engine module '${name}' must expose getDependencies().`);
     if (typeof module.run !== 'function') throw new Error(`Engine module '${name}' must expose run(step, dependencies).`);
 
@@ -158,21 +162,50 @@ export class EngineRuntime {
     const registered = this.modules.get(moduleName);
     if (!registered) throw new Error(`Unknown Engine module: ${moduleName}`);
 
+    step.runtime ??= { events: [] };
+    step.runtime.events = [];
+    delete step.runtime.schema;
+
+    const listener = dependencies.onEvent as tEngineEventListener | undefined;
+    const emit: tEngineEmit = (event) => {
+      step.runtime ??= { events: [] };
+      step.runtime.events.push(event);
+      listener?.({
+        event,
+        path: [...path],
+        module: registered.name,
+        schemaStep: step,
+        step: registered.module,
+      });
+    };
+    const runDependencies: tEngineRunDependencies = { ...dependencies, emit };
+
     this.trace.push({ path: [...path], module: registered.name, status: 'STARTED' });
-    const result = await registered.module.run(step, dependencies);
+    emit({ type: 'step.start' });
 
-    let output: sEngineOutput;
-    if (result instanceof EngineSchema) {
-      const sequence = result.value;
-      const group = registered.module.getGroup();
-      this.validateReturnedSchema(sequence, group);
-      output = await this.executeSequence(result, sequence, undefined, path, group, dependencies);
-    } else {
-      output = result;
+    try {
+      const result = await registered.module.run(step, runDependencies);
+
+      let output: sEngineOutput;
+      if (result instanceof EngineSchema) {
+        const sequence = result.value;
+        step.runtime.schema = sequence;
+        const group = registered.module.getGroup();
+        this.validateReturnedSchema(sequence, group);
+        output = await this.executeSequence(result, sequence, undefined, path, group, dependencies);
+      } else {
+        output = result;
+      }
+
+      emit({ type: 'step.finish', data: { status: output.status, reason: output.reason } });
+      this.trace.push({ path: [...path], module: registered.name, status: output.status });
+      return output;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      emit({ type: 'step.error', level: 'error', data: { reason } });
+      this.trace.push({ path: [...path], module: registered.name, status: 'FAILURE' });
+      throw error;
     }
-
-    this.trace.push({ path: [...path], module: registered.name, status: output.status });
-    return output;
   }
 
   private validateReturnedSchema(sequence: sEngineSchemaStep[], groupName: string): void {

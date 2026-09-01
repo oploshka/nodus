@@ -1,7 +1,7 @@
 import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
-import { EngineStep } from '@engine/Core/EngineStep.js';
 import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
 import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import { StepAction } from '@engine/Step/StepAction.js';
 import { actionCoreResult } from './ActionCoreResult.js';
 
 export interface sFindFileActionInput {
@@ -10,13 +10,9 @@ export interface sFindFileActionInput {
 }
 
 /** Cheap bounded lookup that locates project file paths without reading file content. */
-export class FindFileAction extends EngineStep {
+export class FindFileAction extends StepAction {
   public getId(): string {
     return 'find-file';
-  }
-
-  public getGroup(): string {
-    return 'action';
   }
 
   public async run(

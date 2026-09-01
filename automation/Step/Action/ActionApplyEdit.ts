@@ -1,6 +1,6 @@
-import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
+import type { sEngineOutput, sEngineSchemaStep, tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import { StepAction } from '@engine/Step/StepAction.js';
 import type { ProjectEditRequest } from '@engine/Process/Edit/EditTypes.js';
 import type { ProjectEditResult } from '@engine/Process/Edit/ProjectEditor.js';
 import { actionCoreResult, readActionCoreResult } from './ActionCoreResult.js';
@@ -11,24 +11,20 @@ interface ChangeCodeActionData {
 }
 
 interface EditRuntime {
-  change(task: unknown, step: unknown, request: ProjectEditRequest): Promise<ProjectEditResult>;
+  change(task: unknown, step: unknown, request: ProjectEditRequest, emit: tEngineEmit): Promise<ProjectEditResult>;
 }
 
 /** Prepares semantic edit intents in the Engine-owned task-local edit state. */
-export class ApplyEditAction extends EngineStep {
+export class ApplyEditAction extends StepAction {
   public getId(): string {
     return 'apply-edit';
-  }
-
-  public getGroup(): string {
-    return 'action';
   }
 
   public async run(
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const change = readActionCoreResult<ChangeCodeActionData>(step.computedContext?.previous?.output);
+    const change = readActionCoreResult<ChangeCodeActionData>(step.runtime?.context?.previous?.output);
     if (!change || change.status !== 'completed') {
       return actionCoreResult({
         status: 'failed',
@@ -42,12 +38,14 @@ export class ApplyEditAction extends EngineStep {
     }
 
     const edit = dependencies.edit as EditRuntime | undefined;
-    if (!edit) throw new Error('ActionEditApply requires Engine run edit state.');
+    const emit = dependencies.emit as tEngineEmit | undefined;
+    if (!edit || !emit) throw new Error('ActionEditApply requires Engine run edit state and emit.');
 
     const result = await edit.change(
       { description: String(step.task ?? '') },
       step,
       change.data.edit,
+      emit,
     );
 
     if (result.status === 'not-completed') {

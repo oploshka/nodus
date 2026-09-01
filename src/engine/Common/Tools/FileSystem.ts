@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
+import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import { PathResolver } from './PathResolver.js';
 
@@ -13,20 +13,20 @@ export class FileSystem {
     public readonly root: string,
     private readonly pathResolver: PathResolver,
     private readonly indexProvider: () => ProjectFileIndex | undefined,
-    private readonly logger: EngineLogger,
+    private readonly emit: tEngineEmit,
     private readonly exclude: ReadonlyArray<string> = DEFAULT_EXCLUDE,
   ) {}
 
   public async resolvePath(path: string): Promise<string> {
     const resolved = await this.pathResolver.resolveExisting(path, this.indexProvider());
-    this.logPathCorrection(path, resolved);
+    this.emitPathCorrection(path, resolved);
     return resolved;
   }
 
   public async resolveTargetPath(path: string): Promise<string> {
     const writeExclude = this.exclude.filter((item) => normalizeRule(item) !== '.nodus');
     const resolved = await this.pathResolver.resolveTarget(path, [...writeExclude]);
-    this.logPathCorrection(path, resolved);
+    this.emitPathCorrection(path, resolved);
     return resolved;
   }
 
@@ -53,10 +53,12 @@ export class FileSystem {
     return resolve(this.root, ...projectPath.split('/'));
   }
 
-  private logPathCorrection(requested: string, resolved: string): void {
+  private emitPathCorrection(requested: string, resolved: string): void {
     let canonicalRequested: string | undefined;
     try { canonicalRequested = this.pathResolver.normalize(requested); } catch { /* absolute/model path */ }
-    if (canonicalRequested !== resolved) this.logger.info('project.path.corrected', { requested, resolved });
+    if (canonicalRequested !== resolved) {
+      this.emit({ type: 'project.path.corrected', data: { requested, resolved } });
+    }
   }
 }
 
