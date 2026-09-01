@@ -4,12 +4,12 @@ import { EngineSchema } from '@engine/Core/EngineSchema.js';
 import { ENGINE_STEP, type sEngineOutput, type sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
 import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
 import { StepAction } from '@engine/Step/StepAction.js';
-import WorkerCode from '@automation/Step/Worker/WorkerCode/WorkerCode.js';
-import { actionCoreResult } from '@automation/Step/Action/ActionCoreResult.js';
+import WorkerCode from '../../../automation/Step/Worker/WorkerCode/WorkerCode.js';
+import { actionCoreResult } from '../../../automation/Step/Action/ActionCoreResult.js';
 import {
   actionChangeCodeResult,
   readActionChangeCodeResult,
-} from '@automation/Step/Action/ActionChangeCodeResult.js';
+} from '../../../automation/Step/Action/ActionChangeCodeResult.js';
 
 class ChangeCodeStub extends StepAction {
   public readonly contextSizes: number[] = [];
