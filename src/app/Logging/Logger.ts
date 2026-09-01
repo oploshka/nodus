@@ -5,7 +5,6 @@ import type {
   tEngineEventListener,
   tEngineStepColor,
 } from '@engine/Core/EngineStepInterface.js';
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 
 const ANSI: Record<tEngineStepColor, string> = {
   gray: '\x1b[90m',
@@ -212,23 +211,6 @@ export class FileEventSubscriber implements EngineEventSubscriber {
       level: envelope.event.level ?? 'info',
       data: serialize(envelope.event.data),
     })}\n`, 'utf8');
-  }
-}
-
-/** Temporary adapter for project infrastructure that still exposes EngineLogger. */
-export class ProjectEventLogger implements EngineLogger {
-  public constructor(private readonly listener: tEngineEventListener) {}
-
-  public info(event: string, data?: unknown): void {
-    this.listener({ event: { type: event, data }, path: [] });
-  }
-
-  public warn(event: string, data?: unknown): void {
-    this.listener({ event: { type: event, level: 'warning', data }, path: [] });
-  }
-
-  public error(event: string, data?: unknown): void {
-    this.listener({ event: { type: event, level: 'error', data }, path: [] });
   }
 }
 
