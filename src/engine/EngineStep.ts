@@ -22,5 +22,5 @@ export abstract class EngineStep implements iEngineStep {
   public abstract run(
     input: unknown,
     dependencies: tEngineRunDependencies,
-  ): unknown | Promise<unknown>;
+  ): Promise<unknown>;
 }
