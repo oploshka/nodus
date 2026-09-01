@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { rm } from 'node:fs/promises';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
+import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import {
   ProjectFileIndex,
   type iProjectFileIndex,
@@ -12,7 +13,6 @@ import {
   DEFAULT_PROJECT_FILE_INDEX_CACHE_PATH,
   ProjectFileIndex_Store,
 } from '@engine/Project/File/Index/ProjectFileIndex_Store.js';
-import type { EngineLogger } from '@engine/Type/EngineLogger.js';
 import type { sTargetConfig } from '@engine/Type/EngineConfiguration.js';
 
 export interface iProjectRuntime {
@@ -24,13 +24,13 @@ export interface iProjectRuntime {
 
 export async function createProject(
   configuration: sTargetConfig,
-  logger: EngineLogger,
+  emit: tEngineEmit,
 ): Promise<iProjectRuntime> {
   const scanner = new ProjectFileIndex_Scanner();
   const indexStore = new ProjectFileIndex_Store(
     configuration.root,
     configuration.id,
-    logger,
+    emit,
     configuration.indexCachePath,
   );
   const loadedState = await indexStore.load();
@@ -47,7 +47,7 @@ export async function createProject(
     configuration.root,
     pathResolver,
     () => fileIndex.snapshot(),
-    logger,
+    emit,
     configuration.exclude,
   );
 
@@ -55,7 +55,7 @@ export async function createProject(
     const state = await scanner.scan(configuration);
     fileIndex.replace(state);
     await indexStore.save(state);
-    logger.info('project.scan', { files: state.files.length });
+    emit({ type: 'project.scan', data: { files: state.files.length } });
   }
 
   return {
