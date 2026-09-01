@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 export type sAutomationPackage = Readonly<Record<string, unknown>>;
 
-/** Loads the versioned automation package: product group policy plus available modules. */
+/** Loads the versioned automation package and hydrates file-backed prompt values. */
 export class AutomationLoader {
   public static async load(root: string): Promise<sAutomationPackage> {
     const absoluteRoot = resolve(root);
