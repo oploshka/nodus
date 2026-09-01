@@ -7,13 +7,12 @@ import {
   CompositeEventSubscriber,
   ConsoleEventSubscriber,
   FileEventSubscriber,
-  ProjectEventLogger,
 } from '@app/Logging/Logger.js';
 import { createModel } from '@app/Model/Model.js';
 import { clearProjectIndex, createProject } from '@app/Project/Project.js';
 import { AutomationLoader } from '@engine/Automation/AutomationLoader.js';
 import { EngineSchema } from '@engine/Core/EngineSchema.js';
-import { ENGINE_STEP } from '@engine/Core/EngineSchemaTsType.js';
+import { ENGINE_STEP, type tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { sEngineGroupConfig } from '@engine/Core/EngineRuntimeTsType.js';
 import type { iEngineStep } from '@engine/Core/EngineStepInterface.js';
 import { Engine } from '@engine/Engine.js';
@@ -46,25 +45,22 @@ async function main(args: string[]): Promise<void> {
     new ConsoleEventSubscriber(configuration.language?.response),
     new FileEventSubscriber(logPath),
   ]);
-  const projectLogger = new ProjectEventLogger(events.listener);
+  const emit: tEngineEmit = (event) => events.listener({ event, path: [] });
 
-  events.listener({
-    event: {
-      type: 'app.startup',
-      data: {
-        projectId: configuration.target.id,
-        clearCache: options.clearCache,
-        clearLogs: options.clearLogs,
-        logPath,
-      },
+  emit({
+    type: 'app.startup',
+    data: {
+      projectId: configuration.target.id,
+      clearCache: options.clearCache,
+      clearLogs: options.clearLogs,
+      logPath,
     },
-    path: [],
   });
 
   if (options.clearCache) await clearProjectIndex(configuration.target);
 
   const model = createModel(configuration.model);
-  const target = await createProject(configuration.target, projectLogger);
+  const target = await createProject(configuration.target, emit);
   const language: LanguageConfiguration = {
     project: configuration.language?.project ?? 'en',
     nodus: configuration.language?.nodus ?? 'en',
@@ -109,7 +105,7 @@ async function main(args: string[]): Promise<void> {
     },
   });
 
-  events.listener({ event: { type: 'app.exit' }, path: [] });
+  emit({ type: 'app.exit' });
 }
 
 function createCliSchema(): EngineSchema {
