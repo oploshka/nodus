@@ -86,19 +86,26 @@ RootModule::Dependency
 
 `src/engine/Step/` содержит thin role classes для `Planner`, `Worker`, `Action`, `Research`, `Qualifier`. Они в основном задают group/metadata defaults поверх общего Engine Step contract; отдельной runtime-механики Runner для каждой группы сейчас нет.
 
+`StepWorker` дополнительно хранит declared child dependencies и предоставляет canonical dependency module name через Worker id. Это позволяет concrete Worker владеть своими Actions, не регистрируя их как глобальные root modules.
+
 ## Active automation
 
-`automation/index.js` сейчас регистрирует:
+`automation/index.js` сейчас регистрирует только root modules:
 
 - `Planner`;
-- `WorkerCode`;
-- `ActionCodeChange`;
-- `ActionFileFind`;
-- `ActionFileRead`;
-- `ActionResearch`;
-- `ActionEditApply`.
+- `WorkerCode`.
 
-Group config отдельно задаёт, какие группы могут возвращать schema, а `modules` содержит concrete instances.
+Concrete Actions принадлежат `WorkerCode` как dependencies. Core регистрирует их в namespace:
+
+```text
+WorkerCode::ActionCodeChange
+WorkerCode::ActionFileFind
+WorkerCode::ActionFileRead
+WorkerCode::ActionResearch
+WorkerCode::ActionEditApply
+```
+
+Group config отдельно задаёт, какие группы могут возвращать schema, а root `modules` содержит только independently addressable modules текущей automation.
 
 Текущая рабочая вертикаль:
 
@@ -106,10 +113,10 @@ Group config отдельно задаёт, какие группы могут �
 ActionUserInputCli
   -> Planner
   -> WorkerCode
-  -> ActionCodeChange
-       -> при необходимости ActionFileFind / ActionFileRead / ActionResearch
-       -> повторный ActionCodeChange
-       -> ActionEditApply
+  -> WorkerCode::ActionCodeChange
+       -> при необходимости WorkerCode::ActionFileFind / ActionFileRead / ActionResearch
+       -> повторный WorkerCode::ActionCodeChange
+       -> WorkerCode::ActionEditApply
 ```
 
 Она уже проходит end-to-end на простых code-edit задачах.
@@ -130,7 +137,9 @@ Active `automation/Step/Planner/Planner.ts` сейчас намеренно ми
 
 `WorkerCode` — главный текущий schema-orchestration module code-edit vertical.
 
-Он:
+Он владеет concrete Action instances и использует их только через собственный dependency namespace. Root automation не адресует эти Actions напрямую.
+
+WorkerCode:
 
 - запускает `ActionCodeChange`;
 - интерпретирует semantic result;
