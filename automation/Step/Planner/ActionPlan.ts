@@ -1,13 +1,10 @@
+import type { sEngineResultRef } from '@engine/EngineDsl.js';
 import { EngineStep } from '@engine/EngineStep.js';
-
-export interface sPlanResultRef {
-  resultOf: string;
-}
 
 export interface sPlannedStep {
   id: string;
   task: string;
-  context?: Readonly<Record<string, sPlanResultRef>>;
+  context?: Readonly<Record<string, sEngineResultRef>>;
 }
 
 export interface sActionPlanResult {
