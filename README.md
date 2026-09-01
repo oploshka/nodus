@@ -2,9 +2,9 @@
 
 Nodus — экспериментальный runtime для локальных coding-моделей. Проект исследует, где должна проходить граница между semantic reasoning модели и обязанностями, которые надёжнее выполнять или контролировать на уровне runtime. Для решений, остающихся за моделью, отдельная задача Nodus — предоставить релевантное понимание конкретного проекта: существующие реализации, ограничения, соглашения и другие знания, необходимые для задачи.
 
-Nodus не предполагает, что правильное разделение ответственности между моделью и runtime известно заранее. Текущие границы `Engine`, `Process`, `Planner`, `Worker`, `Research`, Engine-owned Edit и EngineTest являются результатом экспериментов и продолжают проверяться реальными задачами и benchmark'ами.
+Nodus не предполагает, что правильное разделение ответственности между моделью и runtime известно заранее. Границы меняются после наблюдаемых failure cases и экспериментов; старые механизмы 0.4 не являются compatibility requirement только потому, что когда-то существовали.
 
-Версия 0.5 фиксирует переход к schema-driven Process runtime. `STEP` и `SEQUENCE` становятся явным языком исполнения Core: Planner и Worker могут возвращать локальные schemas, Runtime исполняет их, контролирует data flow и разрешённые переходы, а versioned `automation/` определяет конкретное подключаемое поведение. Это развитие границ 0.4, а не утверждение финальной архитектуры.
+Версия 0.5 фиксирует переход к schema-driven execution Core. `EngineSchema` описывает working execution chain, `EngineRuntime` исполняет uniform Step modules, поддерживает вложенные schemas/context/transition, а versioned `automation/` определяет конкретное Planner/Worker/Action behavior. Текущая рабочая вертикаль уже проходит `CLI -> Planner -> WorkerCode -> Actions -> Engine-owned Edit`; Planner и часть surrounding lifecycle ещё находятся в процессе доведения до законченной 0.5-модели.
 
 Подробнее исходная мотивация и две исторические линии проекта — runtime control и Project Understanding — описаны в [`doc/history/origin.md`](doc/history/origin.md).
 
@@ -14,17 +14,17 @@ Nodus не предполагает, что правильное разделе�
 npm install
 npm run test:unit
 npm run test:integration
-npm run dev -- nodus.config.json --clear-cache --clear-logs --scan
+npm run dev -- nodus.config.json --clear-cache --clear-logs
 npm run dev:project
 ```
 
-Для локальной модели example config ожидает OpenAI-compatible endpoint. Полный runtime log создаётся в `.nodus/logs/`.
+Для локальной модели example config ожидает OpenAI-compatible endpoint. Runtime file log создаётся в `log/runtime/<project-id>/`.
 
 ## Документация
 
 Документация разделена по статусу знания:
 
-- [`doc/architecture/`](doc/architecture/) — как Nodus работает сейчас;
+- [`doc/architecture/`](doc/architecture/) — как Nodus работает сейчас; во время текущей 0.5 migration `current-state.md` является главным handoff и отдельные старые документы могут ещё описывать 0.4 boundaries;
 - [`doc/development/`](doc/development/) — roadmap, benchmark practice и активная разработка;
 - [`doc/project/`](doc/project/) — conventions, terminology и устойчивые правила разработки Nodus;
 - [`doc/history/`](doc/history/) — происхождение проекта, архитектурная эволюция, решения и прошлые сценарии;
@@ -35,21 +35,22 @@ npm run dev:project
 ### Основные документы
 
 - [Текущее состояние](doc/architecture/current-state.md)
+- [Roadmap 0.5](doc/development/roadmap.md)
 - [Архитектура](doc/architecture/architecture.md)
 - [Application](doc/architecture/application.md)
 - [Engine](doc/architecture/engine.md)
 - [Planner](doc/architecture/planner.md)
 - [Worker](doc/architecture/worker.md)
 - [Edit](doc/architecture/edit.md)
-- [EngineTest](doc/architecture/engine-test.md)
+- [EngineTest — историческая/0.4 boundary](doc/architecture/engine-test.md)
 - [Model](doc/architecture/model.md)
-- [Roadmap](doc/development/roadmap.md)
 - [Принципы разработки](doc/project/principles.md)
 - [Глоссарий](doc/project/glossary.md)
 - [Conventions проекта](doc/project/conventions.md)
 - [Происхождение Nodus](doc/history/origin.md)
 - [Эволюция проекта](doc/history/evolution.md)
 - [Журнал архитектурных решений](doc/history/decisions.md)
+- [Nodus 0.4 functional snapshot / research](doc/research/0.4-functional-snapshot.md)
 - [Архитектурная эволюция / research](doc/research/architecture-evolution.md)
 - [Каталог failure classes](doc/research/failure-catalog.md)
 
