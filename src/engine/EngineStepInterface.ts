@@ -20,9 +20,10 @@ export interface sEngineStepMetadata {
   color: tEngineStepColor;
 }
 
+/** A reusable executable process. Composite Steps return a Point; leaf Steps return a value. */
 export interface iEngineStep {
   getId(): string | undefined;
   getGroup(): string;
   getMetadata(): sEngineStepMetadata;
-  run(input: unknown, dependencies: tEngineRunDependencies): unknown | Promise<unknown>;
+  run(input: unknown, dependencies: tEngineRunDependencies): Promise<unknown>;
 }
