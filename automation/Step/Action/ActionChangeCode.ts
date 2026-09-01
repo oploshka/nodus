@@ -10,8 +10,12 @@ import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
-import { actionCoreResult, readActionCoreData } from './ActionCoreResult.js';
-import type { tActionCoreResult } from './ActionCoreResult.js';
+import { readActionCoreData } from './ActionCoreResult.js';
+import {
+  actionChangeCodeResult,
+  type tActionChangeCodeRequest,
+  type tActionChangeCodeResult,
+} from './ActionChangeCodeResult.js';
 
 interface ChangeDecision {
   outcome: 'ready' | 'missing-information' | 'already-completed' | 'failed';
@@ -30,19 +34,6 @@ interface ChangeCodeRuntime {
   emit: tEngineEmit;
   language: LanguageConfiguration;
 }
-
-interface ChangeCodeActionData {
-  summary: string;
-  edit?: {
-    strategy: 'range-replace';
-    edits: Array<{ path: string; instruction: string }>;
-  };
-}
-
-type ChangeCodeRequestInput =
-  | { query: string }
-  | { path: string }
-  | { question: string };
 
 const decisionSchema: ModelResponseSchema = {
   description: 'One bounded attempt to determine the semantic project changes needed for the assigned task.',
@@ -77,13 +68,12 @@ export class ChangeCodeAction extends StepAction {
       .filter((item) => item !== undefined);
 
     try {
-      return actionCoreResult(await new ChangeCodeExecution(runtimeDependencies(dependencies)).run(step.task, context));
+      const result = await new ChangeCodeExecution(runtimeDependencies(dependencies)).run(step.task, context);
+      return actionChangeCodeResult(result);
     } catch (error) {
-      return actionCoreResult({
-        status: 'not-completed',
+      return actionChangeCodeResult({
+        status: 'retry',
         reason: error instanceof Error ? error.message : String(error),
-        canContinue: true,
-        retry: true,
       });
     }
   }
@@ -95,7 +85,7 @@ class ChangeCodeExecution {
   public async run(
     task: unknown,
     context: readonly unknown[],
-  ): Promise<tActionCoreResult<ChangeCodeActionData, ChangeCodeRequestInput>> {
+  ): Promise<tActionChangeCodeResult> {
     const taskText = describeTask(task);
     const decision = await callModel<ChangeDecision>(this.runtime.model, this.runtime.emit, {
       request: {
@@ -122,32 +112,61 @@ class ChangeCodeExecution {
     });
 
     if (decision.outcome === 'already-completed') {
-      return { status: 'completed', data: { summary: decision.summary ?? 'Requested outcome is already present.' } };
+      return {
+        status: 'already-completed',
+        summary: decision.summary ?? 'Requested outcome is already present.',
+      };
     }
+
     if (decision.outcome === 'failed') {
-      return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed.', canContinue: false };
+      return {
+        status: 'failed',
+        reason: decision.reason ?? 'The task cannot be completed.',
+      };
     }
+
     if (decision.outcome === 'missing-information') {
-      const requests: Array<{ actionId: string; input: ChangeCodeRequestInput }> = [
-        ...(decision.findFiles ?? []).map((query) => ({ actionId: 'find-file', input: { query: query.trim() } })),
-        ...(decision.readFiles ?? []).map((path) => ({ actionId: 'read-file', input: { path: path.trim() } })),
-        ...(decision.questions ?? []).map((question) => ({ actionId: 'research', input: { question: question.trim() } })),
+      const requests: tActionChangeCodeRequest[] = [
+        ...(decision.findFiles ?? []).map((query): tActionChangeCodeRequest => ({
+          actionId: 'find-file',
+          input: { query: query.trim() },
+        })),
+        ...(decision.readFiles ?? []).map((path): tActionChangeCodeRequest => ({
+          actionId: 'read-file',
+          input: { path: path.trim() },
+        })),
+        ...(decision.questions ?? []).map((question): tActionChangeCodeRequest => ({
+          actionId: 'research',
+          input: { question: question.trim() },
+        })),
       ].filter((request) => Object.values(request.input)[0]).slice(0, 3);
+
       if (requests.length === 0) throw new Error('Missing-information result has no concrete request.');
-      return { status: 'not-completed', reason: decision.reason ?? 'Additional project context is required.', canContinue: true, requests };
+
+      return {
+        status: 'need-context',
+        reason: decision.reason ?? 'Additional project context is required.',
+        requests,
+      };
     }
 
     const edits = (decision.edits ?? []).slice(0, 6);
     if (edits.length === 0) throw new Error('Ready result contains no edits.');
+
     const normalized: Array<{ path: string; instruction: string }> = [];
     for (const edit of edits) {
-      normalized.push({ path: await this.runtime.fileSystem.resolvePath(edit.path), instruction: edit.instruction.trim() });
+      normalized.push({
+        path: await this.runtime.fileSystem.resolvePath(edit.path),
+        instruction: edit.instruction.trim(),
+      });
     }
+
     return {
-      status: 'completed',
-      data: {
-        summary: decision.summary ?? `Prepared ${normalized.length} project edit intent(s).`,
-        edit: { strategy: 'range-replace', edits: normalized },
+      status: 'ready-edit',
+      summary: decision.summary ?? `Prepared ${normalized.length} project edit intent(s).`,
+      edit: {
+        strategy: 'range-replace',
+        edits: normalized,
       },
     };
   }
