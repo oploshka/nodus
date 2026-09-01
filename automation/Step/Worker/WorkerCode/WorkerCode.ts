@@ -4,25 +4,34 @@ import {
 } from '@engine/Core/EngineSchemaTsType.js';
 import { EngineSchema } from '@engine/Core/EngineSchema.js';
 import { StepWorker } from '@engine/Step/StepWorker.js';
+import { ApplyEditAction as ActionEditApply } from '@automation/Step/Action/ActionApplyEdit.js';
+import { ChangeCodeAction as ActionCodeChange } from '@automation/Step/Action/ActionChangeCode.js';
 import {
   readActionCoreResult,
   type sActionCoreRequest,
 } from '@automation/Step/Action/ActionCoreResult.js';
+import { FindFileAction as ActionFileFind } from '@automation/Step/Action/ActionFindFile.js';
+import { ReadFileAction as ActionFileRead } from '@automation/Step/Action/ActionReadFile.js';
+import { ResearchAction as ActionResearch } from '@automation/Step/Action/ActionResearch.js';
 import { previousStepNumbers, previousSteps } from './WorkerCodeSequence.js';
-
-const ACTION_CODE_CHANGE = 'ActionCodeChange';
-const ACTION_FILE_FIND = 'ActionFileFind';
-const ACTION_FILE_READ = 'ActionFileRead';
-const ACTION_RESEARCH = 'ActionResearch';
-const ACTION_EDIT_APPLY = 'ActionEditApply';
 
 const MAX_ATTEMPTS = 5;
 const MAX_FIND_FILE_REQUESTS = 4;
 const MAX_READ_FILE_REQUESTS = 6;
 const MAX_RESEARCH_REQUESTS = 2;
 
-/** WorkerCode owns orchestration only; runtime dependencies are supplied when modules execute. */
+/** WorkerCode owns concrete Actions; Core registers and executes them as Worker dependencies. */
 export default class WorkerCode extends StepWorker {
+  public constructor() {
+    super({
+      ActionCodeChange: new ActionCodeChange(),
+      ActionFileFind: new ActionFileFind(),
+      ActionFileRead: new ActionFileRead(),
+      ActionResearch: new ActionResearch(),
+      ActionEditApply: new ActionEditApply(),
+    });
+  }
+
   public getId(): string {
     return 'WorkerCode';
   }
@@ -34,7 +43,7 @@ export default class WorkerCode extends StepWorker {
   private changeStep(task: unknown, contextSteps: readonly number[]): sEngineSchemaStep {
     return {
       type: ENGINE_STEP.SEQUENCE,
-      module: ACTION_CODE_CHANGE,
+      module: this.dependency('ActionCodeChange'),
       task,
       input: contextSteps.length > 0
         ? { context: { steps: contextSteps } }
@@ -57,7 +66,7 @@ export default class WorkerCode extends StepWorker {
       if (hasEdit(result.data)) {
         this.replaceTail(sequence, stepNumber, [{
           type: ENGINE_STEP.SEQUENCE,
-          module: ACTION_EDIT_APPLY,
+          module: this.dependency('ActionEditApply'),
           task,
           input: { context: { previous: true } },
           steps: null,
@@ -67,7 +76,7 @@ export default class WorkerCode extends StepWorker {
     }
 
     if (result.status === 'failed' || !result.canContinue) return;
-    if (this.countThrough(sequence, stepNumber, ACTION_CODE_CHANGE) >= MAX_ATTEMPTS) return;
+    if (this.countThrough(sequence, stepNumber, this.dependency('ActionCodeChange')) >= MAX_ATTEMPTS) return;
 
     if (result.retry) {
       this.replaceTail(sequence, stepNumber, [
@@ -123,14 +132,18 @@ export default class WorkerCode extends StepWorker {
   }
 
   private route(actionId: string): { module: string; limit: number } | undefined {
-    if (actionId === 'find-file') return { module: ACTION_FILE_FIND, limit: MAX_FIND_FILE_REQUESTS };
-    if (actionId === 'read-file') return { module: ACTION_FILE_READ, limit: MAX_READ_FILE_REQUESTS };
-    if (actionId === 'research') return { module: ACTION_RESEARCH, limit: MAX_RESEARCH_REQUESTS };
+    if (actionId === 'find-file') return { module: this.dependency('ActionFileFind'), limit: MAX_FIND_FILE_REQUESTS };
+    if (actionId === 'read-file') return { module: this.dependency('ActionFileRead'), limit: MAX_READ_FILE_REQUESTS };
+    if (actionId === 'research') return { module: this.dependency('ActionResearch'), limit: MAX_RESEARCH_REQUESTS };
     return undefined;
   }
 
   private contextSteps(sequence: sEngineSchemaStep[], stepNumber: number): number[] {
-    const contextModules = new Set([ACTION_FILE_FIND, ACTION_FILE_READ, ACTION_RESEARCH]);
+    const contextModules = new Set([
+      this.dependency('ActionFileFind'),
+      this.dependency('ActionFileRead'),
+      this.dependency('ActionResearch'),
+    ]);
     return previousStepNumbers(sequence, stepNumber, (step) => Boolean(step.module && contextModules.has(step.module)));
   }
 
