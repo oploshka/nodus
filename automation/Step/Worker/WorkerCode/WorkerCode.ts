@@ -5,9 +5,9 @@ import {
 import { EngineSchema } from '@engine/Core/EngineSchema.js';
 import { StepWorker } from '@engine/Step/StepWorker.js';
 import {
-  readActionCoreResult,
-  type sActionCoreRequest,
-} from '@automation/Step/Action/ActionCoreResult.js';
+  readActionChangeCodeResult,
+  type tActionChangeCodeRequest,
+} from '@automation/Step/Action/ActionChangeCodeResult.js';
 import { previousStepNumbers, previousSteps } from './WorkerCodeSequence.js';
 
 const ACTION_CODE_CHANGE = 'ActionCodeChange';
@@ -48,38 +48,33 @@ export default class WorkerCode extends StepWorker {
     const step = sequence[stepNumber - 1];
     if (!step?.module) return;
 
-    const result = readActionCoreResult(step.output);
+    const result = readActionChangeCodeResult(step.output);
     if (!result) return;
 
     const task = step.task;
 
-    if (result.status === 'completed') {
-      if (hasEdit(result.data)) {
-        this.replaceTail(sequence, stepNumber, [{
-          type: ENGINE_STEP.SEQUENCE,
-          module: ACTION_EDIT_APPLY,
-          task,
-          input: { context: { previous: true } },
-          steps: null,
-        }]);
-      }
+    if (result.status === 'ready-edit') {
+      this.replaceTail(sequence, stepNumber, [{
+        type: ENGINE_STEP.SEQUENCE,
+        module: ACTION_EDIT_APPLY,
+        task,
+        input: { context: { previous: true } },
+        steps: null,
+      }]);
       return;
     }
 
-    if (result.status === 'failed' || !result.canContinue) return;
+    if (result.status === 'already-completed' || result.status === 'failed') return;
     if (this.countThrough(sequence, stepNumber, ACTION_CODE_CHANGE) >= MAX_ATTEMPTS) return;
 
-    if (result.retry) {
+    if (result.status === 'retry') {
       this.replaceTail(sequence, stepNumber, [
         this.changeStep(task, this.contextSteps(sequence, stepNumber + 1)),
       ]);
       return;
     }
 
-    const requests = result.requests ?? [];
-    if (requests.length === 0) return;
-
-    const planned = this.planRequests(sequence, stepNumber, requests);
+    const planned = this.planRequests(sequence, stepNumber, result.requests);
     if (planned === undefined) return;
 
     this.replaceTail(
@@ -101,14 +96,12 @@ export default class WorkerCode extends StepWorker {
   private planRequests(
     sequence: sEngineSchemaStep[],
     stepNumber: number,
-    requests: ReadonlyArray<sActionCoreRequest>,
+    requests: ReadonlyArray<tActionChangeCodeRequest>,
   ): Array<{ module: string; input: unknown }> | undefined {
     const planned: Array<{ module: string; input: unknown }> = [];
 
     for (const request of requests) {
       const route = this.route(request.actionId);
-      if (!route) continue;
-
       const candidate = { module: route.module, input: request.input };
       if (this.wasRequested(sequence, stepNumber, candidate) || planned.some((item) => sameRequest(item, candidate))) continue;
 
@@ -122,11 +115,10 @@ export default class WorkerCode extends StepWorker {
     return planned;
   }
 
-  private route(actionId: string): { module: string; limit: number } | undefined {
+  private route(actionId: tActionChangeCodeRequest['actionId']): { module: string; limit: number } {
     if (actionId === 'find-file') return { module: ACTION_FILE_FIND, limit: MAX_FIND_FILE_REQUESTS };
     if (actionId === 'read-file') return { module: ACTION_FILE_READ, limit: MAX_READ_FILE_REQUESTS };
-    if (actionId === 'research') return { module: ACTION_RESEARCH, limit: MAX_RESEARCH_REQUESTS };
-    return undefined;
+    return { module: ACTION_RESEARCH, limit: MAX_RESEARCH_REQUESTS };
   }
 
   private contextSteps(sequence: sEngineSchemaStep[], stepNumber: number): number[] {
@@ -153,10 +145,6 @@ export default class WorkerCode extends StepWorker {
   private replaceTail(sequence: sEngineSchemaStep[], stepNumber: number, next: sEngineSchemaStep[]): void {
     sequence.splice(stepNumber, sequence.length - stepNumber, ...next);
   }
-}
-
-function hasEdit(data: unknown): boolean {
-  return typeof data === 'object' && data !== null && 'edit' in data && Boolean((data as { edit?: unknown }).edit);
 }
 
 function sameRequest(left: { module: string; input: unknown }, right: { module: string; input: unknown }): boolean {
