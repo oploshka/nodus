@@ -1,12 +1,11 @@
-import type { sEngineSchemaStep } from './EngineSchemaTsType.js';
+import { EngineModule, type sEngineModuleConfig } from './EngineModule.js';
 import type {
   iEngineStep,
   sEngineStepMetadata,
   tEngineRunDependencies,
-  tEngineStepRunResult,
 } from './EngineStepInterface.js';
 
-/** Shared executable Step contract. Concrete Steps implement identity, group and run(). */
+/** Shared Step contract. A Step may return a module to enter its local DSL flow. */
 export abstract class EngineStep implements iEngineStep {
   public abstract getId(): string | undefined;
   public abstract getGroup(): string;
@@ -16,12 +15,12 @@ export abstract class EngineStep implements iEngineStep {
     return { code, title: code, color: 'white' };
   }
 
-  public getDependencies(): Readonly<Record<string, iEngineStep>> {
-    return {};
+  protected module(config: sEngineModuleConfig): EngineModule {
+    return new EngineModule(config);
   }
 
   public abstract run(
-    step: sEngineSchemaStep,
+    input: unknown,
     dependencies: tEngineRunDependencies,
-  ): Promise<tEngineStepRunResult>;
+  ): unknown | Promise<unknown>;
 }

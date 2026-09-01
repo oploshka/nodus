@@ -2,6 +2,7 @@ import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { ActionUserInputCli } from '@app/Cli/ActionUserInputCli.js';
 import { CLI_EXIT, runCli } from '@app/Cli/Cli.js';
+import { AutomationLoader } from '@app/Automation/AutomationLoader.js';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import {
   CompositeEventSubscriber,
@@ -10,7 +11,6 @@ import {
 } from '@app/Logging/Logger.js';
 import { createModel } from '@app/Model/Model.js';
 import { clearProjectIndex, createProject } from '@app/Project/Project.js';
-import { AutomationLoader } from '@engine/Core/Automation/AutomationLoader.js';
 import { EngineSchema } from '@engine/Core/EngineSchema.js';
 import { ENGINE_STEP, type tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { sEngineGroupConfig } from '@engine/Core/EngineRuntimeTsType.js';
