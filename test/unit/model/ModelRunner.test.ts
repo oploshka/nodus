@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { sEngineEvent, tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { ModelAdapter } from '@model/Adapter/ModelAdapter.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
@@ -93,41 +94,39 @@ describe('ModelRunner', () => {
     expect(adapter.requests[0].messages[3].content).toContain('file-content');
   });
 
-  it('ModelCaller logs the complete result and exposes only data', async () => {
+  it('ModelCaller emits the complete result and exposes only data', async () => {
     const adapter = new SingleResponseAdapter('{"status":"completed"}');
     const runner = new ModelRunner(adapter, { provider: 'openai-compatible', endpoint: 'unused', model: 'test' });
-    const events: Array<{ event: string; value: unknown }> = [];
+    const events: sEngineEvent[] = [];
+    const emit: tEngineEmit = (event) => events.push(event);
 
-    const data = await callModel<{ status: 'action' | 'completed' | 'failed' }>(runner, {
-      info(event, value) { events.push({ event, value }); },
-    }, {
+    const data = await callModel<{ status: 'action' | 'completed' | 'failed' }>(runner, emit, {
       request: { message: 'Finish.', format: ModelRequestFormat.Text },
       response: { format: ModelResponseFormat.Json, schema: decisionSchema },
     });
 
     expect(data).toEqual({ status: 'completed' });
-    expect(events.map(({ event }) => event)).toEqual(['model.run.start', 'model.run']);
-    expect(events[0].value).toMatchObject({ kind: 'model', message: 'Finish.' });
-    expect(events[1].value).toHaveProperty('exchange');
-    expect(events[1].value).toHaveProperty('meta');
+    expect(events.map(({ type }) => type)).toEqual(['model.start', 'model.finish']);
+    expect(events[0].data).toMatchObject({ kind: 'model', message: 'Finish.' });
+    expect(events[1].data).toHaveProperty('exchange');
+    expect(events[1].data).toHaveProperty('meta');
   });
 
-  it('ModelCaller logs the model exchange when response schema validation fails', async () => {
+  it('ModelCaller emits the model exchange when response schema validation fails', async () => {
     const adapter = new SingleResponseAdapter('{"unexpected":true}');
     const runner = new ModelRunner(adapter, { provider: 'openai-compatible', endpoint: 'unused', model: 'test' });
-    const events: Array<{ event: string; value: unknown }> = [];
+    const events: sEngineEvent[] = [];
+    const emit: tEngineEmit = (event) => events.push(event);
 
-    await expect(callModel(runner, {
-      info(event, value) { events.push({ event, value }); },
-    }, {
+    await expect(callModel(runner, emit, {
       request: { message: 'Finish.', format: ModelRequestFormat.Text },
       response: { format: ModelResponseFormat.Json, schema: decisionSchema },
     })).rejects.toThrow('Required field is missing');
 
-    expect(events.map(({ event }) => event)).toEqual(['model.run.start', 'model.run.error']);
-    expect(events[0].value).toMatchObject({ kind: 'model', message: 'Finish.' });
-    expect(events[1].value).toHaveProperty('exchange.response.0.message', '{"unexpected":true}');
-    expect(events[1].value).toHaveProperty('meta.model', 'test');
+    expect(events.map(({ type }) => type)).toEqual(['model.start', 'model.error']);
+    expect(events[0].data).toMatchObject({ kind: 'model', message: 'Finish.' });
+    expect(events[1].data).toHaveProperty('exchange.response.0.message', '{"unexpected":true}');
+    expect(events[1].data).toHaveProperty('meta.model', 'test');
   });
 
   it('diffFile stays a thin specialized facade over the same runner contract', async () => {
