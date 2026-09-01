@@ -1,7 +1,7 @@
 import { EngineStep } from '@engine/EngineStep.js';
 import type { EngineDsl } from '@engine/EngineDsl.js';
 import type { iEngineStep } from '@engine/EngineStepInterface.js';
-import { ActionPlan, type sActionPlanResult, type sPlanResultRef } from './ActionPlan.js';
+import { ActionPlan, type sActionPlanResult } from './ActionPlan.js';
 
 /** Planner materializes a plan by running each planned task as a nested Qualification Step. */
 export class Planner extends EngineStep {
@@ -30,19 +30,14 @@ export class Planner extends EngineStep {
 
   private async runPlan(result: unknown, dsl: EngineDsl): Promise<unknown> {
     const plan = readPlan(result);
-    const results = new Map<string, unknown>();
-    let lastResult: unknown;
-
-    for (const planned of plan.steps) {
-      const context = resolveContext(planned.context, results);
-      lastResult = await dsl.runStep(this.qualification, {
+    const value = await dsl.runSteps(plan.steps, (planned, context) => ({
+      step: this.qualification,
+      input: {
         task: planned.task,
         context,
-      });
-      results.set(planned.id, lastResult);
-    }
-
-    return lastResult;
+      },
+    }));
+    return value;
   }
 }
 
@@ -51,18 +46,4 @@ function readPlan(value: unknown): sActionPlanResult {
     throw new Error('ActionPlan must return steps.');
   }
   return value as sActionPlanResult;
-}
-
-function resolveContext(
-  context: Readonly<Record<string, sPlanResultRef>> | undefined,
-  results: ReadonlyMap<string, unknown>,
-): Record<string, unknown> {
-  if (!context) return {};
-
-  return Object.fromEntries(Object.entries(context).map(([name, reference]) => {
-    if (!results.has(reference.resultOf)) {
-      throw new Error(`Planned Step requires unavailable result '${reference.resultOf}'.`);
-    }
-    return [name, results.get(reference.resultOf)];
-  }));
 }
