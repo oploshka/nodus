@@ -12,7 +12,7 @@ Roadmap фиксирует текущую рабочую точку 0.5 и по�
 - [x] Step output остаётся частью working schema и может использоваться последующими шагами.
 - [x] `transition` может менять только невыполненный хвост sequence; Core проверяет group/module boundaries.
 - [x] Modules могут объявлять dependencies, которые Core регистрирует в namespace вида `RootModule::Dependency`.
-- [x] Active automation регистрирует `Planner`, `WorkerCode` и конкретные Actions.
+- [x] Active automation root-регистрирует `Planner` и `WorkerCode`; concrete Actions принадлежат `WorkerCode` и доступны через `WorkerCode::Dependency` namespace.
 - [x] CLI проходит через рабочую вертикаль `ActionUserInputCli -> Planner -> WorkerCode -> Actions`.
 - [x] `Engine` создаёт task-local `ProjectEditor`, передаёт его как runtime dependency и применяет накопленные изменения после успешного выполнения schema.
 - [x] Runtime events привязаны к конкретному Step через scoped `emit`; `runtime.events` сохраняет execution-local события, внешний listener получает path/module/Step metadata.
@@ -22,7 +22,7 @@ Roadmap фиксирует текущую рабочую точку 0.5 и по�
 
 ### 1. Довести WorkerCode до устойчивого контракта
 
-`WorkerCode` уже является рабочей schema-orchestration вертикалью, но его `transitionChange()` всё ещё вынужден интерпретировать общий `ActionCoreResult` с `completed / not-completed / failed`, `canContinue`, `retry` и generic requests.
+`WorkerCode` уже владеет concrete Actions через declared dependencies и остаётся рабочей schema-orchestration вертикалью, но его `transitionChange()` всё ещё вынужден интерпретировать общий `ActionCoreResult` с `completed / not-completed / failed`, `canContinue`, `retry` и generic requests.
 
 Следующий шаг — сделать контракт `ActionCodeChange` предметным для задачи изменения кода. Ориентир по смыслу:
 
