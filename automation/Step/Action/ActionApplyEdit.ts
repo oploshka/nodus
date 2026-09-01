@@ -3,12 +3,8 @@ import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js
 import { StepAction } from '@engine/Step/StepAction.js';
 import type { ProjectEditRequest } from '@engine/Process/Edit/EditTypes.js';
 import type { ProjectEditResult } from '@engine/Process/Edit/ProjectEditor.js';
-import { actionCoreResult, readActionCoreResult } from './ActionCoreResult.js';
-
-interface ChangeCodeActionData {
-  summary: string;
-  edit?: ProjectEditRequest;
-}
+import { actionCoreResult } from './ActionCoreResult.js';
+import { readActionChangeCodeResult } from './ActionChangeCodeResult.js';
 
 interface EditRuntime {
   change(task: unknown, step: unknown, request: ProjectEditRequest, emit: tEngineEmit): Promise<ProjectEditResult>;
@@ -24,17 +20,13 @@ export class ApplyEditAction extends StepAction {
     step: sEngineSchemaStep,
     dependencies: tEngineRunDependencies,
   ): Promise<sEngineOutput> {
-    const change = readActionCoreResult<ChangeCodeActionData>(step.runtime?.context?.previous?.output);
-    if (!change || change.status !== 'completed') {
+    const change = readActionChangeCodeResult(step.runtime?.context?.previous?.output);
+    if (!change || change.status !== 'ready-edit') {
       return actionCoreResult({
         status: 'failed',
-        reason: 'ActionEditApply requires the previous completed ActionCodeChange output.',
+        reason: 'ActionEditApply requires the previous ready ActionCodeChange output.',
         canContinue: false,
       });
-    }
-
-    if (!change.data.edit) {
-      return actionCoreResult({ status: 'completed', data: { summary: change.data.summary } });
     }
 
     const edit = dependencies.edit as EditRuntime | undefined;
@@ -44,7 +36,7 @@ export class ApplyEditAction extends StepAction {
     const result = await edit.change(
       { description: String(step.task ?? '') },
       step,
-      change.data.edit,
+      change.edit,
       emit,
     );
 
@@ -59,7 +51,7 @@ export class ApplyEditAction extends StepAction {
     return actionCoreResult({
       status: 'completed',
       data: {
-        summary: change.data.summary,
+        summary: change.summary,
         edit: {
           files: result.files,
           operations: result.operations,
