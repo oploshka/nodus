@@ -91,9 +91,10 @@ export class OpenAICompatibleModelAdapter implements ModelAdapter, AgentModelAda
   private async request(body: Record<string, unknown>): Promise<OpenAICompatibleResponse> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const url = `${this.endpoint.replace(/\/$/, '')}/chat/completions`;
 
     try {
-      const response = await fetch(`${this.endpoint.replace(/\/$/, '')}/chat/completions`, {
+      const response = await fetch(url, {
         method: 'POST',
         signal: controller.signal,
         headers: {
@@ -114,9 +115,20 @@ export class OpenAICompatibleModelAdapter implements ModelAdapter, AgentModelAda
       if (error instanceof DOMException && error.name === 'AbortError') {
         throw new Error(`Model request timed out after ${this.requestTimeoutMs} ms`);
       }
+      if (error instanceof TypeError && error.message === 'fetch failed') {
+        throw new Error(`Model request to ${url} failed: ${transportErrorMessage(error)}`, { cause: error });
+      }
       throw error;
     } finally {
       clearTimeout(timer);
     }
   }
+}
+
+function transportErrorMessage(error: Error): string {
+  const cause = error.cause;
+  if (!(cause instanceof Error)) return error.message;
+
+  const code = 'code' in cause && typeof cause.code === 'string' ? cause.code : undefined;
+  return [code, cause.message].filter(Boolean).join(' - ') || error.message;
 }
