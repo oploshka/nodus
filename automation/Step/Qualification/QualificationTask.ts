@@ -17,7 +17,7 @@ export class QualificationTask extends EngineStep {
   private readonly points = {
     qualify: this.point({
       step: new ActionQualification(),
-      response: async (result, dsl) => {
+      response: async ({ result, dsl }) => {
         const qualification = readQualification(result);
 
         if (qualification.type === 'multi' && this.allowPlanning) {
@@ -25,15 +25,13 @@ export class QualificationTask extends EngineStep {
             allowPlanning: false,
             worker: this.worker,
           });
-          const value = await dsl.runStep(
+          return dsl.runStep(
             new Planner(nestedQualification),
             qualification.input,
           );
-          return value;
         }
 
-        const value = await dsl.runStep(this.worker, qualification.input);
-        return value;
+        return dsl.runStep(this.worker, qualification.input);
       },
     }),
   };
