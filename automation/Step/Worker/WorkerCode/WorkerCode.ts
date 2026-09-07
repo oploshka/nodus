@@ -1,6 +1,10 @@
 import { EngineStep } from '@engine/EngineStep.js';
 import type { EngineDsl } from '@engine/EngineDsl.js';
-import type { EnginePoint, tEnginePointContext } from '@engine/EnginePoint.js';
+import type {
+  EnginePoint,
+  sEnginePointResolvedOption,
+  tEnginePointContext,
+} from '@engine/EnginePoint.js';
 import type { tEngineStepContext } from '@engine/EngineStepContext.js';
 import { ApplyEditAction } from '@automation/Step/Action/ActionApplyEdit.js';
 import {
@@ -33,7 +37,7 @@ interface sReadPointContext extends tEnginePointContext {
   calls: number;
 }
 
-/** WorkerCode expressed as a local Point flow: change -> retrieval -> change -> apply. */
+/** WorkerCode schema: change -> retrieval -> change -> apply. */
 export default class WorkerCode extends EngineStep {
   private readonly points = {
     change: this.point({
@@ -63,7 +67,7 @@ export default class WorkerCode extends EngineStep {
         available,
       ),
       createContext: () => ({ attempts: 0 }),
-      response: async (result, dsl, context, stepContext) => this.handleChange(
+      response: ({ result, dsl, context, stepContext }) => this.handleChange(
         result,
         dsl,
         context as sChangePointContext,
@@ -75,7 +79,7 @@ export default class WorkerCode extends EngineStep {
       name: 'read-file',
       step: new ReadFileAction(),
       createContext: () => ({ calls: 0 }),
-      response: async (result, _dsl, context) => {
+      response: ({ result, context }) => {
         const state = context as sReadPointContext;
         state.calls += 1;
         return result;
@@ -85,19 +89,19 @@ export default class WorkerCode extends EngineStep {
     find: this.point({
       name: 'find-file',
       step: new FindFileAction(),
-      response: async (result) => result,
+      response: ({ result }) => result,
     }),
 
     research: this.point({
       name: 'research',
       step: new ResearchAction(),
-      response: async (result) => result,
+      response: ({ result }) => result,
     }),
 
     apply: this.point({
       name: 'apply-edit',
       step: new ApplyEditAction(),
-      response: async (result) => result,
+      response: ({ result }) => result,
     }),
   };
 
@@ -135,7 +139,7 @@ export default class WorkerCode extends EngineStep {
     if (change.status === 'completed') {
       if (!change.data.edit) return change;
 
-      return dsl.runPoint(this.points.apply, {
+      return this.pointNext(this.points.apply, {
         task: stepContext.task,
         change,
       });
@@ -146,7 +150,7 @@ export default class WorkerCode extends EngineStep {
     }
 
     if (change.retry) {
-      return dsl.runPoint(this.points.change);
+      return this.pointNext(this.points.change);
     }
 
     const requests = change.requests ?? [];
@@ -166,13 +170,13 @@ export default class WorkerCode extends EngineStep {
       stepContext.evidence.push(action.data);
     }
 
-    return dsl.runPoint(this.points.change);
+    return this.pointNext(this.points.change);
   }
 }
 
 function changeInput(
   context: sWorkerCodeContext,
-  available: readonly EnginePoint[],
+  available: readonly sEnginePointResolvedOption[],
 ): {
   task: unknown;
   context: readonly unknown[];
@@ -186,15 +190,19 @@ function changeInput(
 }
 
 function availableActionPoint(
-  available: readonly EnginePoint[],
+  available: readonly sEnginePointResolvedOption[],
   actionId: string,
 ): EnginePoint | undefined {
-  return available.find((point) => point.name === actionId && isChangeCodeActionId(point.name));
+  return available
+    .map((option) => option.point)
+    .find((point) => point.name === actionId && isChangeCodeActionId(point.name));
 }
 
-function availableActionIds(available: readonly EnginePoint[]): tChangeCodeActionId[] {
+function availableActionIds(
+  available: readonly sEnginePointResolvedOption[],
+): tChangeCodeActionId[] {
   return available
-    .map((point) => point.name)
+    .map((option) => option.point.name)
     .filter(isChangeCodeActionId);
 }
 
