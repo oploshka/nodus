@@ -21,7 +21,6 @@ const MAX_READ_FILE_REQUESTS = 6;
 interface sWorkerCodeContext extends tEngineStepContext {
   task: unknown;
   evidence: unknown[];
-  availableActions: Set<tChangeCodeActionId>;
 }
 
 interface sChangePointContext extends tEnginePointContext {
@@ -36,7 +35,17 @@ interface sReadPointContext extends tEnginePointContext {
 export default class WorkerCode extends EngineStep {
   private readonly points = {
     change: this.point({
+      name: 'change-code',
       step: new ChangeCodeAction(),
+      options: () => [
+        {
+          point: this.points.read,
+          available: ({ nextContext }) => {
+            const state = nextContext as sReadPointContext | undefined;
+            return (state?.calls ?? 0) < MAX_READ_FILE_REQUESTS;
+          },
+        },
+      ],
       createContext: () => ({ attempts: 0 }),
       response: async (result, dsl, context, stepContext) => this.handleChange(
         result,
@@ -47,18 +56,18 @@ export default class WorkerCode extends EngineStep {
     }),
 
     read: this.point({
+      name: 'read-file',
       step: new ReadFileAction(),
       createContext: () => ({ calls: 0 }),
-      response: async (result, _dsl, context, stepContext) => {
+      response: async (result, _dsl, context) => {
         const state = context as sReadPointContext;
-        const worker = stepContext as sWorkerCodeContext;
         state.calls += 1;
-        if (state.calls >= MAX_READ_FILE_REQUESTS) worker.availableActions.delete('read-file');
         return result;
       },
     }),
 
     apply: this.point({
+      name: 'apply-edit',
       step: new ApplyEditAction(),
       response: async (result) => result,
     }),
@@ -77,7 +86,6 @@ export default class WorkerCode extends EngineStep {
     return {
       task: worker.task,
       evidence: [...worker.context],
-      availableActions: new Set<tChangeCodeActionId>(['read-file']),
     };
   }
 
@@ -111,7 +119,7 @@ export default class WorkerCode extends EngineStep {
     }
 
     if (change.retry) {
-      const value = await dsl.runPoint(this.points.change, changeInput(stepContext));
+      const value = await dsl.runPoint(this.points.change, changeInput(stepContext, dsl));
       return value;
     }
 
@@ -119,7 +127,7 @@ export default class WorkerCode extends EngineStep {
     if (requests.length === 0) return change;
 
     for (const request of requests) {
-      if (!stepContext.availableActions.has(request.actionId as tChangeCodeActionId)) {
+      if (!availableActionIds(dsl).includes(request.actionId as tChangeCodeActionId)) {
         return unavailableRequest(request.actionId);
       }
       if (request.actionId !== 'read-file') {
@@ -134,12 +142,15 @@ export default class WorkerCode extends EngineStep {
       stepContext.evidence.push(read.data);
     }
 
-    const value = await dsl.runPoint(this.points.change, changeInput(stepContext));
+    const value = await dsl.runPoint(this.points.change, changeInput(stepContext, dsl));
     return value;
   }
 }
 
-function changeInput(context: sWorkerCodeContext): {
+function changeInput(
+  context: sWorkerCodeContext,
+  dsl: EngineDsl,
+): {
   task: unknown;
   context: readonly unknown[];
   actions: readonly tChangeCodeActionId[];
@@ -147,8 +158,18 @@ function changeInput(context: sWorkerCodeContext): {
   return {
     task: context.task,
     context: context.evidence,
-    actions: [...context.availableActions],
+    actions: availableActionIds(dsl),
   };
+}
+
+function availableActionIds(dsl: EngineDsl): tChangeCodeActionId[] {
+  return dsl.available()
+    .map((point) => point.name)
+    .filter(isChangeCodeActionId);
+}
+
+function isChangeCodeActionId(value: unknown): value is tChangeCodeActionId {
+  return value === 'find-file' || value === 'read-file' || value === 'research';
 }
 
 function readWorkerInput(input: unknown): { task: unknown; context: readonly unknown[] } {
