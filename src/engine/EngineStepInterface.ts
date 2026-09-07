@@ -1,3 +1,5 @@
+import type { tEngineStepContext } from './EngineStepContext.js';
+
 export type tEngineRunDependencies = Readonly<Record<string, unknown>>;
 
 export type tEngineStepColor =
@@ -25,5 +27,10 @@ export interface iEngineStep {
   getId(): string | undefined;
   getGroup(): string;
   getMetadata(): sEngineStepMetadata;
-  run(input: unknown, dependencies: tEngineRunDependencies): Promise<unknown>;
+  createContext(input: unknown): tEngineStepContext;
+  run(
+    input: unknown,
+    dependencies: tEngineRunDependencies,
+    context: tEngineStepContext,
+  ): Promise<unknown>;
 }
