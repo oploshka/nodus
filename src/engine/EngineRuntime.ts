@@ -50,7 +50,9 @@ export class EngineRuntime {
 
     const dsl = new EngineDsl(
       (step, childInput) => this.executeStep(step, childInput, dependencies),
-      (nextPoint, nextInput) => this.executePoint(
+      (nextPoint, nextInput) => this.executeAvailablePoint(
+        point,
+        context,
         nextPoint,
         nextInput,
         dependencies,
@@ -61,6 +63,25 @@ export class EngineRuntime {
     );
 
     return point.response(result, dsl, context, stepContext);
+  }
+
+  private async executeAvailablePoint(
+    point: EnginePoint,
+    context: tEnginePointContext,
+    nextPoint: EnginePoint,
+    input: unknown,
+    dependencies: tEngineRunDependencies,
+    stepContext: tEngineStepContext,
+    pointContexts: tEnginePointContexts,
+  ): Promise<unknown> {
+    const available = this.getAvailablePoints(point, context, stepContext, pointContexts);
+    if (!available.includes(nextPoint)) {
+      throw new Error(
+        `Point '${pointName(point)}' cannot continue through '${pointName(nextPoint)}'.`,
+      );
+    }
+
+    return this.executePoint(nextPoint, input, dependencies, stepContext, pointContexts);
   }
 
   private getAvailablePoints(
@@ -91,4 +112,8 @@ export class EngineRuntime {
     pointContexts.set(point, context);
     return context;
   }
+}
+
+function pointName(point: EnginePoint): string {
+  return point.name ?? point.step.getId() ?? point.step.constructor.name;
 }
