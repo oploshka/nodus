@@ -8,7 +8,7 @@ export class Planner extends EngineStep {
   private readonly points = {
     plan: this.point({
       step: new ActionPlan(),
-      response: async (result, dsl) => this.runPlan(result, dsl),
+      response: ({ result, dsl }) => this.runPlan(result, dsl),
     }),
   };
 
@@ -30,14 +30,13 @@ export class Planner extends EngineStep {
 
   private async runPlan(result: unknown, dsl: EngineDsl): Promise<unknown> {
     const plan = readPlan(result);
-    const value = await dsl.runSteps(plan.steps, (planned, context) => ({
+    return dsl.runSteps(plan.steps, (planned, context) => ({
       step: this.qualification,
       input: {
         task: planned.task,
         context,
       },
     }));
-    return value;
   }
 }
 
