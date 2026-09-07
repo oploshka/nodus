@@ -6,6 +6,7 @@ import { ApplyEditAction } from '@automation/Step/Action/ActionApplyEdit.js';
 import {
   ChangeCodeAction,
   type sChangeCodeActionData,
+  type tChangeCodeActionId,
   type tChangeCodeRequestInput,
 } from '@automation/Step/Action/ActionChangeCode.js';
 import {
@@ -20,6 +21,7 @@ const MAX_READ_FILE_REQUESTS = 6;
 interface sWorkerCodeContext extends tEngineStepContext {
   task: unknown;
   evidence: unknown[];
+  availableActions: Set<tChangeCodeActionId>;
 }
 
 interface sChangePointContext extends tEnginePointContext {
@@ -47,10 +49,11 @@ export default class WorkerCode extends EngineStep {
     read: this.point({
       step: new ReadFileAction(),
       createContext: () => ({ calls: 0 }),
-      response: async (result, _dsl, context) => {
+      response: async (result, _dsl, context, stepContext) => {
         const state = context as sReadPointContext;
+        const worker = stepContext as sWorkerCodeContext;
         state.calls += 1;
-        if (state.calls > MAX_READ_FILE_REQUESTS) return readLimitReached();
+        if (state.calls >= MAX_READ_FILE_REQUESTS) worker.availableActions.delete('read-file');
         return result;
       },
     }),
@@ -74,6 +77,7 @@ export default class WorkerCode extends EngineStep {
     return {
       task: worker.task,
       evidence: [...worker.context],
+      availableActions: new Set<tChangeCodeActionId>(['read-file']),
     };
   }
 
@@ -107,10 +111,7 @@ export default class WorkerCode extends EngineStep {
     }
 
     if (change.retry) {
-      const value = await dsl.runPoint(this.points.change, {
-        task: stepContext.task,
-        context: stepContext.evidence,
-      });
+      const value = await dsl.runPoint(this.points.change, changeInput(stepContext));
       return value;
     }
 
@@ -118,6 +119,9 @@ export default class WorkerCode extends EngineStep {
     if (requests.length === 0) return change;
 
     for (const request of requests) {
+      if (!stepContext.availableActions.has(request.actionId as tChangeCodeActionId)) {
+        return unavailableRequest(request.actionId);
+      }
       if (request.actionId !== 'read-file') {
         return unsupportedRequest(request.actionId);
       }
@@ -130,12 +134,21 @@ export default class WorkerCode extends EngineStep {
       stepContext.evidence.push(read.data);
     }
 
-    const value = await dsl.runPoint(this.points.change, {
-      task: stepContext.task,
-      context: stepContext.evidence,
-    });
+    const value = await dsl.runPoint(this.points.change, changeInput(stepContext));
     return value;
   }
+}
+
+function changeInput(context: sWorkerCodeContext): {
+  task: unknown;
+  context: readonly unknown[];
+  actions: readonly tChangeCodeActionId[];
+} {
+  return {
+    task: context.task,
+    context: context.evidence,
+    actions: [...context.availableActions],
+  };
 }
 
 function readWorkerInput(input: unknown): { task: unknown; context: readonly unknown[] } {
@@ -155,18 +168,18 @@ function readContext(value: unknown): readonly unknown[] {
   return [];
 }
 
-function unsupportedRequest(actionId: string): tActionCoreResult<never> {
+function unavailableRequest(actionId: string): tActionCoreResult<never> {
   return {
     status: 'failed',
-    reason: `WorkerCode Point flow does not support '${actionId}' yet.`,
+    reason: `WorkerCode received unavailable action '${actionId}'.`,
     canContinue: false,
   };
 }
 
-function readLimitReached(): tActionCoreResult<never> {
+function unsupportedRequest(actionId: string): tActionCoreResult<never> {
   return {
     status: 'failed',
-    reason: `WorkerCode exceeded ${MAX_READ_FILE_REQUESTS} read-file requests.`,
+    reason: `WorkerCode Point flow does not support '${actionId}' yet.`,
     canContinue: false,
   };
 }
