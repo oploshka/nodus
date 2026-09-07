@@ -39,12 +39,20 @@ export default class WorkerCode extends EngineStep {
       step: new ChangeCodeAction(),
       options: () => [
         {
+          point: this.points.change,
+          available: ({ nextContext }) => {
+            const state = nextContext as sChangePointContext | undefined;
+            return (state?.attempts ?? 0) < MAX_ATTEMPTS;
+          },
+        },
+        {
           point: this.points.read,
           available: ({ nextContext }) => {
             const state = nextContext as sReadPointContext | undefined;
             return (state?.calls ?? 0) < MAX_READ_FILE_REQUESTS;
           },
         },
+        { point: this.points.apply },
       ],
       createContext: () => ({ attempts: 0 }),
       response: async (result, dsl, context, stepContext) => this.handleChange(
