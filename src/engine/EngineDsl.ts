@@ -3,6 +3,7 @@ import type { iEngineStep } from './EngineStepInterface.js';
 
 type tRunStep = (step: iEngineStep, input?: unknown) => Promise<unknown>;
 type tRunPoint = (point: EnginePoint, input?: unknown) => Promise<unknown>;
+type tAvailablePoints = () => readonly EnginePoint[];
 
 export interface sEngineResultRef {
   resultOf: string;
@@ -28,6 +29,7 @@ export class EngineDsl {
   public constructor(
     private readonly executeStep: tRunStep,
     private readonly executePoint: tRunPoint,
+    private readonly availablePoints: tAvailablePoints = () => [],
   ) {}
 
   /** Runs another Step as a child execution and returns its completed value. */
@@ -51,6 +53,11 @@ export class EngineDsl {
     }
 
     return lastResult;
+  }
+
+  /** Returns currently available options exposed by the current Point. */
+  public available(): readonly EnginePoint[] {
+    return this.availablePoints();
   }
 
   /** Continues the current parent Step through another declared Point. */
