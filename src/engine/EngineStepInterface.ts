@@ -22,7 +22,7 @@ export interface sEngineStepMetadata {
   color: tEngineStepColor;
 }
 
-/** A reusable executable process. Composite Steps return a Point; leaf Steps return a value. */
+/** Shared Step schema contract. Composite Steps expose Points; leaf Steps may return a value directly. */
 export interface iEngineStep {
   getId(): string | undefined;
   getGroup(): string;
