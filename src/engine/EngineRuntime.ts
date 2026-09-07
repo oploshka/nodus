@@ -45,7 +45,9 @@ export class EngineRuntime {
     pointContexts: tEnginePointContexts,
   ): Promise<unknown> {
     const context = this.getPointContext(point, pointContexts, input);
-    const result = await this.executeStep(point.step, input, dependencies);
+    const available = this.getAvailablePoints(point, context, stepContext, pointContexts);
+    const stepInput = point.createInput(input, context, stepContext, available);
+    const result = await this.executeStep(point.step, stepInput, dependencies);
     if (!point.response) return result;
 
     const dsl = new EngineDsl(
