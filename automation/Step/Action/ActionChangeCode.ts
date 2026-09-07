@@ -188,7 +188,7 @@ class ChangeCodeExecution {
 
 function readInput(input: unknown): sChangeCodeActionInput {
   if (!isRecord(input) || !('task' in input)) {
-    return { task: input, context: [], actions: ['read-file'] };
+    return { task: input, context: [], actions: [] };
   }
 
   return {
@@ -205,7 +205,7 @@ function readContext(value: unknown): readonly unknown[] {
 }
 
 function readActions(value: unknown): readonly tChangeCodeActionId[] {
-  if (!Array.isArray(value)) return ['read-file'];
+  if (!Array.isArray(value)) return [];
   return value.filter(isChangeCodeActionId);
 }
 
