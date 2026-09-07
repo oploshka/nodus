@@ -1,118 +1,188 @@
+import { isEngineDirective } from './EngineDirective.js';
 import { EngineDsl } from './EngineDsl.js';
-import { EnginePoint, type tEnginePointContext } from './EnginePoint.js';
+import {
+  EnginePoint,
+  type sEnginePointResolvedOption,
+  type tEnginePointContext,
+} from './EnginePoint.js';
 import type { tEngineStepContext } from './EngineStepContext.js';
 import type { iEngineStep, tEngineRunDependencies } from './EngineStepInterface.js';
+import type { EngineStepRun, sEngineStepRunParent } from './EngineStepRun.js';
 
 type tEnginePointContexts = Map<EnginePoint, tEnginePointContext>;
 
-/** Minimal point-based runtime. Schema/history integration remains intentionally absent. */
+interface sEnginePointRun {
+  point: EnginePoint;
+  stepRun: EngineStepRun;
+  input: unknown;
+  context: tEnginePointContext;
+}
+
+/** Creates an isolated execution for every root Step run. */
 export class EngineRuntime {
   public async run(
     step: iEngineStep,
     input?: unknown,
     dependencies: tEngineRunDependencies = {},
   ): Promise<unknown> {
-    return this.executeStep(step, input, dependencies);
+    return new EngineExecution(dependencies).run(step, input);
+  }
+}
+
+/** Owns mutable runtime state for one root execution tree. */
+class EngineExecution {
+  private readonly runs = new Map<string, EngineStepRun>();
+  private runSequence = 0;
+
+  public constructor(private readonly dependencies: tEngineRunDependencies) {}
+
+  public async run(step: iEngineStep, input: unknown): Promise<unknown> {
+    const run = await this.executeStep(step, input);
+    return run.result;
   }
 
   private async executeStep(
     step: iEngineStep,
     input: unknown,
-    dependencies: tEngineRunDependencies,
-  ): Promise<unknown> {
-    const stepContext = step.createContext(input);
+    parent?: sEngineStepRunParent,
+  ): Promise<EngineStepRun> {
+    const run: EngineStepRun = {
+      id: this.nextRunId(),
+      step,
+      input,
+      context: step.createContext(input),
+      parent,
+      status: 'running',
+    };
     const pointContexts: tEnginePointContexts = new Map();
-    const result = await step.run(input, dependencies, stepContext);
+    this.runs.set(run.id, run);
 
-    if (result instanceof EnginePoint) {
-      return this.executePoint(
-        result,
-        input,
-        dependencies,
-        stepContext,
-        pointContexts,
-      );
+    try {
+      const initial = await step.run(input, this.dependencies, run.context);
+      run.result = initial instanceof EnginePoint
+        ? await this.executePoint(initial, input, run, pointContexts)
+        : initial;
+      run.status = 'completed';
+      return run;
+    } catch (error) {
+      run.status = 'failed';
+      run.error = error;
+      throw error;
     }
-
-    return result;
   }
 
   private async executePoint(
     point: EnginePoint,
     input: unknown,
-    dependencies: tEngineRunDependencies,
-    stepContext: tEngineStepContext,
+    stepRun: EngineStepRun,
     pointContexts: tEnginePointContexts,
   ): Promise<unknown> {
-    const context = this.getPointContext(point, pointContexts, input);
-    const available = this.getAvailablePoints(point, context, stepContext, pointContexts);
-    const stepInput = point.createInput(input, context, stepContext, available);
-    const result = await this.executeStep(point.step, stepInput, dependencies);
+    const pointRun: sEnginePointRun = {
+      point,
+      stepRun,
+      input,
+      context: this.getPointContext(point, pointContexts, input, stepRun.context),
+    };
+
+    const available = this.getAvailableOptions(pointRun, pointContexts);
+    const stepInput = point.createInput({
+      input: pointRun.input,
+      context: pointRun.context,
+      stepContext: stepRun.context,
+      available,
+    });
+
+    const childRun = await this.executeStep(point.step, stepInput, {
+      runId: stepRun.id,
+      point,
+    });
+    const result = childRun.result;
     if (!point.response) return result;
 
     const dsl = new EngineDsl(
-      (step, childInput) => this.executeStep(step, childInput, dependencies),
+      async (step, childInput) => {
+        const run = await this.executeStep(step, childInput, {
+          runId: stepRun.id,
+          point,
+        });
+        return run.result;
+      },
       (nextPoint, nextInput) => this.executeAvailablePoint(
-        point,
-        context,
+        pointRun,
         nextPoint,
         nextInput,
-        dependencies,
-        stepContext,
         pointContexts,
       ),
-      () => this.getAvailablePoints(point, context, stepContext, pointContexts),
+      () => this.getAvailableOptions(pointRun, pointContexts),
     );
 
-    return point.response(result, dsl, context, stepContext);
-  }
+    const response = await point.response({
+      result,
+      dsl,
+      context: pointRun.context,
+      stepContext: stepRun.context,
+      available: this.getAvailableOptions(pointRun, pointContexts),
+    });
 
-  private async executeAvailablePoint(
-    point: EnginePoint,
-    context: tEnginePointContext,
-    nextPoint: EnginePoint,
-    input: unknown,
-    dependencies: tEngineRunDependencies,
-    stepContext: tEngineStepContext,
-    pointContexts: tEnginePointContexts,
-  ): Promise<unknown> {
-    const available = this.getAvailablePoints(point, context, stepContext, pointContexts);
-    if (!available.includes(nextPoint)) {
-      throw new Error(
-        `Point '${pointName(point)}' cannot continue through '${pointName(nextPoint)}'.`,
+    if (isEngineDirective(response)) {
+      return this.executeAvailablePoint(
+        pointRun,
+        response.point,
+        response.input,
+        pointContexts,
       );
     }
 
-    return this.executePoint(nextPoint, input, dependencies, stepContext, pointContexts);
+    return response;
   }
 
-  private getAvailablePoints(
-    point: EnginePoint,
-    context: tEnginePointContext,
-    stepContext: tEngineStepContext,
+  private async executeAvailablePoint(
+    pointRun: sEnginePointRun,
+    nextPoint: EnginePoint,
+    input: unknown,
     pointContexts: tEnginePointContexts,
-  ): readonly EnginePoint[] {
-    return point.getOptions()
+  ): Promise<unknown> {
+    const available = this.getAvailableOptions(pointRun, pointContexts);
+    if (!available.some((option) => option.point === nextPoint)) {
+      throw new Error(
+        `Point '${pointName(pointRun.point)}' cannot continue through '${pointName(nextPoint)}'.`,
+      );
+    }
+
+    return this.executePoint(nextPoint, input, pointRun.stepRun, pointContexts);
+  }
+
+  private getAvailableOptions(
+    pointRun: sEnginePointRun,
+    pointContexts: tEnginePointContexts,
+  ): readonly sEnginePointResolvedOption[] {
+    return pointRun.point.getOptions()
       .filter((option) => !option.available || option.available({
-        context,
-        stepContext,
+        context: pointRun.context,
+        stepContext: pointRun.stepRun.context,
         nextPoint: option.point,
         nextContext: pointContexts.get(option.point),
       }))
-      .map((option) => option.point);
+      .map((option) => ({ point: option.point }));
   }
 
   private getPointContext(
     point: EnginePoint,
     pointContexts: tEnginePointContexts,
     input: unknown,
+    stepContext: tEngineStepContext,
   ): tEnginePointContext {
     const existing = pointContexts.get(point);
     if (existing) return existing;
 
-    const context = point.createContext(input);
+    const context = point.createContext({ input, stepContext });
     pointContexts.set(point, context);
     return context;
+  }
+
+  private nextRunId(): string {
+    this.runSequence += 1;
+    return `run-${this.runSequence}`;
   }
 }
 
