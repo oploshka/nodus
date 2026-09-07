@@ -1,3 +1,4 @@
+import { enginePointNext, type sEnginePointNextDirective } from './EngineDirective.js';
 import { EnginePoint, type sEnginePointConfig } from './EnginePoint.js';
 import type { tEngineStepContext } from './EngineStepContext.js';
 import type {
@@ -6,7 +7,7 @@ import type {
   tEngineRunDependencies,
 } from './EngineStepInterface.js';
 
-/** Shared Step contract. A composite Step starts by returning its first Point. */
+/** Shared Step schema contract. Leaf Steps may still execute directly through run(). */
 export abstract class EngineStep implements iEngineStep {
   public abstract getId(): string | undefined;
   public abstract getGroup(): string;
@@ -23,6 +24,11 @@ export abstract class EngineStep implements iEngineStep {
 
   protected point(config: sEnginePointConfig): EnginePoint {
     return new EnginePoint(config);
+  }
+
+  /** Describes the next Point without executing it. Runtime interprets the directive. */
+  protected pointNext(point: EnginePoint, input?: unknown): sEnginePointNextDirective {
+    return enginePointNext(point, input);
   }
 
   public abstract run(
