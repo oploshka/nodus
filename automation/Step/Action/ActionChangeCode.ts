@@ -39,6 +39,8 @@ export interface sChangeCodeActionData {
   };
 }
 
+export type tChangeCodeActionId = 'find-file' | 'read-file' | 'research';
+
 export type tChangeCodeRequestInput =
   | { query: string }
   | { path: string }
@@ -47,6 +49,7 @@ export type tChangeCodeRequestInput =
 interface sChangeCodeActionInput {
   task: unknown;
   context: readonly unknown[];
+  actions: readonly tChangeCodeActionId[];
 }
 
 const decisionSchema: ModelResponseSchema = {
@@ -67,7 +70,7 @@ const decisionSchema: ModelResponseSchema = {
   },
 };
 
-/** Stateless Action. Worker supplies task and already gathered Point results explicitly. */
+/** Stateless Action. Worker supplies task, context and currently available child actions. */
 export class ChangeCodeAction extends StepAction {
   public getId(): string {
     return 'change-code';
@@ -77,11 +80,11 @@ export class ChangeCodeAction extends StepAction {
     input: unknown,
     dependencies: tEngineRunDependencies,
   ): Promise<tActionCoreResult<sChangeCodeActionData, tChangeCodeRequestInput>> {
-    const { task, context } = readInput(input);
+    const { task, context, actions } = readInput(input);
 
     try {
       return actionCoreResult(
-        await new ChangeCodeExecution(runtimeDependencies(dependencies)).run(task, context),
+        await new ChangeCodeExecution(runtimeDependencies(dependencies)).run(task, context, actions),
       );
     } catch (error) {
       return actionCoreResult({
@@ -100,6 +103,7 @@ class ChangeCodeExecution {
   public async run(
     task: unknown,
     context: readonly unknown[],
+    actions: readonly tChangeCodeActionId[],
   ): Promise<tActionCoreResult<sChangeCodeActionData, tChangeCodeRequestInput>> {
     const taskText = describeTask(task);
     const decision = await callModel<ChangeDecision>(this.runtime.model, this.runtime.emit, {
@@ -109,6 +113,7 @@ class ChangeCodeExecution {
           task,
           candidateFiles: this.candidateFiles(taskText, context),
           context,
+          availableActions: actions,
         },
         format: ModelRequestFormat.Json,
         guidance: [
@@ -117,6 +122,8 @@ class ChangeCodeExecution {
           ...new ModelLanguagePolicy(this.runtime.language).mixedProjectEdit(),
           'Describe what must change. Do not generate patch serialization.',
           'When information is missing, request the cheapest sufficient operation.',
+          'Only request operations listed in availableActions.',
+          'If required information cannot be obtained with availableActions, return failed instead of requesting an unavailable operation.',
           'Use findFiles only when a path is unknown and readFiles when an already known file must be inspected.',
           'Use questions only for project-level conclusions that direct retrieval cannot answer.',
           'Keep edits minimal and preserve unrelated behavior.',
@@ -133,12 +140,18 @@ class ChangeCodeExecution {
       return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed.', canContinue: false };
     }
     if (decision.outcome === 'missing-information') {
-      const requests: Array<{ actionId: string; input: tChangeCodeRequestInput }> = [
-        ...(decision.findFiles ?? []).map((query) => ({ actionId: 'find-file', input: { query: query.trim() } })),
-        ...(decision.readFiles ?? []).map((path) => ({ actionId: 'read-file', input: { path: path.trim() } })),
-        ...(decision.questions ?? []).map((question) => ({ actionId: 'research', input: { question: question.trim() } })),
+      const requests: Array<{ actionId: tChangeCodeActionId; input: tChangeCodeRequestInput }> = [
+        ...(decision.findFiles ?? []).map((query) => ({ actionId: 'find-file' as const, input: { query: query.trim() } })),
+        ...(decision.readFiles ?? []).map((path) => ({ actionId: 'read-file' as const, input: { path: path.trim() } })),
+        ...(decision.questions ?? []).map((question) => ({ actionId: 'research' as const, input: { question: question.trim() } })),
       ].filter((request) => Object.values(request.input)[0]).slice(0, 3);
       if (requests.length === 0) throw new Error('Missing-information result has no concrete request.');
+
+      const unavailable = requests.find((request) => !actions.includes(request.actionId));
+      if (unavailable) {
+        throw new Error(`ActionCodeChange requested unavailable action '${unavailable.actionId}'.`);
+      }
+
       return {
         status: 'not-completed',
         reason: decision.reason ?? 'Additional project context is required.',
@@ -175,12 +188,13 @@ class ChangeCodeExecution {
 
 function readInput(input: unknown): sChangeCodeActionInput {
   if (!isRecord(input) || !('task' in input)) {
-    return { task: input, context: [] };
+    return { task: input, context: [], actions: ['read-file'] };
   }
 
   return {
     task: input.task,
     context: readContext(input.context),
+    actions: readActions(input.actions),
   };
 }
 
@@ -188,6 +202,15 @@ function readContext(value: unknown): readonly unknown[] {
   if (Array.isArray(value)) return value;
   if (isRecord(value)) return Object.values(value);
   return [];
+}
+
+function readActions(value: unknown): readonly tChangeCodeActionId[] {
+  if (!Array.isArray(value)) return ['read-file'];
+  return value.filter(isChangeCodeActionId);
+}
+
+function isChangeCodeActionId(value: unknown): value is tChangeCodeActionId {
+  return value === 'find-file' || value === 'read-file' || value === 'research';
 }
 
 function runtimeDependencies(dependencies: tEngineRunDependencies): ChangeCodeRuntime {
