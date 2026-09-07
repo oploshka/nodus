@@ -15,6 +15,7 @@ import {
 } from '@automation/Step/Action/ActionCoreResult.js';
 import { FindFileAction } from '@automation/Step/Action/ActionFindFile.js';
 import { ReadFileAction } from '@automation/Step/Action/ActionReadFile.js';
+import { ResearchAction } from '@automation/Step/Action/ActionResearch.js';
 
 const MAX_ATTEMPTS = 5;
 const MAX_READ_FILE_REQUESTS = 6;
@@ -54,6 +55,7 @@ export default class WorkerCode extends EngineStep {
           },
         },
         { point: this.points.find },
+        { point: this.points.research },
         { point: this.points.apply },
       ],
       input: ({ stepContext, available }) => changeInput(
@@ -83,6 +85,12 @@ export default class WorkerCode extends EngineStep {
     find: this.point({
       name: 'find-file',
       step: new FindFileAction(),
+      response: async (result) => result,
+    }),
+
+    research: this.point({
+      name: 'research',
+      step: new ResearchAction(),
       response: async (result) => result,
     }),
 
