@@ -1,5 +1,6 @@
 import { EngineDsl } from './EngineDsl.js';
 import { EnginePoint, type tEnginePointContext } from './EnginePoint.js';
+import type { tEngineStepContext } from './EngineStepContext.js';
 import type { iEngineStep, tEngineRunDependencies } from './EngineStepInterface.js';
 
 type tEnginePointContexts = Map<EnginePoint, tEnginePointContext>;
@@ -19,11 +20,18 @@ export class EngineRuntime {
     input: unknown,
     dependencies: tEngineRunDependencies,
   ): Promise<unknown> {
+    const stepContext = step.createContext(input);
     const pointContexts: tEnginePointContexts = new Map();
-    const result = await step.run(input, dependencies);
+    const result = await step.run(input, dependencies, stepContext);
 
     if (result instanceof EnginePoint) {
-      return this.executePoint(result, input, dependencies, pointContexts);
+      return this.executePoint(
+        result,
+        input,
+        dependencies,
+        stepContext,
+        pointContexts,
+      );
     }
 
     return result;
@@ -33,6 +41,7 @@ export class EngineRuntime {
     point: EnginePoint,
     input: unknown,
     dependencies: tEngineRunDependencies,
+    stepContext: tEngineStepContext,
     pointContexts: tEnginePointContexts,
   ): Promise<unknown> {
     const context = this.getPointContext(point, pointContexts, input);
@@ -45,11 +54,12 @@ export class EngineRuntime {
         nextPoint,
         nextInput,
         dependencies,
+        stepContext,
         pointContexts,
       ),
     );
 
-    return point.response(result, dsl, context);
+    return point.response(result, dsl, context, stepContext);
   }
 
   private getPointContext(
