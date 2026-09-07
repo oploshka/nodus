@@ -1,4 +1,5 @@
 import { EnginePoint, type sEnginePointConfig } from './EnginePoint.js';
+import type { tEngineStepContext } from './EngineStepContext.js';
 import type {
   iEngineStep,
   sEngineStepMetadata,
@@ -15,6 +16,11 @@ export abstract class EngineStep implements iEngineStep {
     return { code, title: code, color: 'white' };
   }
 
+  /** Creates mutable state owned by one concrete execution of this Step. */
+  public createContext(_input: unknown): tEngineStepContext {
+    return {};
+  }
+
   protected point(config: sEnginePointConfig): EnginePoint {
     return new EnginePoint(config);
   }
@@ -22,5 +28,6 @@ export abstract class EngineStep implements iEngineStep {
   public abstract run(
     input: unknown,
     dependencies: tEngineRunDependencies,
+    context: tEngineStepContext,
   ): Promise<unknown>;
 }
