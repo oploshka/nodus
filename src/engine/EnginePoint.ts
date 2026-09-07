@@ -23,6 +23,17 @@ export interface sEnginePointOption {
 
 export type tEnginePointOptionsFactory = () => readonly sEnginePointOption[];
 
+export interface sEnginePointInputContext {
+  input: unknown;
+  context: tEnginePointContext;
+  stepContext: tEngineStepContext;
+  available: readonly EnginePoint[];
+}
+
+export type tEnginePointInputFactory = (
+  context: sEnginePointInputContext,
+) => unknown;
+
 export type tEnginePointResponse = (
   result: unknown,
   dsl: EngineDsl,
@@ -34,6 +45,7 @@ export interface sEnginePointConfig {
   name?: string;
   step: iEngineStep;
   options?: tEnginePointOptionsFactory;
+  input?: tEnginePointInputFactory;
   createContext?: tEnginePointContextFactory;
   response?: tEnginePointResponse;
 }
@@ -45,12 +57,14 @@ export class EnginePoint {
   public readonly response?: tEnginePointResponse;
 
   private readonly optionsFactory: tEnginePointOptionsFactory;
+  private readonly inputFactory?: tEnginePointInputFactory;
   private readonly contextFactory: tEnginePointContextFactory;
 
   public constructor(config: sEnginePointConfig) {
     this.name = config.name;
     this.step = config.step;
     this.optionsFactory = config.options ?? (() => []);
+    this.inputFactory = config.input;
     this.contextFactory = config.createContext ?? (() => ({}));
     this.response = config.response;
   }
@@ -58,6 +72,17 @@ export class EnginePoint {
   /** Returns Points this binding may expose as next options. */
   public getOptions(): readonly sEnginePointOption[] {
     return this.optionsFactory();
+  }
+
+  /** Builds the input passed to the bound Step for this Point invocation. */
+  public createInput(
+    input: unknown,
+    context: tEnginePointContext,
+    stepContext: tEngineStepContext,
+    available: readonly EnginePoint[],
+  ): unknown {
+    if (!this.inputFactory) return input;
+    return this.inputFactory({ input, context, stepContext, available });
   }
 
   /** Creates mutable state for this Point inside one parent Step execution. */
