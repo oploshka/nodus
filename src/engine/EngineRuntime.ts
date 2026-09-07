@@ -57,9 +57,26 @@ export class EngineRuntime {
         stepContext,
         pointContexts,
       ),
+      () => this.getAvailablePoints(point, context, stepContext, pointContexts),
     );
 
     return point.response(result, dsl, context, stepContext);
+  }
+
+  private getAvailablePoints(
+    point: EnginePoint,
+    context: tEnginePointContext,
+    stepContext: tEngineStepContext,
+    pointContexts: tEnginePointContexts,
+  ): readonly EnginePoint[] {
+    return point.getOptions()
+      .filter((option) => !option.available || option.available({
+        context,
+        stepContext,
+        nextPoint: option.point,
+        nextContext: pointContexts.get(option.point),
+      }))
+      .map((option) => option.point);
   }
 
   private getPointContext(
