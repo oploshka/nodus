@@ -1,34 +1,41 @@
-import type { sEngineOutput, sEngineSchemaStep, tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
-import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
-import { StepAction } from '@engine/Step/StepAction.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
+import type { tEngineRunDependencies } from '@engine/EngineStepInterface.js';
 import type { ProjectEditRequest } from '@engine/Process/Edit/EditTypes.js';
 import type { ProjectEditResult } from '@engine/Process/Edit/ProjectEditor.js';
+import { StepAction } from '@engine/Step/StepAction.js';
 import { actionCoreResult, readActionCoreResult } from './ActionCoreResult.js';
+import type { tActionCoreResult } from './ActionCoreResult.js';
 
-interface ChangeCodeActionData {
+interface sChangeCodeActionData {
   summary: string;
   edit?: ProjectEditRequest;
+}
+
+interface sApplyEditActionInput {
+  task: unknown;
+  change: unknown;
 }
 
 interface EditRuntime {
   change(task: unknown, step: unknown, request: ProjectEditRequest, emit: tEngineEmit): Promise<ProjectEditResult>;
 }
 
-/** Prepares semantic edit intents in the Engine-owned task-local edit state. */
+/** Applies one completed change-code result supplied explicitly by the parent Worker Point. */
 export class ApplyEditAction extends StepAction {
   public getId(): string {
     return 'apply-edit';
   }
 
   public async run(
-    step: sEngineSchemaStep,
+    input: unknown,
     dependencies: tEngineRunDependencies,
-  ): Promise<sEngineOutput> {
-    const change = readActionCoreResult<ChangeCodeActionData>(step.runtime?.context?.previous?.output);
+  ): Promise<tActionCoreResult<unknown>> {
+    const { task, change: output } = readInput(input);
+    const change = readActionCoreResult<sChangeCodeActionData>(output);
     if (!change || change.status !== 'completed') {
       return actionCoreResult({
         status: 'failed',
-        reason: 'ActionEditApply requires the previous completed ActionCodeChange output.',
+        reason: 'ActionEditApply requires a completed ActionCodeChange result.',
         canContinue: false,
       });
     }
@@ -42,8 +49,8 @@ export class ApplyEditAction extends StepAction {
     if (!edit || !emit) throw new Error('ActionEditApply requires Engine run edit state and emit.');
 
     const result = await edit.change(
-      { description: String(step.task ?? '') },
-      step,
+      { description: describeTask(task) },
+      { task },
       change.data.edit,
       emit,
     );
@@ -68,5 +75,21 @@ export class ApplyEditAction extends StepAction {
         },
       },
     });
+  }
+}
+
+function readInput(input: unknown): sApplyEditActionInput {
+  if (typeof input !== 'object' || input === null) return { task: input, change: undefined };
+  const value = input as { task?: unknown; change?: unknown };
+  return { task: value.task, change: value.change };
+}
+
+function describeTask(task: unknown): string {
+  if (typeof task === 'string') return task;
+  if (task === undefined) return '';
+  try {
+    return JSON.stringify(task);
+  } catch {
+    return String(task);
   }
 }

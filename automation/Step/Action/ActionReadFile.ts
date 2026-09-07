@@ -1,11 +1,16 @@
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
-import type { sEngineOutput, sEngineSchemaStep } from '@engine/Core/EngineSchemaTsType.js';
-import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import type { tEngineRunDependencies } from '@engine/EngineStepInterface.js';
 import { StepAction } from '@engine/Step/StepAction.js';
-import { actionCoreResult } from './ActionCoreResult.js';
+import { actionCoreResult, type tActionCoreResult } from './ActionCoreResult.js';
 
 export interface sReadFileActionInput {
   path: string;
+}
+
+export interface sReadFileActionData {
+  kind: 'read';
+  path: string;
+  content: string;
 }
 
 /** Cheap task-local read of one already known project file. */
@@ -15,23 +20,36 @@ export class ReadFileAction extends StepAction {
   }
 
   public async run(
-    step: sEngineSchemaStep,
+    input: unknown,
     dependencies: tEngineRunDependencies,
-  ): Promise<sEngineOutput> {
-    return actionCoreResult(await this.perform(step.task as sReadFileActionInput, dependencies));
+  ): Promise<tActionCoreResult<sReadFileActionData>> {
+    return actionCoreResult(await this.perform(readInput(input), dependencies));
   }
 
-  private async perform(input: sReadFileActionInput, dependencies: tEngineRunDependencies) {
+  private async perform(
+    input: sReadFileActionInput,
+    dependencies: tEngineRunDependencies,
+  ): Promise<tActionCoreResult<sReadFileActionData>> {
     const path = input.path.trim();
-    if (!path) return { status: 'failed' as const, reason: 'File read path is empty.', canContinue: false as const };
+    if (!path) return { status: 'failed', reason: 'File read path is empty.', canContinue: false };
 
     try {
       const fileSystem = projectFileSystem(dependencies);
-      return { status: 'completed' as const, data: { kind: 'read' as const, path, content: await fileSystem.read(path) } };
+      return { status: 'completed', data: { kind: 'read', path, content: await fileSystem.read(path) } };
     } catch (error) {
-      return { status: 'not-completed' as const, reason: error instanceof Error ? error.message : String(error), canContinue: true as const };
+      return {
+        status: 'not-completed',
+        reason: error instanceof Error ? error.message : String(error),
+        canContinue: true,
+      };
     }
   }
+}
+
+function readInput(input: unknown): sReadFileActionInput {
+  if (typeof input !== 'object' || input === null) return { path: '' };
+  const path = (input as { path?: unknown }).path;
+  return { path: typeof path === 'string' ? path : '' };
 }
 
 function projectFileSystem(dependencies: tEngineRunDependencies): FileSystem {

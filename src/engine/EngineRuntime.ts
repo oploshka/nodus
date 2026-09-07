@@ -35,7 +35,7 @@ export class EngineRuntime {
     dependencies: tEngineRunDependencies,
     pointContexts: tEnginePointContexts,
   ): Promise<unknown> {
-    const context = this.getPointContext(point, pointContexts);
+    const context = this.getPointContext(point, pointContexts, input);
     const result = await this.executeStep(point.step, input, dependencies);
     if (!point.response) return result;
 
@@ -55,11 +55,12 @@ export class EngineRuntime {
   private getPointContext(
     point: EnginePoint,
     pointContexts: tEnginePointContexts,
+    input: unknown,
   ): tEnginePointContext {
     const existing = pointContexts.get(point);
     if (existing) return existing;
 
-    const context = point.createContext();
+    const context = point.createContext(input);
     pointContexts.set(point, context);
     return context;
   }

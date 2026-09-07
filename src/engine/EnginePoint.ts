@@ -2,7 +2,7 @@ import type { EngineDsl } from './EngineDsl.js';
 import type { iEngineStep } from './EngineStepInterface.js';
 
 export type tEnginePointContext = Record<string, unknown>;
-export type tEnginePointContextFactory = () => tEnginePointContext;
+export type tEnginePointContextFactory = (input: unknown) => tEnginePointContext;
 
 export type tEnginePointResponse = (
   result: unknown,
@@ -30,7 +30,7 @@ export class EnginePoint {
   }
 
   /** Creates mutable state for this Point inside one parent Step execution. */
-  public createContext(): tEnginePointContext {
-    return this.contextFactory();
+  public createContext(input: unknown): tEnginePointContext {
+    return this.contextFactory(input);
   }
 }

@@ -1,4 +1,4 @@
-import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
 import type { ModelRunInput } from '@model/Request/ModelRun.js';
 import type { DiffFileRunInput, ModelRunError, ModelRunner, UnifiedDiffModelResponse } from '@model/Runner/ModelRunner.js';
 

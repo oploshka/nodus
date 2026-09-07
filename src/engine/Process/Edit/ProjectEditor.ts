@@ -1,5 +1,5 @@
-import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
 import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
 import type { EditStrategyId, PreparedProjectChange, ProjectEditRequest, EditPrepareResult, EditPreparationContext } from '@engine/Process/Edit/EditTypes.js';
 import { EditValidator, type EditCandidate, type EditValidationResult } from '@engine/Process/Edit/Validation/EditValidator.js';

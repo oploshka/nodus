@@ -1,190 +1,174 @@
+import { EngineStep } from '@engine/EngineStep.js';
+import type { EngineDsl } from '@engine/EngineDsl.js';
+import type { tEnginePointContext } from '@engine/EnginePoint.js';
+import { ApplyEditAction } from '@automation/Step/Action/ActionApplyEdit.js';
 import {
-  ENGINE_STEP,
-  type sEngineSchemaStep,
-} from '@engine/Core/EngineSchemaTsType.js';
-import { EngineSchema } from '@engine/Core/EngineSchema.js';
-import { StepWorker } from '@engine/Step/StepWorker.js';
-import { ApplyEditAction as ActionEditApply } from '@automation/Step/Action/ActionApplyEdit.js';
-import { ChangeCodeAction as ActionCodeChange } from '@automation/Step/Action/ActionChangeCode.js';
+  ChangeCodeAction,
+  type sChangeCodeActionData,
+  type tChangeCodeRequestInput,
+} from '@automation/Step/Action/ActionChangeCode.js';
 import {
   readActionCoreResult,
-  type sActionCoreRequest,
+  type tActionCoreResult,
 } from '@automation/Step/Action/ActionCoreResult.js';
-import { FindFileAction as ActionFileFind } from '@automation/Step/Action/ActionFindFile.js';
-import { ReadFileAction as ActionFileRead } from '@automation/Step/Action/ActionReadFile.js';
-import { ResearchAction as ActionResearch } from '@automation/Step/Action/ActionResearch.js';
-import { previousStepNumbers, previousSteps } from './WorkerCodeSequence.js';
+import { ReadFileAction } from '@automation/Step/Action/ActionReadFile.js';
 
 const MAX_ATTEMPTS = 5;
-const MAX_FIND_FILE_REQUESTS = 4;
 const MAX_READ_FILE_REQUESTS = 6;
-const MAX_RESEARCH_REQUESTS = 2;
 
-/** WorkerCode owns concrete Actions; Core registers and executes them as Worker dependencies. */
-export default class WorkerCode extends StepWorker {
-  public constructor() {
-    super({
-      ActionCodeChange: new ActionCodeChange(),
-      ActionFileFind: new ActionFileFind(),
-      ActionFileRead: new ActionFileRead(),
-      ActionResearch: new ActionResearch(),
-      ActionEditApply: new ActionEditApply(),
-    });
-  }
+interface sChangePointContext extends tEnginePointContext {
+  task: unknown;
+  evidence: unknown[];
+  attempts: number;
+  readRequests: number;
+}
+
+interface sReadPointContext extends tEnginePointContext {
+  calls: number;
+}
+
+/** WorkerCode expressed as a local Point flow: change -> read -> change -> apply. */
+export default class WorkerCode extends EngineStep {
+  private readonly points = {
+    change: this.point({
+      step: new ChangeCodeAction(),
+      createContext: (input) => {
+        const worker = readWorkerInput(input);
+        return {
+          task: worker.task,
+          evidence: [...worker.context],
+          attempts: 0,
+          readRequests: 0,
+        } satisfies sChangePointContext;
+      },
+      response: async (result, dsl, context) => this.handleChange(
+        result,
+        dsl,
+        context as sChangePointContext,
+      ),
+    }),
+
+    read: this.point({
+      step: new ReadFileAction(),
+      createContext: () => ({ calls: 0 }),
+      response: async (result, _dsl, context) => {
+        const state = context as sReadPointContext;
+        state.calls += 1;
+        return result;
+      },
+    }),
+
+    apply: this.point({
+      step: new ApplyEditAction(),
+      response: async (result) => result,
+    }),
+  };
 
   public getId(): string {
     return 'WorkerCode';
   }
 
-  public async run(step: sEngineSchemaStep): Promise<EngineSchema> {
-    return new EngineSchema([this.changeStep(step.task, [])]);
+  public getGroup(): string {
+    return 'worker';
   }
 
-  private changeStep(task: unknown, contextSteps: readonly number[]): sEngineSchemaStep {
-    return {
-      type: ENGINE_STEP.SEQUENCE,
-      module: this.dependency('ActionCodeChange'),
-      task,
-      input: contextSteps.length > 0
-        ? { context: { steps: contextSteps } }
-        : undefined,
-      transition: (sequence, stepNumber) => this.transitionChange(sequence, stepNumber),
-      steps: null,
-    };
+  public async run(_input: unknown): Promise<unknown> {
+    return this.points.change;
   }
 
-  private transitionChange(sequence: sEngineSchemaStep[], stepNumber: number): void {
-    const step = sequence[stepNumber - 1];
-    if (!step?.module) return;
+  private async handleChange(
+    output: unknown,
+    dsl: EngineDsl,
+    context: sChangePointContext,
+  ): Promise<unknown> {
+    const change = readActionCoreResult<sChangeCodeActionData, tChangeCodeRequestInput>(output);
+    if (!change) throw new Error('ActionCodeChange returned an invalid result.');
 
-    const result = readActionCoreResult(step.output);
-    if (!result) return;
+    context.attempts += 1;
 
-    const task = step.task;
+    if (change.status === 'completed') {
+      if (!change.data.edit) return change;
 
-    if (result.status === 'completed') {
-      if (hasEdit(result.data)) {
-        this.replaceTail(sequence, stepNumber, [{
-          type: ENGINE_STEP.SEQUENCE,
-          module: this.dependency('ActionEditApply'),
-          task,
-          input: { context: { previous: true } },
-          steps: null,
-        }]);
-      }
-      return;
+      const value = await dsl.runPoint(this.points.apply, {
+        task: context.task,
+        change,
+      });
+      return value;
     }
 
-    if (result.status === 'failed' || !result.canContinue) return;
-    if (this.countThrough(sequence, stepNumber, this.dependency('ActionCodeChange')) >= MAX_ATTEMPTS) return;
-
-    if (result.retry) {
-      this.replaceTail(sequence, stepNumber, [
-        this.changeStep(task, this.contextSteps(sequence, stepNumber + 1)),
-      ]);
-      return;
+    if (change.status === 'failed' || context.attempts >= MAX_ATTEMPTS) {
+      return change;
     }
 
-    const requests = result.requests ?? [];
-    if (requests.length === 0) return;
+    if (change.retry) {
+      const value = await dsl.runPoint(this.points.change, {
+        task: context.task,
+        context: context.evidence,
+      });
+      return value;
+    }
 
-    const planned = this.planRequests(sequence, stepNumber, requests);
-    if (planned === undefined) return;
-
-    this.replaceTail(
-      sequence,
-      stepNumber,
-      planned.map(({ module, input }) => ({
-        type: ENGINE_STEP.SEQUENCE,
-        module,
-        task: input,
-        steps: null,
-      })),
-    );
-
-    sequence.push(
-      this.changeStep(task, this.contextSteps(sequence, sequence.length + 1)),
-    );
-  }
-
-  private planRequests(
-    sequence: sEngineSchemaStep[],
-    stepNumber: number,
-    requests: ReadonlyArray<sActionCoreRequest>,
-  ): Array<{ module: string; input: unknown }> | undefined {
-    const planned: Array<{ module: string; input: unknown }> = [];
+    const requests = change.requests ?? [];
+    if (requests.length === 0) return change;
 
     for (const request of requests) {
-      const route = this.route(request.actionId);
-      if (!route) continue;
+      if (request.actionId !== 'read-file') {
+        return unsupportedRequest(request.actionId);
+      }
+      if (context.readRequests >= MAX_READ_FILE_REQUESTS) {
+        return readLimitReached();
+      }
 
-      const candidate = { module: route.module, input: request.input };
-      if (this.wasRequested(sequence, stepNumber, candidate) || planned.some((item) => sameRequest(item, candidate))) continue;
+      context.readRequests += 1;
+      const output = await dsl.runPoint(this.points.read, request.input);
+      const read = readActionCoreResult(output);
+      if (!read) throw new Error('ActionFileRead returned an invalid result.');
+      if (read.status !== 'completed') return read;
 
-      const existing = this.countThrough(sequence, stepNumber, route.module);
-      const pending = planned.filter((item) => item.module === route.module).length;
-      if (existing + pending >= route.limit) return undefined;
-
-      planned.push(candidate);
+      context.evidence.push(read.data);
     }
 
-    return planned;
-  }
-
-  private route(actionId: string): { module: string; limit: number } | undefined {
-    if (actionId === 'find-file') return { module: this.dependency('ActionFileFind'), limit: MAX_FIND_FILE_REQUESTS };
-    if (actionId === 'read-file') return { module: this.dependency('ActionFileRead'), limit: MAX_READ_FILE_REQUESTS };
-    if (actionId === 'research') return { module: this.dependency('ActionResearch'), limit: MAX_RESEARCH_REQUESTS };
-    return undefined;
-  }
-
-  private contextSteps(sequence: sEngineSchemaStep[], stepNumber: number): number[] {
-    const contextModules = new Set([
-      this.dependency('ActionFileFind'),
-      this.dependency('ActionFileRead'),
-      this.dependency('ActionResearch'),
-    ]);
-    return previousStepNumbers(sequence, stepNumber, (step) => Boolean(step.module && contextModules.has(step.module)));
-  }
-
-  private countThrough(sequence: sEngineSchemaStep[], stepNumber: number, module: string): number {
-    return previousSteps(sequence, stepNumber + 1, (step) => step.module === module).length;
-  }
-
-  private wasRequested(
-    sequence: sEngineSchemaStep[],
-    stepNumber: number,
-    candidate: { module: string; input: unknown },
-  ): boolean {
-    return previousSteps(
-      sequence,
-      stepNumber + 1,
-      (step) => step.module === candidate.module && sameValue(step.task, candidate.input),
-    ).length > 0;
-  }
-
-  private replaceTail(sequence: sEngineSchemaStep[], stepNumber: number, next: sEngineSchemaStep[]): void {
-    sequence.splice(stepNumber, sequence.length - stepNumber, ...next);
+    const value = await dsl.runPoint(this.points.change, {
+      task: context.task,
+      context: context.evidence,
+    });
+    return value;
   }
 }
 
-function hasEdit(data: unknown): boolean {
-  return typeof data === 'object' && data !== null && 'edit' in data && Boolean((data as { edit?: unknown }).edit);
-}
-
-function sameRequest(left: { module: string; input: unknown }, right: { module: string; input: unknown }): boolean {
-  return left.module === right.module && sameValue(left.input, right.input);
-}
-
-function sameValue(left: unknown, right: unknown): boolean {
-  return stableValue(left) === stableValue(right);
-}
-
-function stableValue(value: unknown): string {
-  if (value === undefined) return 'undefined';
-  try {
-    return JSON.stringify(value, Object.keys(value as object).sort());
-  } catch {
-    return String(value);
+function readWorkerInput(input: unknown): { task: unknown; context: readonly unknown[] } {
+  if (!isRecord(input) || !('task' in input)) {
+    return { task: input, context: [] };
   }
+
+  return {
+    task: input.task,
+    context: readContext(input.context),
+  };
+}
+
+function readContext(value: unknown): readonly unknown[] {
+  if (Array.isArray(value)) return value;
+  if (isRecord(value)) return Object.values(value);
+  return [];
+}
+
+function unsupportedRequest(actionId: string): tActionCoreResult<never> {
+  return {
+    status: 'failed',
+    reason: `WorkerCode Point flow does not support '${actionId}' yet.`,
+    canContinue: false,
+  };
+}
+
+function readLimitReached(): tActionCoreResult<never> {
+  return {
+    status: 'failed',
+    reason: `WorkerCode exceeded ${MAX_READ_FILE_REQUESTS} read-file requests.`,
+    canContinue: false,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

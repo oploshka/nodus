@@ -1,16 +1,16 @@
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
+import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
 import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
-import type { sEngineOutput, sEngineSchemaStep, tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
-import type { tEngineRunDependencies } from '@engine/Core/EngineStepInterface.js';
+import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
+import type { tEngineRunDependencies } from '@engine/EngineStepInterface.js';
 import { StepAction } from '@engine/Step/StepAction.js';
-import { callModel } from '@model/Runner/ModelCaller.js';
-import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
-import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
-import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
-import { actionCoreResult, readActionCoreData } from './ActionCoreResult.js';
+import { callModel } from '@model/Runner/ModelCaller.js';
+import type { ModelRunner } from '@model/Runner/ModelRunner.js';
+import { actionCoreResult } from './ActionCoreResult.js';
 import type { tActionCoreResult } from './ActionCoreResult.js';
 
 interface ChangeDecision {
@@ -31,7 +31,7 @@ interface ChangeCodeRuntime {
   language: LanguageConfiguration;
 }
 
-interface ChangeCodeActionData {
+export interface sChangeCodeActionData {
   summary: string;
   edit?: {
     strategy: 'range-replace';
@@ -39,10 +39,15 @@ interface ChangeCodeActionData {
   };
 }
 
-type ChangeCodeRequestInput =
+export type tChangeCodeRequestInput =
   | { query: string }
   | { path: string }
   | { question: string };
+
+interface sChangeCodeActionInput {
+  task: unknown;
+  context: readonly unknown[];
+}
 
 const decisionSchema: ModelResponseSchema = {
   description: 'One bounded attempt to determine the semantic project changes needed for the assigned task.',
@@ -62,22 +67,22 @@ const decisionSchema: ModelResponseSchema = {
   },
 };
 
-/** Stateless module definition. Per-run infrastructure is owned by ChangeCodeExecution. */
+/** Stateless Action. Worker supplies task and already gathered Point results explicitly. */
 export class ChangeCodeAction extends StepAction {
   public getId(): string {
     return 'change-code';
   }
 
   public async run(
-    step: sEngineSchemaStep,
+    input: unknown,
     dependencies: tEngineRunDependencies,
-  ): Promise<sEngineOutput> {
-    const context = (step.runtime?.context?.steps ?? [])
-      .map((contextStep) => readActionCoreData<unknown>(contextStep.output))
-      .filter((item) => item !== undefined);
+  ): Promise<tActionCoreResult<sChangeCodeActionData, tChangeCodeRequestInput>> {
+    const { task, context } = readInput(input);
 
     try {
-      return actionCoreResult(await new ChangeCodeExecution(runtimeDependencies(dependencies)).run(step.task, context));
+      return actionCoreResult(
+        await new ChangeCodeExecution(runtimeDependencies(dependencies)).run(task, context),
+      );
     } catch (error) {
       return actionCoreResult({
         status: 'not-completed',
@@ -95,7 +100,7 @@ class ChangeCodeExecution {
   public async run(
     task: unknown,
     context: readonly unknown[],
-  ): Promise<tActionCoreResult<ChangeCodeActionData, ChangeCodeRequestInput>> {
+  ): Promise<tActionCoreResult<sChangeCodeActionData, tChangeCodeRequestInput>> {
     const taskText = describeTask(task);
     const decision = await callModel<ChangeDecision>(this.runtime.model, this.runtime.emit, {
       request: {
@@ -128,20 +133,28 @@ class ChangeCodeExecution {
       return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed.', canContinue: false };
     }
     if (decision.outcome === 'missing-information') {
-      const requests: Array<{ actionId: string; input: ChangeCodeRequestInput }> = [
+      const requests: Array<{ actionId: string; input: tChangeCodeRequestInput }> = [
         ...(decision.findFiles ?? []).map((query) => ({ actionId: 'find-file', input: { query: query.trim() } })),
         ...(decision.readFiles ?? []).map((path) => ({ actionId: 'read-file', input: { path: path.trim() } })),
         ...(decision.questions ?? []).map((question) => ({ actionId: 'research', input: { question: question.trim() } })),
       ].filter((request) => Object.values(request.input)[0]).slice(0, 3);
       if (requests.length === 0) throw new Error('Missing-information result has no concrete request.');
-      return { status: 'not-completed', reason: decision.reason ?? 'Additional project context is required.', canContinue: true, requests };
+      return {
+        status: 'not-completed',
+        reason: decision.reason ?? 'Additional project context is required.',
+        canContinue: true,
+        requests,
+      };
     }
 
     const edits = (decision.edits ?? []).slice(0, 6);
     if (edits.length === 0) throw new Error('Ready result contains no edits.');
     const normalized: Array<{ path: string; instruction: string }> = [];
     for (const edit of edits) {
-      normalized.push({ path: await this.runtime.fileSystem.resolvePath(edit.path), instruction: edit.instruction.trim() });
+      normalized.push({
+        path: await this.runtime.fileSystem.resolvePath(edit.path),
+        instruction: edit.instruction.trim(),
+      });
     }
     return {
       status: 'completed',
@@ -158,6 +171,23 @@ class ChangeCodeExecution {
     for (const file of this.runtime.fileIndex.findFiles(task, 16)) paths.add(file.path);
     return [...paths].slice(0, 24);
   }
+}
+
+function readInput(input: unknown): sChangeCodeActionInput {
+  if (!isRecord(input) || !('task' in input)) {
+    return { task: input, context: [] };
+  }
+
+  return {
+    task: input.task,
+    context: readContext(input.context),
+  };
+}
+
+function readContext(value: unknown): readonly unknown[] {
+  if (Array.isArray(value)) return value;
+  if (isRecord(value)) return Object.values(value);
+  return [];
 }
 
 function runtimeDependencies(dependencies: tEngineRunDependencies): ChangeCodeRuntime {
@@ -188,16 +218,19 @@ function describeTask(task: unknown): string {
 }
 
 function collectPaths(value: unknown, paths: Set<string>): void {
-  if (!value || typeof value !== 'object') return;
-  const item = value as Record<string, unknown>;
-  if (typeof item.path === 'string') paths.add(item.path);
-  if (Array.isArray(item.paths)) for (const path of item.paths) if (typeof path === 'string') paths.add(path);
-  const research = item.value;
-  if (research && typeof research === 'object' && Array.isArray((research as { sources?: unknown[] }).sources)) {
-    for (const source of (research as { sources: unknown[] }).sources) {
-      if (source && typeof source === 'object' && typeof (source as { path?: unknown }).path === 'string') {
-        paths.add((source as { path: string }).path);
-      }
+  if (!isRecord(value)) return;
+  if (typeof value.path === 'string') paths.add(value.path);
+  if (Array.isArray(value.paths)) {
+    for (const path of value.paths) if (typeof path === 'string') paths.add(path);
+  }
+  const research = value.value;
+  if (isRecord(research) && Array.isArray(research.sources)) {
+    for (const source of research.sources) {
+      if (isRecord(source) && typeof source.path === 'string') paths.add(source.path);
     }
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

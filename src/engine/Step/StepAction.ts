@@ -1,5 +1,5 @@
-import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { sEngineStepMetadata } from '@engine/Core/EngineStepInterface.js';
+import { EngineStep } from '@engine/EngineStep.js';
+import type { sEngineStepMetadata } from '@engine/EngineStepInterface.js';
 
 export abstract class StepAction extends EngineStep {
   public getGroup(): string {

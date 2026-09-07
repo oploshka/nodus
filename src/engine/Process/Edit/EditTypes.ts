@@ -1,4 +1,4 @@
-import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
 import type { ModelRunSettings } from '@model/Request/ModelRun.js';
 
 export type EditStrategyId = 'range-replace' | 'replace' | 'diff' | 'edit';
