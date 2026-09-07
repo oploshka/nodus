@@ -1,4 +1,5 @@
 import type { EngineDsl } from './EngineDsl.js';
+import type { tEngineStepContext } from './EngineStepContext.js';
 import type { iEngineStep } from './EngineStepInterface.js';
 
 export type tEnginePointContext = Record<string, unknown>;
@@ -8,6 +9,7 @@ export type tEnginePointResponse = (
   result: unknown,
   dsl: EngineDsl,
   context: tEnginePointContext,
+  stepContext: tEngineStepContext,
 ) => Promise<unknown>;
 
 export interface sEnginePointConfig {
