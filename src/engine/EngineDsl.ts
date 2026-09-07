@@ -1,9 +1,9 @@
-import type { EnginePoint } from './EnginePoint.js';
+import type { EnginePoint, sEnginePointResolvedOption } from './EnginePoint.js';
 import type { iEngineStep } from './EngineStepInterface.js';
 
 type tRunStep = (step: iEngineStep, input?: unknown) => Promise<unknown>;
 type tRunPoint = (point: EnginePoint, input?: unknown) => Promise<unknown>;
-type tAvailablePoints = () => readonly EnginePoint[];
+type tAvailablePoints = () => readonly sEnginePointResolvedOption[];
 
 export interface sEngineResultRef {
   resultOf: string;
@@ -24,7 +24,7 @@ type tRunStepsFactory<T extends sEngineRunStepsItem> = (
   context: Readonly<Record<string, unknown>>,
 ) => sEngineRunStepConfig;
 
-/** Runtime-bound API available while a parent Step handles a Point result. */
+/** Runtime-bound escape hatch and execution helpers available to Point callbacks. */
 export class EngineDsl {
   public constructor(
     private readonly executeStep: tRunStep,
@@ -32,7 +32,7 @@ export class EngineDsl {
     private readonly availablePoints: tAvailablePoints = () => [],
   ) {}
 
-  /** Runs another Step as a child execution and returns its completed value. */
+  /** Runs another Step imperatively as a child execution. */
   public runStep(step: iEngineStep, input?: unknown): Promise<unknown> {
     return this.executeStep(step, input);
   }
@@ -55,12 +55,12 @@ export class EngineDsl {
     return lastResult;
   }
 
-  /** Returns currently available options exposed by the current Point. */
-  public available(): readonly EnginePoint[] {
+  /** Returns transitions currently allowed from the active Point. */
+  public available(): readonly sEnginePointResolvedOption[] {
     return this.availablePoints();
   }
 
-  /** Continues the current parent Step through another declared Point. */
+  /** Imperatively continues the current parent Step through an allowed Point. */
   public runPoint(point: EnginePoint, input?: unknown): Promise<unknown> {
     return this.executePoint(point, input);
   }
