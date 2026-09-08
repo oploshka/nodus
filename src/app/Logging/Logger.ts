@@ -3,8 +3,8 @@ import { dirname } from 'node:path';
 import type {
   sEngineEventEnvelope,
   tEngineEventListener,
-  tEngineStepColor,
-} from '@engine/Core/EngineStepInterface.js';
+} from '@engine/EngineEvent.js';
+import type { tEngineStepColor } from '@engine/EngineStepInterface.js';
 
 const ANSI: Record<tEngineStepColor, string> = {
   gray: '\x1b[90m',
@@ -85,7 +85,7 @@ export class ConsoleEventSubscriber implements EngineEventSubscriber {
       return `${' '.repeat(stepIndent)}${this.label(metadata.title, metadata.color)}${code}${description}`;
     }
 
-    // A Step may return FAILURE as part of normal schema control flow. The runtime
+    // A Step may return failure as part of normal schema control flow. The runtime
     // trace/file event keeps the result; the console only renders thrown step errors.
     if (event.type === 'step.finish') return '';
 
