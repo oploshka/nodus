@@ -2,6 +2,7 @@ import { EngineStep } from '@engine/EngineStep.js';
 import type { EngineDsl } from '@engine/EngineDsl.js';
 import type {
   EnginePoint,
+  sEnginePointOption,
   sEnginePointResolvedOption,
   tEnginePointContext,
 } from '@engine/EnginePoint.js';
@@ -37,13 +38,21 @@ interface sReadPointContext extends tEnginePointContext {
   calls: number;
 }
 
+interface sWorkerCodePoints {
+  change: EnginePoint;
+  read: EnginePoint;
+  find: EnginePoint;
+  research: EnginePoint;
+  apply: EnginePoint;
+}
+
 /** WorkerCode schema: change -> retrieval -> change -> apply. */
 export default class WorkerCode extends EngineStep {
-  private readonly points = {
+  private readonly points: sWorkerCodePoints = {
     change: this.point({
       name: 'change-code',
       step: new ChangeCodeAction(),
-      options: () => [
+      options: (): readonly sEnginePointOption[] => [
         {
           point: this.points.change,
           available: ({ nextContext }) => {
