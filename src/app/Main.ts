@@ -18,8 +18,7 @@ import type { tEngineEmit } from '@engine/EngineEvent.js';
 import { EngineRuntime } from '@engine/EngineRuntime.js';
 import type { iEngineStep, tEngineRunDependencies } from '@engine/EngineStepInterface.js';
 import { ProjectEditor } from '@engine/Process/Edit/ProjectEditor.js';
-import { EditStrategyDiff } from '@engine/Process/Edit/Strategy/EditStrategyDiff.js';
-import { EditStrategyRangeReplace } from '@engine/Process/Edit/Strategy/EditStrategyRangeReplace.js';
+import { EditStrategyFullFile } from '@engine/Process/Edit/Strategy/EditStrategyFullFile.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 
@@ -117,8 +116,7 @@ function createRunEdit(
   language: LanguageConfiguration,
 ): ProjectEditor {
   return new ProjectEditor(target.fileSystem, [
-    new EditStrategyRangeReplace(target.fileSystem, model, language, EDIT_GUIDANCE),
-    new EditStrategyDiff(model, language, EDIT_GUIDANCE),
+    new EditStrategyFullFile(target.fileSystem, model, language, EDIT_GUIDANCE),
   ]);
 }
 
