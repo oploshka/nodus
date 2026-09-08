@@ -27,6 +27,7 @@ interface StartupOptions {
   configPath: string;
   clearCache: boolean;
   clearLogs: boolean;
+  scan: boolean;
 }
 
 interface sAutomationRuntimePackage {
@@ -55,6 +56,7 @@ async function main(args: string[]): Promise<void> {
       projectId: configuration.target.id,
       clearCache: options.clearCache,
       clearLogs: options.clearLogs,
+      scan: options.scan,
       logPath,
     },
   });
@@ -62,7 +64,12 @@ async function main(args: string[]): Promise<void> {
   if (options.clearCache) await clearProjectIndex(configuration.target);
 
   const model = createModel(configuration.model);
-  const target = await createProject(configuration.target, emit);
+  const target = await createProject(
+    options.scan
+      ? { ...configuration.target, scanMode: 'on-open' }
+      : configuration.target,
+    emit,
+  );
   const language: LanguageConfiguration = {
     project: configuration.language?.project ?? 'en',
     nodus: configuration.language?.nodus ?? 'en',
@@ -139,14 +146,16 @@ function parseStartupOptions(args: string[]): StartupOptions {
   let configPath = 'nodus.config.json';
   let clearCache = false;
   let clearLogs = false;
+  let scan = false;
 
   for (const arg of args) {
     if (arg === '--clear-cache') { clearCache = true; continue; }
     if (arg === '--clear-logs') { clearLogs = true; continue; }
+    if (arg === '--scan') { scan = true; continue; }
     if (!arg.startsWith('--')) configPath = arg;
   }
 
-  return { configPath, clearCache, clearLogs };
+  return { configPath, clearCache, clearLogs, scan };
 }
 
 function fileTimestamp(): string {
