@@ -31,30 +31,37 @@ export class FileSystem {
   }
 
   public async read(path: string): Promise<string> {
-    return readFile(resolve(this.root, ...(await this.resolvePath(path)).split('/')), 'utf8');
+    const projectPath = await this.resolvePath(path);
+    return readFile(this.absolute(projectPath), 'utf8');
   }
 
   public async write(path: string, content: string): Promise<void> {
     const projectPath = await this.resolveTargetPath(path);
-    const absolute = resolve(this.root, ...projectPath.split('/'));
+    const absolute = this.absolute(projectPath);
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, content, 'utf8');
   }
 
-  public async checksum(path: string): Promise<string> {
-    return createHash('sha256').update(await this.read(path)).digest('hex');
+  public async hash(path: string): Promise<string> {
+    const projectPath = await this.resolvePath(path);
+    const content = await readFile(this.absolute(projectPath));
+    return createHash('sha256').update(content).digest('hex');
   }
 
-  private emitPathCorrection(requested: string, resolvedPath: string): void {
-    const normalizedRequested = requested.replace(/\\/g, '/').replace(/^\.\//, '');
-    if (normalizedRequested === resolvedPath) return;
-    this.emit({
-      type: 'project.path.corrected',
-      data: { requested, resolved: resolvedPath },
-    });
+  private absolute(path: string): string {
+    const projectPath = this.pathResolver.normalize(path);
+    return resolve(this.root, ...projectPath.split('/'));
+  }
+
+  private emitPathCorrection(requested: string, resolved: string): void {
+    let canonicalRequested: string | undefined;
+    try { canonicalRequested = this.pathResolver.normalize(requested); } catch { /* absolute/model path */ }
+    if (canonicalRequested !== resolved) {
+      this.emit({ type: 'project.path.corrected', data: { requested, resolved } });
+    }
   }
 }
 
-function normalizeRule(value: string): string {
-  return value.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '');
+function normalizeRule(rule: string): string {
+  return rule.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '');
 }
