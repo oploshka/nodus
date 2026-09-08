@@ -1,7 +1,8 @@
+import type { EnginePoint } from '@engine/EnginePoint.js';
 import { EngineStep } from '@engine/EngineStep.js';
 import type { iEngineStep } from '@engine/EngineStepInterface.js';
 import { Planner } from '@automation/Step/Planner/Planner.js';
-import { WorkerExample } from '@automation/Step/Worker/WorkerExample.js';
+import WorkerCode from '@automation/Step/Worker/WorkerCode/WorkerCode.js';
 import { ActionQualification, type sQualificationResult } from './ActionQualification.js';
 
 interface sQualificationTaskOptions {
@@ -9,37 +10,58 @@ interface sQualificationTaskOptions {
   worker?: iEngineStep;
 }
 
-/** Routes one task either into Planner or directly into Worker. */
+interface sQualificationPoints {
+  qualify: EnginePoint;
+  worker: EnginePoint;
+  planner?: EnginePoint;
+}
+
+/** Root routing schema: qualification -> planner or worker. */
 export class QualificationTask extends EngineStep {
-  private readonly allowPlanning: boolean;
-  private readonly worker: iEngineStep;
-
-  private readonly points = {
-    qualify: this.point({
-      step: new ActionQualification(),
-      response: async ({ result, dsl }) => {
-        const qualification = readQualification(result);
-
-        if (qualification.type === 'multi' && this.allowPlanning) {
-          const nestedQualification = new QualificationTask({
-            allowPlanning: false,
-            worker: this.worker,
-          });
-          return dsl.runStep(
-            new Planner(nestedQualification),
-            qualification.input,
-          );
-        }
-
-        return dsl.runStep(this.worker, qualification.input);
-      },
-    }),
-  };
+  private readonly points: sQualificationPoints;
 
   public constructor(options: sQualificationTaskOptions = {}) {
     super();
-    this.allowPlanning = options.allowPlanning ?? true;
-    this.worker = options.worker ?? new WorkerExample();
+
+    const worker = options.worker ?? new WorkerCode();
+    const allowPlanning = options.allowPlanning ?? true;
+
+    const workerPoint = this.point({
+      name: 'worker',
+      step: worker,
+    });
+
+    const plannerPoint = allowPlanning
+      ? this.point({
+        name: 'planner',
+        step: new Planner(new QualificationTask({
+          allowPlanning: false,
+          worker,
+        })),
+      })
+      : undefined;
+
+    const qualifyPoint = this.point({
+      name: 'qualification',
+      step: new ActionQualification(),
+      options: () => [
+        ...(plannerPoint ? [{ point: plannerPoint }] : []),
+        { point: workerPoint },
+      ],
+      response: ({ result }) => {
+        const qualification = readQualification(result);
+        if (qualification.type === 'multi' && plannerPoint) {
+          return this.pointNext(plannerPoint, qualification.input);
+        }
+        return this.pointNext(workerPoint, qualification.input);
+      },
+    });
+
+    this.points = {
+      qualify: qualifyPoint,
+      worker: workerPoint,
+      planner: plannerPoint,
+    };
   }
 
   public getId(): string {
