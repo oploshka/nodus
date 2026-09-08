@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
 import type { sProjectFileIndexState } from './ProjectFileIndex.js';
 
