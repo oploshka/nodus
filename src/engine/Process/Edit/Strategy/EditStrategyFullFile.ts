@@ -40,7 +40,9 @@ export class EditStrategyFullFile implements EditStrategy {
       response: { format: ModelResponseFormat.Json, schema },
       settings: { maxTokens: 8192, ...context.settings },
     });
-    const responsePath = await this.fileSystem.resolvePath(response.path);
+    const responsePath = context.edit.type === 'create'
+      ? await this.fileSystem.resolveTargetPath(response.path)
+      : await this.fileSystem.resolvePath(response.path);
     if (responsePath !== path) return { status: 'not-completed', reason: `Edit path mismatch: expected ${path}, received ${responsePath}` };
     return { status: 'completed', path, content: preserveEol(context.source, response.content), operations: 1 };
   }
