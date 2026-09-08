@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { tEngineEmit } from '@engine/EngineEvent.js';
 import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
@@ -30,6 +30,17 @@ export class FileSystem {
     return resolved;
   }
 
+  /** Checks the exact writable project path without index-based path repair. */
+  public async exists(path: string): Promise<boolean> {
+    const projectPath = await this.resolveTargetPath(path);
+    try {
+      return (await stat(this.absolute(projectPath))).isFile();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
+  }
+
   public async read(path: string): Promise<string> {
     const projectPath = await this.resolvePath(path);
     return readFile(this.absolute(projectPath), 'utf8');
@@ -40,6 +51,12 @@ export class FileSystem {
     const absolute = this.absolute(projectPath);
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, content, 'utf8');
+  }
+
+  /** Removes one exact writable project file. Used to roll back newly created files. */
+  public async remove(path: string): Promise<void> {
+    const projectPath = await this.resolveTargetPath(path);
+    await rm(this.absolute(projectPath), { force: true });
   }
 
   public async hash(path: string): Promise<string> {
