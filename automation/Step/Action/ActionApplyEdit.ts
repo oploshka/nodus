@@ -48,10 +48,14 @@ export class ApplyEditAction extends StepAction {
     const emit = dependencies.emit as tEngineEmit | undefined;
     if (!edit || !emit) throw new Error('ActionEditApply requires Engine run edit state and emit.');
 
+    const request: ProjectEditRequest = {
+      ...change.data.edit,
+      strategy: 'edit',
+    };
     const result = await edit.change(
       { description: describeTask(task) },
       { task },
-      change.data.edit,
+      request,
       emit,
     );
 
