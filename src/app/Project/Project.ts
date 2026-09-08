@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { rm } from 'node:fs/promises';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
-import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
 import {
   ProjectFileIndex,
   type iProjectFileIndex,
