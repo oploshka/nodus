@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
 import type { ProjectFileIndex } from '@engine/Project/File/ProjectFileIndex.js';
 import { PathResolver } from './PathResolver.js';
 
@@ -31,37 +31,30 @@ export class FileSystem {
   }
 
   public async read(path: string): Promise<string> {
-    const projectPath = await this.resolvePath(path);
-    return readFile(this.absolute(projectPath), 'utf8');
+    return readFile(resolve(this.root, ...(await this.resolvePath(path)).split('/')), 'utf8');
   }
 
   public async write(path: string, content: string): Promise<void> {
     const projectPath = await this.resolveTargetPath(path);
-    const absolute = this.absolute(projectPath);
+    const absolute = resolve(this.root, ...projectPath.split('/'));
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, content, 'utf8');
   }
 
-  public async hash(path: string): Promise<string> {
-    const projectPath = await this.resolvePath(path);
-    const content = await readFile(this.absolute(projectPath));
-    return createHash('sha256').update(content).digest('hex');
+  public async checksum(path: string): Promise<string> {
+    return createHash('sha256').update(await this.read(path)).digest('hex');
   }
 
-  private absolute(path: string): string {
-    const projectPath = this.pathResolver.normalize(path);
-    return resolve(this.root, ...projectPath.split('/'));
-  }
-
-  private emitPathCorrection(requested: string, resolved: string): void {
-    let canonicalRequested: string | undefined;
-    try { canonicalRequested = this.pathResolver.normalize(requested); } catch { /* absolute/model path */ }
-    if (canonicalRequested !== resolved) {
-      this.emit({ type: 'project.path.corrected', data: { requested, resolved } });
-    }
+  private emitPathCorrection(requested: string, resolvedPath: string): void {
+    const normalizedRequested = requested.replace(/\\/g, '/').replace(/^\.\//, '');
+    if (normalizedRequested === resolvedPath) return;
+    this.emit({
+      type: 'project.path.corrected',
+      data: { requested, resolved: resolvedPath },
+    });
   }
 }
 
-function normalizeRule(rule: string): string {
-  return rule.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '');
+function normalizeRule(value: string): string {
+  return value.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '');
 }
