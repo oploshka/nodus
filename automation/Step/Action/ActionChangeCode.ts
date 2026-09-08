@@ -1,10 +1,14 @@
 import type { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
-import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
-import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import type { tEngineEmit } from '@engine/EngineEvent.js';
 import type { tEngineRunDependencies } from '@engine/EngineStepInterface.js';
+import type {
+  ProjectEditRequest,
+  ProjectFileChange,
+} from '@engine/Process/Edit/EditTypes.js';
+import type { iProjectFileIndex } from '@engine/Project/File/Index/ProjectFileIndex.js';
 import { StepAction } from '@engine/Step/StepAction.js';
+import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
 import { ModelResponseFormat } from '@model/Response/ModelResponseFormat.js';
 import type { ModelResponseSchema } from '@model/Response/ModelResponseSchema.js';
@@ -20,7 +24,11 @@ interface ChangeDecision {
   findFiles?: string[];
   readFiles?: string[];
   questions?: string[];
-  edits?: Array<{ path: string; instruction: string }>;
+  changes?: Array<{
+    type: 'update' | 'create';
+    path: string;
+    instruction: string;
+  }>;
 }
 
 interface ChangeCodeRuntime {
@@ -33,10 +41,7 @@ interface ChangeCodeRuntime {
 
 export interface sChangeCodeActionData {
   summary: string;
-  edit?: {
-    strategy: 'range-replace';
-    edits: Array<{ path: string; instruction: string }>;
-  };
+  edit?: ProjectEditRequest;
 }
 
 export type tChangeCodeActionId = 'find-file' | 'read-file' | 'research';
@@ -53,12 +58,12 @@ interface sChangeCodeActionInput {
 }
 
 const decisionSchema: ModelResponseSchema = {
-  description: 'One bounded attempt to determine the semantic project changes needed for the assigned task.',
+  description: 'One bounded attempt to determine the semantic project file changes needed for the assigned task.',
   fields: {
     outcome: { type: 'option', optionList: [
-      { id: 'ready', description: 'Enough information is available; return semantic edit intents.' },
+      { id: 'ready', description: 'Enough information is available; return semantic file-change intents.' },
       { id: 'missing-information', description: 'Specific project facts are required before editing safely.' },
-      { id: 'already-completed', description: 'The requested outcome is already true; no edit is needed.' },
+      { id: 'already-completed', description: 'The requested outcome is already true; no file change is needed.' },
       { id: 'failed', description: 'The task cannot be performed under the supplied constraints.' },
     ] },
     summary: { type: 'string', optional: true },
@@ -66,7 +71,24 @@ const decisionSchema: ModelResponseSchema = {
     findFiles: { type: 'array', items: { type: 'string' }, optional: true },
     readFiles: { type: 'filePathList', optional: true },
     questions: { type: 'array', items: { type: 'string' }, optional: true },
-    edits: { type: 'editList', optional: true },
+    changes: {
+      type: 'array',
+      optional: true,
+      items: {
+        type: 'object',
+        fields: {
+          type: {
+            type: 'option',
+            optionList: [
+              { id: 'update', description: 'Modify a file that is known to already exist.' },
+              { id: 'create', description: 'Create a new file that is known not to exist yet.' },
+            ],
+          },
+          path: { type: 'string', description: 'Project-root-relative file path.' },
+          instruction: { type: 'string', description: 'Concrete semantic instruction for this one file.' },
+        },
+      },
+    },
   },
 };
 
@@ -108,7 +130,7 @@ class ChangeCodeExecution {
     const taskText = describeTask(task);
     const decision = await callModel<ChangeDecision>(this.runtime.model, this.runtime.emit, {
       request: {
-        message: 'Determine the concrete project edits required to complete the assigned task now.',
+        message: 'Determine the concrete project file changes required to complete the assigned task now.',
         data: {
           task,
           candidateFiles: this.candidateFiles(taskText, context),
@@ -120,13 +142,17 @@ class ChangeCodeExecution {
           'Implement the requested software/project behavior change.',
           'Prefer existing project APIs and conventions. Change source code only when required by the task.',
           ...new ModelLanguagePolicy(this.runtime.language).mixedProjectEdit(),
-          'Describe what must change. Do not generate patch serialization.',
+          'Describe semantic file changes. Do not generate patch serialization.',
+          'Every ready change must explicitly be either update or create.',
+          'Use update only for a file that is known to already exist.',
+          'Use create only for a genuinely new file that is known not to exist yet.',
+          'If file existence is uncertain, request find-file or read-file instead of guessing create.',
           'When information is missing, request the cheapest sufficient operation.',
           'Only request operations listed in availableActions.',
           'If required information cannot be obtained with availableActions, return failed instead of requesting an unavailable operation.',
           'Use findFiles only when a path is unknown and readFiles when an already known file must be inspected.',
           'Use questions only for project-level conclusions that direct retrieval cannot answer.',
-          'Keep edits minimal and preserve unrelated behavior.',
+          'Keep changes minimal and preserve unrelated behavior.',
         ].join('\n'),
       },
       response: { format: ModelResponseFormat.Raw, schema: decisionSchema },
@@ -134,18 +160,36 @@ class ChangeCodeExecution {
     });
 
     if (decision.outcome === 'already-completed') {
-      return { status: 'completed', data: { summary: decision.summary ?? 'Requested outcome is already present.' } };
+      return {
+        status: 'completed',
+        data: { summary: decision.summary ?? 'Requested outcome is already present.' },
+      };
     }
     if (decision.outcome === 'failed') {
-      return { status: 'failed', reason: decision.reason ?? 'The task cannot be completed.', canContinue: false };
+      return {
+        status: 'failed',
+        reason: decision.reason ?? 'The task cannot be completed.',
+        canContinue: false,
+      };
     }
     if (decision.outcome === 'missing-information') {
       const requests: Array<{ actionId: tChangeCodeActionId; input: tChangeCodeRequestInput }> = [
-        ...(decision.findFiles ?? []).map((query) => ({ actionId: 'find-file' as const, input: { query: query.trim() } })),
-        ...(decision.readFiles ?? []).map((path) => ({ actionId: 'read-file' as const, input: { path: path.trim() } })),
-        ...(decision.questions ?? []).map((question) => ({ actionId: 'research' as const, input: { question: question.trim() } })),
+        ...(decision.findFiles ?? []).map((query) => ({
+          actionId: 'find-file' as const,
+          input: { query: query.trim() },
+        })),
+        ...(decision.readFiles ?? []).map((path) => ({
+          actionId: 'read-file' as const,
+          input: { path: path.trim() },
+        })),
+        ...(decision.questions ?? []).map((question) => ({
+          actionId: 'research' as const,
+          input: { question: question.trim() },
+        })),
       ].filter((request) => Object.values(request.input)[0]).slice(0, 3);
-      if (requests.length === 0) throw new Error('Missing-information result has no concrete request.');
+      if (requests.length === 0) {
+        throw new Error('Missing-information result has no concrete request.');
+      }
 
       const unavailable = requests.find((request) => !actions.includes(request.actionId));
       if (unavailable) {
@@ -160,20 +204,38 @@ class ChangeCodeExecution {
       };
     }
 
-    const edits = (decision.edits ?? []).slice(0, 6);
-    if (edits.length === 0) throw new Error('Ready result contains no edits.');
-    const normalized: Array<{ path: string; instruction: string }> = [];
-    for (const edit of edits) {
+    const changes = (decision.changes ?? []).slice(0, 6);
+    if (changes.length === 0) throw new Error('Ready result contains no file changes.');
+
+    const normalized: ProjectFileChange[] = [];
+    for (const change of changes) {
+      const instruction = change.instruction.trim();
+      if (!instruction) throw new Error(`File change instruction is empty for ${change.path}.`);
+
+      if (change.type === 'create') {
+        const path = await this.runtime.fileSystem.resolveTargetPath(change.path);
+        if (await this.runtime.fileSystem.exists(path)) {
+          throw new Error(`ChangeCode marked existing file as create: ${path}`);
+        }
+        normalized.push({ type: 'create', path, instruction });
+        continue;
+      }
+
       normalized.push({
-        path: await this.runtime.fileSystem.resolvePath(edit.path),
-        instruction: edit.instruction.trim(),
+        type: 'update',
+        path: await this.runtime.fileSystem.resolvePath(change.path),
+        instruction,
       });
     }
+
     return {
       status: 'completed',
       data: {
-        summary: decision.summary ?? `Prepared ${normalized.length} project edit intent(s).`,
-        edit: { strategy: 'range-replace', edits: normalized },
+        summary: decision.summary ?? `Prepared ${normalized.length} project file change intent(s).`,
+        edit: {
+          strategy: 'range-replace',
+          changes: normalized,
+        },
       },
     };
   }
@@ -214,7 +276,10 @@ function isChangeCodeActionId(value: unknown): value is tChangeCodeActionId {
 }
 
 function runtimeDependencies(dependencies: tEngineRunDependencies): ChangeCodeRuntime {
-  const target = dependencies.target as { fileSystem?: FileSystem; fileIndex?: iProjectFileIndex } | undefined;
+  const target = dependencies.target as {
+    fileSystem?: FileSystem;
+    fileIndex?: iProjectFileIndex;
+  } | undefined;
   const model = dependencies.model as ModelRunner | undefined;
   const emit = dependencies.emit as tEngineEmit | undefined;
   const language = dependencies.language as LanguageConfiguration | undefined;
