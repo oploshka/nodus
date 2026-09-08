@@ -7,7 +7,7 @@ import type { EditStrategy } from '@engine/Edit/EditStrategy.js';
 import { EditValidator } from '@engine/Edit/Validation/EditValidator.js';
 import { FileSystem } from '@engine/Common/Tools/FileSystem.js';
 import { PathResolver } from '@engine/Common/Tools/PathResolver.js';
-import type { tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
 
 const emit: tEngineEmit = () => undefined;
 const roots: string[] = [];
@@ -55,6 +55,58 @@ describe('ProjectEditor', () => {
     expect(applied.status).toBe('completed');
     expect(await readFile(join(root, 'a.ts'), 'utf8')).toBe('AA\n');
     expect(await readFile(join(root, 'b.ts'), 'utf8')).toBe('BB\n');
+  });
+
+  it('creates a file only when creation is explicit', async () => {
+    const strategy: EditStrategy = {
+      id: 'diff',
+      async prepare(context) {
+        expect(context.edit.type).toBe('create');
+        expect(context.source).toBe('');
+        return {
+          status: 'completed',
+          path: context.edit.path,
+          content: 'export const created = true;\n',
+          operations: 1,
+        };
+      },
+    };
+    const { root, editor } = await fixture(strategy);
+
+    const prepared = await editor.change(task, step, {
+      strategy: 'diff',
+      changes: [{
+        type: 'create',
+        path: 'test/created.test.ts',
+        instruction: 'create the new test file',
+      }],
+    }, emit);
+
+    expect(prepared.status).toBe('completed');
+    await expect(readFile(join(root, 'test', 'created.test.ts'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await editor.read('test/created.test.ts')).toBe('export const created = true;\n');
+
+    expect((await editor.apply(undefined, emit)).status).toBe('completed');
+    expect(await readFile(join(root, 'test', 'created.test.ts'), 'utf8'))
+      .toBe('export const created = true;\n');
+  });
+
+  it('rejects create when the target already exists', async () => {
+    const strategy: EditStrategy = {
+      id: 'diff',
+      async prepare(context) {
+        return { status: 'completed', path: context.edit.path, content: 'unused', operations: 1 };
+      },
+    };
+    const { editor } = await fixture(strategy);
+
+    const result = await editor.change(task, step, {
+      strategy: 'diff',
+      changes: [{ type: 'create', path: 'a.ts', instruction: 'must not overwrite' }],
+    }, emit);
+
+    expect(result).toEqual({ status: 'not-completed', reason: 'Create target already exists: a.ts' });
   });
 
   it('does not accumulate anything when one edit cannot be prepared', async () => {
