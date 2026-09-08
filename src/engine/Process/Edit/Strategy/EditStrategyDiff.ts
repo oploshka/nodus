@@ -1,11 +1,11 @@
 import { EditApplicatorPatch } from '@engine/Process/Edit/Applicator/EditApplicatorPatch.js';
+import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
 import type { EditStrategy } from '@engine/Process/Edit/EditStrategy.js';
 import type { EditPreparationContext, EditPrepareResult } from '@engine/Process/Edit/EditTypes.js';
-import { callDiffFile } from '@model/Runner/ModelCaller.js';
-import type { ModelRunner } from '@model/Runner/ModelRunner.js';
-import { ModelLanguagePolicy } from '@engine/Common/Language/ModelLanguagePolicy.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
 import { ModelRequestFormat } from '@model/Request/ModelRequestFormat.js';
+import { callDiffFile } from '@model/Runner/ModelCaller.js';
+import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 
 export class EditStrategyDiff implements EditStrategy {
   public readonly id = 'diff' as const;
@@ -19,22 +19,43 @@ export class EditStrategyDiff implements EditStrategy {
 
   public async prepare(context: EditPreparationContext): Promise<EditPrepareResult> {
     const path = context.edit.path;
+    const creating = context.edit.type === 'create';
     let lastError: string | undefined;
     for (let attempt = 1; attempt <= this.maxEditAttempts; attempt += 1) {
       try {
         const response = await callDiffFile(this.model, context.emit, {
           path,
           request: {
-            message: attempt === 1 ? 'Apply this concrete project edit using unified diff.' : 'Repair the failed unified-diff edit against the current authoritative file.',
-            data: { task: context.task.description, step: context.step, instruction: context.edit.instruction, authoritativeSource: { path, content: context.source }, recovery: attempt === 1 ? undefined : { attempt, previousError: lastError } },
+            message: creating
+              ? (attempt === 1
+                  ? 'Create this new project file using unified diff against an empty authoritative source.'
+                  : 'Repair the failed new-file unified diff against the empty authoritative source.')
+              : (attempt === 1
+                  ? 'Apply this concrete project edit using unified diff.'
+                  : 'Repair the failed unified-diff edit against the current authoritative file.'),
+            data: {
+              task: context.task.description,
+              step: context.step,
+              instruction: context.edit.instruction,
+              authoritativeSource: { path, content: context.source },
+              recovery: attempt === 1 ? undefined : { attempt, previousError: lastError },
+            },
             format: ModelRequestFormat.Json,
             guidance: [
               this.guidance,
               ...new ModelLanguagePolicy(this.language).mixedProjectEdit(),
-              'Edit exactly the authoritative file supplied in DATA.',
+              creating
+                ? 'The target file does not exist yet. Treat authoritativeSource.content as an empty source and add the complete intended file.'
+                : 'Edit exactly the authoritative file supplied in DATA.',
               'Treat authoritativeSource.content as the current source of truth.',
-              attempt === 1 ? 'Return the minimal unified diff for this file only.' : 'Regenerate the diff from scratch against the current authoritative source and fix only this edit.',
-              'Include enough unchanged context for deterministic patch application.',
+              attempt === 1
+                ? (creating
+                    ? 'Return one minimal new-file unified diff that adds the complete file content.'
+                    : 'Return the minimal unified diff for this file only.')
+                : 'Regenerate the diff from scratch against the authoritative source and fix only this file change.',
+              creating
+                ? 'Do not remove or reference old lines because the authoritative source is empty.'
+                : 'Include enough unchanged context for deterministic patch application.',
               'Do not change unrelated content.',
             ].join('\n'),
           },
@@ -53,6 +74,9 @@ export class EditStrategyDiff implements EditStrategy {
         });
       }
     }
-    return { status: 'not-completed', reason: `Diff edit recovery limit reached (${this.maxEditAttempts}) for ${path}. Last error: ${lastError ?? 'unknown edit error'}` };
+    return {
+      status: 'not-completed',
+      reason: `Diff edit recovery limit reached (${this.maxEditAttempts}) for ${path}. Last error: ${lastError ?? 'unknown edit error'}`,
+    };
   }
 }
