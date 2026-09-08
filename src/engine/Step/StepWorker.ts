@@ -1,5 +1,5 @@
-import { EngineStep } from '@engine/Core/EngineStep.js';
-import type { iEngineStep, sEngineStepMetadata } from '@engine/Core/EngineStepInterface.js';
+import { EngineStep } from '@engine/EngineStep.js';
+import type { iEngineStep, sEngineStepMetadata } from '@engine/EngineStepInterface.js';
 
 export abstract class StepWorker extends EngineStep {
   private readonly dependencies: Readonly<Record<string, iEngineStep>>;
