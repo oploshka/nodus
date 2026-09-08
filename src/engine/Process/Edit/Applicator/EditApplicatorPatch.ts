@@ -41,13 +41,14 @@ export class EditApplicatorPatch {
     try {
       return { hunk, index: this.resolve(source, hunk, path) };
     } catch (error) {
-      if (!hadTrailingNewline || !this.isNotFound(error, path) || !this.hasTrailingEmptyContext(hunk)) throw error;
+      const phantomContext = this.trailingEmptyContextIndex(hunk);
+      if (!hadTrailingNewline || !this.isNotFound(error, path) || phantomContext === undefined) throw error;
 
       const normalizedHunk: UnifiedDiffHunk = {
         ...hunk,
         oldCount: Math.max(0, hunk.oldCount - 1),
         newCount: Math.max(0, hunk.newCount - 1),
-        lines: hunk.lines.slice(0, -1),
+        lines: hunk.lines.filter((_, index) => index !== phantomContext),
       };
       return { hunk: normalizedHunk, index: this.resolve(source, normalizedHunk, path) };
     }
@@ -65,9 +66,13 @@ export class EditApplicatorPatch {
     return ranked[0].index;
   }
 
-  private hasTrailingEmptyContext(hunk: UnifiedDiffHunk): boolean {
-    const last = hunk.lines.at(-1);
-    return last?.type === 'context' && last.text === '';
+  private trailingEmptyContextIndex(hunk: UnifiedDiffHunk): number | undefined {
+    for (let index = hunk.lines.length - 1; index >= 0; index -= 1) {
+      const line = hunk.lines[index];
+      if (line.type === 'add') continue;
+      return line.type === 'context' && line.text === '' ? index : undefined;
+    }
+    return undefined;
   }
 
   private isNotFound(error: unknown, path: string): boolean {
