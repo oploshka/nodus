@@ -1,8 +1,7 @@
 import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { ActionUserInputCli } from '@app/Cli/ActionUserInputCli.js';
-import { CLI_EXIT, runCli } from '@app/Cli/Cli.js';
 import { AutomationLoader } from '@app/Automation/AutomationLoader.js';
+import { CLI_EXIT, readCliInput, runCli } from '@app/Cli/Cli.js';
 import { ConfigurationLoader } from '@app/Config/ConfigurationLoader.js';
 import {
   CompositeEventSubscriber,
@@ -10,13 +9,19 @@ import {
   FileEventSubscriber,
 } from '@app/Logging/Logger.js';
 import { createModel } from '@app/Model/Model.js';
-import { clearProjectIndex, createProject } from '@app/Project/Project.js';
-import { EngineSchema } from '@engine/Core/EngineSchema.js';
-import { ENGINE_STEP, type tEngineEmit } from '@engine/Core/EngineSchemaTsType.js';
-import type { sEngineGroupConfig } from '@engine/Core/EngineRuntimeTsType.js';
-import type { iEngineStep } from '@engine/Core/EngineStepInterface.js';
-import { Engine } from '@engine/Engine.js';
+import {
+  clearProjectIndex,
+  createProject,
+  type iProjectRuntime,
+} from '@app/Project/Project.js';
+import type { tEngineEmit } from '@engine/EngineEvent.js';
+import { EngineRuntime } from '@engine/EngineRuntime.js';
+import type { iEngineStep, tEngineRunDependencies } from '@engine/EngineStepInterface.js';
+import { ProjectEditor } from '@engine/Process/Edit/ProjectEditor.js';
+import { EditStrategyDiff } from '@engine/Process/Edit/Strategy/EditStrategyDiff.js';
+import { EditStrategyRangeReplace } from '@engine/Process/Edit/Strategy/EditStrategyRangeReplace.js';
 import type { LanguageConfiguration } from '@engine/Type/LanguageConfiguration.js';
+import type { ModelRunner } from '@model/Runner/ModelRunner.js';
 
 interface StartupOptions {
   configPath: string;
@@ -25,13 +30,10 @@ interface StartupOptions {
 }
 
 interface sAutomationRuntimePackage {
-  groups: Readonly<Record<string, sEngineGroupConfig>>;
-  modules: Readonly<Record<string, iEngineStep>>;
+  root: iEngineStep;
 }
 
-const ACTION_USER_INPUT_CLI = 'ActionUserInputCli';
-const PLANNER = 'Planner';
-const CLI_GROUP = 'cli';
+const EDIT_GUIDANCE = 'Implement only the accepted semantic edit. Preserve unrelated project content.';
 
 async function main(args: string[]): Promise<void> {
   const options = parseStartupOptions(args);
@@ -67,40 +69,34 @@ async function main(args: string[]): Promise<void> {
     response: configuration.language?.response ?? 'en',
   };
 
-  const automationRoot = configuration.automation?.root ?? 'automation';
-  const automation = resolveAutomationRuntime(await AutomationLoader.load(resolve(automationRoot)));
-  if (automation.modules[ACTION_USER_INPUT_CLI]) {
-    throw new Error(`Automation module '${ACTION_USER_INPUT_CLI}' is reserved by the CLI application.`);
-  }
-  if (!automation.modules[PLANNER]) {
-    throw new Error(`Automation module '${PLANNER}' is not registered.`);
-  }
-
-  const engine = new Engine({
-    groups: {
-      ...automation.groups,
-      [CLI_GROUP]: {
-        schema: {
-          allowedGroups: ['planner'],
-        },
-      },
-    },
-    modules: {
-      ...automation.modules,
-      [ACTION_USER_INPUT_CLI]: new ActionUserInputCli(),
-    },
-  });
-  const dependencies = { target, model, language, onEvent: events.listener };
+  const automationDirectory = configuration.automation?.root ?? 'automation';
+  const automation = resolveAutomationRuntime(
+    await AutomationLoader.load(resolve(automationDirectory)),
+  );
+  const runtime = new EngineRuntime();
 
   await runCli({
     projectId: target.id,
     onRun: async () => {
-      const result = await engine.run(createCliSchema(), dependencies);
-      if (result.status === 'FAILURE') {
-        throw new Error(result.reason ?? 'Execution failed.');
+      const input = await readCliInput();
+      if (input === CLI_EXIT) return false;
+
+      const edit = createRunEdit(target, model, language);
+      const dependencies: tEngineRunDependencies = {
+        target,
+        model,
+        language,
+        edit,
+        onEvent: events.listener,
+      };
+
+      const result = await runtime.run(automation.root, input, dependencies);
+      const applied = await edit.apply(undefined, emit);
+      if (applied.status === 'not-completed') {
+        throw new Error(applied.reason);
       }
-      if (result.output.value === CLI_EXIT) return false;
-      if (result.output.value !== undefined) console.log(result.output.value);
+
+      if (result !== undefined) console.log(result);
       return true;
     },
   });
@@ -108,31 +104,35 @@ async function main(args: string[]): Promise<void> {
   emit({ type: 'app.exit' });
 }
 
-function createCliSchema(): EngineSchema {
-  return new EngineSchema([
-    {
-      type: ENGINE_STEP.SEQUENCE,
-      module: ACTION_USER_INPUT_CLI,
-      steps: null,
-    },
+function createRunEdit(
+  target: iProjectRuntime,
+  model: ModelRunner,
+  language: LanguageConfiguration,
+): ProjectEditor {
+  return new ProjectEditor(target.fileSystem, [
+    new EditStrategyRangeReplace(target.fileSystem, model, language, EDIT_GUIDANCE),
+    new EditStrategyDiff(model, language, EDIT_GUIDANCE),
   ]);
 }
 
-function resolveAutomationRuntime(value: Readonly<Record<string, unknown>>): sAutomationRuntimePackage {
-  const groups = value.groups;
-  const modules = value.modules;
+function resolveAutomationRuntime(
+  value: Readonly<Record<string, unknown>>,
+): sAutomationRuntimePackage {
+  if (!isEngineStep(value.root)) {
+    throw new Error('automation/index.js must export root EngineStep.');
+  }
 
-  if (!isRecord(groups)) throw new Error('automation/index.js must export groups.');
-  if (!isRecord(modules)) throw new Error('automation/index.js must export modules.');
-
-  return {
-    groups: groups as Readonly<Record<string, sEngineGroupConfig>>,
-    modules: modules as Readonly<Record<string, iEngineStep>>,
-  };
+  return { root: value.root };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function isEngineStep(value: unknown): value is iEngineStep {
+  if (typeof value !== 'object' || value === null) return false;
+  const step = value as Partial<iEngineStep>;
+  return typeof step.getId === 'function'
+    && typeof step.getGroup === 'function'
+    && typeof step.getMetadata === 'function'
+    && typeof step.createContext === 'function'
+    && typeof step.run === 'function';
 }
 
 function parseStartupOptions(args: string[]): StartupOptions {
