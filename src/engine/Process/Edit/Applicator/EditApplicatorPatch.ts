@@ -1,5 +1,10 @@
 import type { UnifiedDiffHunk } from '@model/Response/Format/DiffResponseFormatHandler.js';
 
+interface ResolvedHunk {
+  hunk: UnifiedDiffHunk;
+  index: number;
+}
+
 export class EditApplicatorPatch {
   public apply(content: string, hunks: UnifiedDiffHunk[], path: string): string {
     const eol = content.includes('\r\n') ? '\r\n' : '\n';
@@ -8,7 +13,7 @@ export class EditApplicatorPatch {
     const source = normalized.split('\n');
     if (hadTrailingNewline) source.pop();
 
-    const resolved = hunks.map((hunk) => ({ hunk, index: this.resolve(source, hunk, path) }));
+    const resolved = hunks.map((hunk) => this.resolveHunk(source, hunk, path, hadTrailingNewline));
     resolved.sort((a, b) => b.index - a.index);
     for (let i = 1; i < resolved.length; i += 1) {
       const lower = resolved[i - 1];
@@ -27,6 +32,27 @@ export class EditApplicatorPatch {
     return eol === '\r\n' ? output.replace(/\n/g, '\r\n') : output;
   }
 
+  private resolveHunk(
+    source: string[],
+    hunk: UnifiedDiffHunk,
+    path: string,
+    hadTrailingNewline: boolean,
+  ): ResolvedHunk {
+    try {
+      return { hunk, index: this.resolve(source, hunk, path) };
+    } catch (error) {
+      if (!hadTrailingNewline || !this.isNotFound(error, path) || !this.hasTrailingEmptyContext(hunk)) throw error;
+
+      const normalizedHunk: UnifiedDiffHunk = {
+        ...hunk,
+        oldCount: Math.max(0, hunk.oldCount - 1),
+        newCount: Math.max(0, hunk.newCount - 1),
+        lines: hunk.lines.slice(0, -1),
+      };
+      return { hunk: normalizedHunk, index: this.resolve(source, normalizedHunk, path) };
+    }
+  }
+
   private resolve(source: string[], hunk: UnifiedDiffHunk, path: string): number {
     const oldLines = this.oldLines(hunk);
     const expected = Math.max(0, hunk.oldStart - 1);
@@ -37,6 +63,15 @@ export class EditApplicatorPatch {
     const ranked = candidates.map((index) => ({ index, distance: Math.abs(index - expected) })).sort((a, b) => a.distance - b.distance || a.index - b.index);
     if (ranked.length > 1 && ranked[0].distance === ranked[1].distance) throw new Error(`Patch context is ambiguous in ${path}`);
     return ranked[0].index;
+  }
+
+  private hasTrailingEmptyContext(hunk: UnifiedDiffHunk): boolean {
+    const last = hunk.lines.at(-1);
+    return last?.type === 'context' && last.text === '';
+  }
+
+  private isNotFound(error: unknown, path: string): boolean {
+    return error instanceof Error && error.message.startsWith(`Patch context not found in ${path}`);
   }
 
   private oldLines(hunk: UnifiedDiffHunk): string[] {
