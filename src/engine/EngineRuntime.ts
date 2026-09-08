@@ -1,5 +1,6 @@
 import { isEngineDirective } from './EngineDirective.js';
 import { EngineDsl } from './EngineDsl.js';
+import type { tEngineEmit, tEngineEventListener } from './EngineEvent.js';
 import {
   EnginePoint,
   type sEnginePointResolvedOption,
@@ -57,16 +58,29 @@ class EngineExecution {
     const pointContexts: tEnginePointContexts = new Map();
     this.runs.set(run.id, run);
 
+    const dependencies = this.createRunDependencies(run);
+    const emit = dependencies.emit as tEngineEmit | undefined;
+    emit?.({ type: 'step.start', data: { input } });
+
     try {
-      const initial = await step.run(input, this.dependencies, run.context);
+      const initial = await step.run(input, dependencies, run.context);
       run.result = initial instanceof EnginePoint
         ? await this.executePoint(initial, input, run, pointContexts)
         : initial;
       run.status = 'completed';
+      emit?.({ type: 'step.finish', data: { result: run.result } });
       return run;
     } catch (error) {
       run.status = 'failed';
       run.error = error;
+      emit?.({
+        type: 'step.error',
+        level: 'error',
+        data: {
+          reason: error instanceof Error ? error.message : String(error),
+          error,
+        },
+      });
       throw error;
     }
   }
@@ -178,6 +192,37 @@ class EngineExecution {
     const context = point.createContext({ input, stepContext });
     pointContexts.set(point, context);
     return context;
+  }
+
+  private createRunDependencies(run: EngineStepRun): tEngineRunDependencies {
+    const listener = this.dependencies.onEvent as tEngineEventListener | undefined;
+    if (!listener) return this.dependencies;
+
+    const emit: tEngineEmit = (event) => listener({
+      event,
+      path: this.getRunPath(run),
+      module: run.step.getId() ?? run.step.constructor.name,
+      step: run.step,
+    });
+
+    return {
+      ...this.dependencies,
+      emit,
+    };
+  }
+
+  private getRunPath(run: EngineStepRun): string[] {
+    const path = [run.id];
+    let parentId = run.parent?.runId;
+
+    while (parentId) {
+      const parent = this.runs.get(parentId);
+      if (!parent) break;
+      path.unshift(parent.id);
+      parentId = parent.parent?.runId;
+    }
+
+    return path;
   }
 
   private nextRunId(): string {
