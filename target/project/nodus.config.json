@@ -11,7 +11,7 @@
     ]
   },
   "model": {
-    "provider": "openai-compatible",
+    "provider": "koboldcpp",
     "endpoint": "http://localhost:5001/v1",
     "model": "koboldcpp",
     "temperature": 0,
