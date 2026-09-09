@@ -33,6 +33,7 @@ export class OpenAICompatibleModelAdapter implements ModelAdapter, AgentModelAda
       messages: request.messages,
       temperature: request.temperature,
       max_tokens: request.maxTokens,
+      ...(request.constraint?.type === 'gbnf' ? { grammar: request.constraint.grammar } : {}),
     });
 
     const choice = payload.choices?.[0];
