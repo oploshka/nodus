@@ -1,7 +1,7 @@
 import type { ModelMessageLayout } from '@model/Request/ModelMessageTransport.js';
 
 export interface ModelConfiguration {
-  provider: 'openai-compatible';
+  provider: 'openai-compatible' | 'koboldcpp';
   endpoint: string;
   model: string;
   apiKey?: string;
