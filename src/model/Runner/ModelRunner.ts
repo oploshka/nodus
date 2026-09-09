@@ -11,6 +11,7 @@ import { TextResponseFormatHandler } from '@model/Response/Format/TextResponseFo
 import { RawResponseFormatHandler } from '@model/Response/Format/RawResponseFormatHandler.js';
 import { JsonResponseFormatHandler } from '@model/Response/Format/JsonResponseFormatHandler.js';
 import { DiffResponseFormatHandler, type UnifiedDiffHunk } from '@model/Response/Format/DiffResponseFormatHandler.js';
+import type { ModelResponseStructureAdapter } from '@model/Response/Structure/ModelResponseStructureAdapter.js';
 
 export interface ModelExchangeMessage {
   role: 'system' | 'user' | 'assistant';
@@ -64,6 +65,7 @@ export class ModelRunner {
   public constructor(
     private readonly adapter: ModelAdapter,
     private readonly configuration: ModelConfiguration,
+    private readonly responseStructure?: ModelResponseStructureAdapter,
   ) {
     const handlers: ModelResponseFormatHandler[] = [
       new TextResponseFormatHandler(),
@@ -99,6 +101,7 @@ export class ModelRunner {
       messages: transportMessages(messages, this.configuration.messageLayout),
       temperature: input.settings?.temperature ?? this.configuration.temperature ?? 0,
       maxTokens: this.resolveMaxTokens(input.settings?.maxTokens),
+      constraint: this.responseStructure?.compile(input.response.format, input.response.schema),
     };
 
     const startedAt = performance.now();
